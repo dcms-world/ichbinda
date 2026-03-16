@@ -12,7 +12,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:20px}
-.container{background:white;border-radius:20px;padding:40px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.container{background:white;border-radius:20px;padding:40px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative}
 h1{color:#333;margin-bottom:10px}
 .subtitle{color:#666;margin-bottom:30px}
 .btn-okay{width:200px;height:200px;border-radius:50%;border:none;background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%);color:white;font-size:24px;font-weight:bold;cursor:pointer;box-shadow:0 10px 30px rgba(17,153,142,0.4);transition:transform 0.2s,box-shadow 0.2s}
@@ -23,142 +23,87 @@ h1{color:#333;margin-bottom:10px}
 .status.success{background:#d4edda;color:#155724}
 .status.error{background:#f8d7da;color:#721c24}
 .last-checkin{margin-top:20px;color:#666;font-size:14px}
-.setup-info{margin-top:30px;padding:15px;background:#f8f9fa;border-radius:10px;font-size:14px}
-.id-display{background:#e9ecef;padding:12px;border-radius:8px;font-family:monospace;font-size:16px;word-break:break-all;margin:10px 0;cursor:pointer;transition:background 0.2s}
+
+.menu-btn{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.9);border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:100}
+.menu-btn:hover{background:white;transform:scale(1.1)}
+
+.settings-panel{position:fixed;top:0;right:-100%;width:100%;max-width:400px;height:100vh;background:white;box-shadow:-5px 0 20px rgba(0,0,0,0.2);transition:right 0.3s;z-index:200;padding:60px 20px 20px;overflow-y:auto}
+.settings-panel.open{right:0}
+.settings-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);opacity:0;visibility:hidden;transition:opacity 0.3s;z-index:150}
+.settings-overlay.open{opacity:1;visibility:visible}
+
+.settings-title{font-size:24px;margin-bottom:20px;color:#333}
+.settings-section{margin:20px 0;padding:15px;background:#f8f9fa;border-radius:10px}
+.settings-section h3{margin-bottom:10px;color:#555;font-size:16px}
+.id-display{background:#e9ecef;padding:12px;border-radius:8px;font-family:monospace;font-size:14px;word-break:break-all;margin:10px 0;cursor:pointer;transition:background 0.2s}
 .id-display:hover{background:#dee2e6}
 .id-display.copied{background:#d4edda}
-.btn-small{padding:8px 16px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin:5px}
-.btn-qr{background:#667eea;color:white}
-.btn-copy{background:#6c757d;color:white}
-.qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;display:none}
-.qr-container.show{display:block}
-.menu{margin-top:15px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.btn-small{padding:10px 20px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin:5px}
+.btn-close{position:absolute;top:15px;left:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666}
+.btn-close:hover{color:#333}
+.qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;text-align:center}
+#qrcode{display:inline-block}
+.close-settings{margin-top:30px;padding:12px 24px;background:#dc3545;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;width:100%}
+.close-settings:hover{background:#c82333}
 </style>
 </head>
 <body>
+<button class="menu-btn" onclick="openSettings()" title="Einstellungen">⚙️</button>
+
+<div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
+
+<div class="settings-panel" id="settingsPanel">
+<button class="btn-close" onclick="closeSettings()">✕</button>
+<h2 class="settings-title">⚙️ Einstellungen</h2>
+
+<div class="settings-section">
+<h3>🔑 Deine ID</h3>
+<div class="id-display" id="personId" onclick="copyId()" title="Klicken zum Kopieren">-</div>
+<small id="copyHint">Tippe auf die ID zum Kopieren</small>
+<div style="margin-top:10px">
+<button class="btn-small" style="background:#6c757d;color:white" onclick="copyId()">📋 Kopieren</button>
+</div>
+</div>
+
+<div class="settings-section">
+<h3>📱 QR-Code für Betreuer</h3>
+<div class="qr-container" id="qrContainer">
+<div id="qrcode"></div>
+</div>
+<small>Der Betreuer kann diesen Code scannen.</small>
+</div>
+
+<button class="close-settings" onclick="closeSettings()">Schließen</button>
+</div>
+
 <div class="container">
 <h1>👋 SicherDa</h1>
 <p class="subtitle">Einmal drücken = "Ich bin okay"</p>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
 <div id="status"></div>
 <div class="last-checkin" id="lastCheckin"></div>
-
-<div class="setup-info" id="setupInfo">
-<strong>🔑 Deine ID:</strong>
-<div class="id-display" id="personId" onclick="copyId()" title="Klicken zum Kopieren">-</div>
-<small id="copyHint">Tippe auf die ID zum Kopieren</small>
-
-<div class="menu">
-<button class="btn-small btn-copy" onclick="copyId()">📋 Kopieren</button>
-<button class="btn-small btn-qr" onclick="toggleQR()">📱 QR-Code</button>
-</div>
-
-<div class="qr-container" id="qrContainer">
-<div id="qrcode"></div>
-<small>Der Betreuer kann diesen Code scannen</small>
-</div>
-
-<small style="display:block;margin-top:15px;color:#666">Gib diese ID oder den QR-Code deinem Betreuer.</small>
-</div>
 </div>
 
 <script>
 const API_URL='/api';
-let currentPersonId = null;
+let currentPersonId=null;
+let qrGenerated=false;
 
-function getPersonId(){
-const params=new URLSearchParams(window.location.search);
-return params.get('id')||localStorage.getItem('sicherda_person_id')
-}
+function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
 
-async function createPerson(){
-const res=await fetch(API_URL+'/person',{method:'POST'});
-const data=await res.json();
-localStorage.setItem('sicherda_person_id',data.id);
-return data.id
-}
+async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
 
-function copyId(){
-if(!currentPersonId)return;
-navigator.clipboard.writeText(currentPersonId).then(()=>{
-const idEl=document.getElementById('personId');
-idEl.classList.add('copied');
-idEl.textContent='✅ Kopiert!';
-document.getElementById('copyHint').textContent='ID wurde in die Zwischenablage kopiert';
-setTimeout(()=>{
-idEl.classList.remove('copied');
-idEl.textContent=currentPersonId;
-document.getElementById('copyHint').textContent='Tippe auf die ID zum Kopieren';
-},2000);
-});
-}
+function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');if(currentPersonId&&!qrGenerated){new QRCode(document.getElementById('qrcode'),{text:currentPersonId,width:180,height:180});qrGenerated=true}}
 
-function toggleQR(){
-const container=document.getElementById('qrContainer');
-if(container.classList.contains('show')){
-container.classList.remove('show');
-}else{
-container.classList.add('show');
-if(currentPersonId){
-document.getElementById('qrcode').innerHTML='';
-new QRCode(document.getElementById('qrcode'),{
-text:currentPersonId,
-width:200,
-height:200,
-colorDark:"#000000",
-colorLight:"#ffffff",
-correctLevel:QRCode.CorrectLevel.M
-});
-}
-}
-}
+function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
-async function init(){
-let personId=getPersonId();
-if(!personId)personId=await createPerson();
-currentPersonId=personId;
-document.getElementById('personId').textContent=personId;
-const url=new URL(window.location);
-url.searchParams.set('id',personId);
-window.history.replaceState({},'',url);
-loadStatus(personId)
-}
+function copyId(){if(!currentPersonId)return;navigator.clipboard.writeText(currentPersonId).then(()=>{const idEl=document.getElementById('personId');idEl.classList.add('copied');idEl.textContent='✅ Kopiert!';document.getElementById('copyHint').textContent='ID wurde kopiert';setTimeout(()=>{idEl.classList.remove('copied');idEl.textContent=currentPersonId;document.getElementById('copyHint').textContent='Tippe auf die ID zum Kopieren'},2000)})}
 
-async function sendHeartbeat(){
-const btn=document.getElementById('btnOkay');
-const status=document.getElementById('status');
-const personId=getPersonId();
-btn.disabled=true;
-status.className='status';
-status.textContent='Wird gesendet...';
-try{
-const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});
-if(res.ok){
-const data=await res.json();
-status.className='status success';
-status.textContent='✅ Gemeldet!';
-document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')
-}else throw new Error('Fehler')
-}catch(err){
-status.className='status error';
-status.textContent='❌ Fehler. Bitte erneut versuchen.'
-}finally{
-btn.disabled=false;
-setTimeout(()=>status.textContent='',5000)
-}
-}
+async function init(){let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
 
-async function loadStatus(personId){
-try{
-const res=await fetch(API_URL+'/person/'+personId);
-if(res.ok){
-const data=await res.json();
-if(data.last_heartbeat){
-document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')
-}
-}
-}catch(e){}
-}
+async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
+
+async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
 init();
 </script>
