@@ -180,30 +180,56 @@ async function init() {
 async function addPerson() {
   const personId = document.getElementById('personId').value.trim();
   if (!personId) return;
-  await fetch(API_URL + '/watch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_hours: 24 })
-  });
-  document.getElementById('personId').value = '';
-  loadPersons();
+  
+  // Zuerst sicherstellen, dass die Person existiert (automatisch erstellt durch API)
+  try {
+    // Person erstellen falls nicht existiert
+    const personRes = await fetch(API_URL + '/person', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: personId })
+    });
+    if (!personRes.ok && personRes.status !== 409) { // 409 = already exists ist OK
+      throw new Error('Failed to create person');
+    }
+    
+    // Dann Watch-Relation erstellen
+    await fetch(API_URL + '/watch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: 1440 })
+    });
+    
+    document.getElementById('personId').value = '';
+    loadPersons();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
 }
 
-async function updateInterval(personId, hours) {
+async function updateInterval(personId, minutes) {
   await fetch(API_URL + '/watch', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_hours: parseInt(hours) })
+    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: parseInt(minutes) })
   });
   loadPersons();
 }
 
 function buildIntervalSelect(p) {
-  const intervals = [6, 12, 24, 48];
+  // Werte in Minuten: 1min, 1h, 6h, 12h, 24h, 48h
+  const intervals = [
+    { min: 1, label: '1 Min' },
+    { min: 60, label: '1 Std' },
+    { min: 360, label: '6 Std' },
+    { min: 720, label: '12 Std' },
+    { min: 1440, label: '24 Std' },
+    { min: 2880, label: '48 Std' }
+  ];
   let html = '<select onchange="updateInterval(&quot;' + p.id + '&quot;, this.value)" style="padding:2px 6px;border:1px solid #ddd;border-radius:4px">';
-  for (const h of intervals) {
-    const selected = p.check_interval_hours == h ? ' selected' : '';
-    html += '<option value="' + h + '"' + selected + '>' + h + 'h</option>';
+  for (const iv of intervals) {
+    const selected = p.check_interval_minutes == iv.min ? ' selected' : '';
+    html += '<option value="' + iv.min + '"' + selected + '>' + iv.label + '</option>';
   }
   html += '</select>';
   return html;
@@ -259,12 +285,14 @@ app.get('/watcher.html', (c) => c.html(WATCHER_HTML));
 // API routes with CORS
 app.use('/api/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
 
-// API: Neue Person erstellen
+// API: Neue Person erstellen (oder bestehende zurückgeben)
 app.post('/api/person', async (c) => {
   try {
     const body = await c.req.json<{ id?: string }>().catch(() => ({}));
     const personId = body.id || crypto.randomUUID();
-    await c.env.DB.prepare('INSERT INTO persons (id) VALUES (?)').bind(personId).run();
+    await c.env.DB.prepare(
+      'INSERT OR IGNORE INTO persons (id) VALUES (?)'
+    ).bind(personId).run();
     return c.json({ id: personId }, 201);
   } catch (e) {
     console.error('Error creating person:', e);
@@ -301,40 +329,45 @@ app.post('/api/watcher', async (c) => {
   return c.json({ id: watcherId }, 201);
 });
 
-// API: Person überwachen
+// API: Person überwachen (Intervall in Minuten)
 app.post('/api/watch', async (c) => {
-  const { person_id, watcher_id, check_interval_hours = 24 } = await c.req.json();
-  if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
-  await c.env.DB.prepare(
-    `INSERT INTO watch_relations (person_id, watcher_id, check_interval_hours)
-     VALUES (?, ?, ?)
-     ON CONFLICT(person_id, watcher_id) DO UPDATE SET
-     check_interval_hours = excluded.check_interval_hours`
-  ).bind(person_id, watcher_id, check_interval_hours).run();
-  return c.json({ success: true, person_id, watcher_id, check_interval_hours });
+  try {
+    const { person_id, watcher_id, check_interval_minutes = 1440 } = await c.req.json();
+    if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
+    await c.env.DB.prepare(
+      `INSERT INTO watch_relations (person_id, watcher_id, check_interval_minutes)
+       VALUES (?, ?, ?)
+       ON CONFLICT(person_id, watcher_id) DO UPDATE SET
+       check_interval_minutes = excluded.check_interval_minutes`
+    ).bind(person_id, watcher_id, check_interval_minutes).run();
+    return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
+  } catch (e) {
+    console.error('Error in watch:', e);
+    return c.json({ error: 'Failed to create watch relation', details: String(e) }, 500);
+  }
 });
 
-// API: Intervall für überwachte Person aktualisieren
+// API: Intervall für überwachte Person aktualisieren (in Minuten)
 app.put('/api/watch', async (c) => {
-  const { person_id, watcher_id, check_interval_hours } = await c.req.json();
-  if (!person_id || !watcher_id || !check_interval_hours) return c.json({ error: 'person_id, watcher_id and check_interval_hours required' }, 400);
+  const { person_id, watcher_id, check_interval_minutes } = await c.req.json();
+  if (!person_id || !watcher_id || !check_interval_minutes) return c.json({ error: 'person_id, watcher_id and check_interval_minutes required' }, 400);
   await c.env.DB.prepare(
-    `UPDATE watch_relations SET check_interval_hours = ? WHERE person_id = ? AND watcher_id = ?`
-  ).bind(check_interval_hours, person_id, watcher_id).run();
-  return c.json({ success: true, person_id, watcher_id, check_interval_hours });
+    `UPDATE watch_relations SET check_interval_minutes = ? WHERE person_id = ? AND watcher_id = ?`
+  ).bind(check_interval_minutes, person_id, watcher_id).run();
+  return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
 });
 
-// API: Alle überwachten Personen eines Betreuers
+// API: Alle überwachten Personen eines Betreuers (Intervall in Minuten)
 app.get('/api/watcher/:id/persons', async (c) => {
   const watcherId = c.req.param('id');
   const persons = await c.env.DB.prepare(
     `SELECT 
       p.id,
       p.last_heartbeat,
-      wr.check_interval_hours,
+      wr.check_interval_minutes,
       CASE 
         WHEN p.last_heartbeat IS NULL THEN 'never'
-        WHEN datetime(p.last_heartbeat, '+' || wr.check_interval_hours || ' hours') < datetime('now') 
+        WHEN datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now') 
         THEN 'overdue'
         ELSE 'ok'
       END as status
@@ -345,26 +378,27 @@ app.get('/api/watcher/:id/persons', async (c) => {
   return c.json(persons.results);
 });
 
-// CRON: Überfälligkeits-Check
+// CRON: Überfälligkeits-Check (Intervall in Minuten)
 async function checkOverduePersons(db: D1Database, expoToken?: string) {
   const overdue = await db.prepare(
-    `SELECT p.id as person_id, p.last_heartbeat, wr.watcher_id, wr.check_interval_hours, w.push_token
+    `SELECT p.id as person_id, p.last_heartbeat, wr.watcher_id, wr.check_interval_minutes, w.push_token
      FROM persons p
      JOIN watch_relations wr ON p.id = wr.person_id
      JOIN watchers w ON wr.watcher_id = w.id
-     WHERE (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_hours || ' hours') < datetime('now'))
+     WHERE (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
      AND (wr.last_notified_at IS NULL OR wr.last_notified_at < datetime('now', '-1 hour'))`
   ).all();
 
   for (const item of overdue.results || []) {
     if (expoToken && item.push_token) {
+      const hours = Math.round(item.check_interval_minutes / 60);
       await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${expoToken}` },
         body: JSON.stringify({
           to: item.push_token,
           title: 'SicherDa Alarm',
-          body: `Keine Meldung seit ${item.check_interval_hours} Stunden`,
+          body: `Keine Meldung seit ${hours} Stunden`,
           data: { person_id: item.person_id },
         }),
       });
