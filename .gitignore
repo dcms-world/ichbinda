@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.bak
+
+# Build & Cache
+.wrangler/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SicherDa - Ich bin okay</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        .btn-okay {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(17, 153, 142, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-okay:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(17, 153, 142, 0.5);
+        }
+        .btn-okay:active {
+            transform: scale(0.95);
+        }
+        .btn-okay:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .last-checkin {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+        .setup-info {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .setup-info code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👋 SicherDa</h1>
+        <p class="subtitle">Einmal drücken = „Ich bin okay"</p>
+        
+        <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">
+            ✅<br>OKAY
+        </button>
+        
+        <div id="status"></div>
+        <div class="last-checkin" id="lastCheckin"></div>
+        
+        <div class="setup-info" id="setupInfo">
+            <strong>Deine ID:</strong><br>
+            <code id="personId">-</code><br><br>
+            <small>Gib diese ID deinem Betreuer.</small>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = ''; // Gleiche Domain
+        
+        // Person ID aus URL oder localStorage
+        function getPersonId() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('id') || localStorage.getItem('sicherda_person_id');
+        }
+        
+        // Neue Person erstellen
+        async function createPerson() {
+            const res = await fetch(`${API_URL}/person`, { method: 'POST' });
+            const data = await res.json();
+            localStorage.setItem('sicherda_person_id', data.id);
+            return data.id;
+        }
+        
+        // Initialisierung
+        async function init() {
+            let personId = getPersonId();
+            if (!personId) {
+                personId = await createPerson();
+            }
+            document.getElementById('personId').textContent = personId;
+            updateUrl(personId);
+            loadStatus(personId);
+        }
+        
+        // URL aktualisieren
+        function updateUrl(personId) {
+            const url = new URL(window.location);
+            url.searchParams.set('id', personId);
+            window.history.replaceState({}, '', url);
+        }
+        
+        // Heartbeat senden
+        async function sendHeartbeat() {
+            const btn = document.getElementById('btnOkay');
+            const status = document.getElementById('status');
+            const personId = getPersonId();
+            
+            btn.disabled = true;
+            status.className = 'status';
+            status.textContent = 'Wird gesendet...';
+            
+            try {
+                const res = await fetch(`${API_URL}/heartbeat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ person_id: personId })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    status.className = 'status success';
+                    status.textContent = '✅ Gemeldet!';
+                    document.getElementById('lastCheckin').textContent = 
+                        'Letzte Meldung: ' + new Date(data.timestamp).toLocaleString('de-DE');
+                } else {
+                    throw new Error('Fehler');
+                }
+            } catch (err) {
+                status.className = 'status error';
+                status.textContent = '❌ Fehler. Bitte erneut versuchen.';
+            } finally {
+                btn.disabled = false;
+                setTimeout(() => status.textContent = '', 5000);
+            }
+        }
+        
+        // Status laden
+        async function loadStatus(personId) {
+            try {
+                const res = await fetch(`${API_URL}/person/${personId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.last_heartbeat) {
+                        document.getElementById('lastCheckin').textContent = 
+                            'Letzte Meldung: ' + new Date(data.last_heartbeat).toLocaleString('de-DE');
+                    }
+                }
+            } catch (e) {}
+        }
+        
+        init();
+    </script>
+</body>
+</html>

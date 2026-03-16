@@ -1,0 +1,17 @@
+name = "sicherda"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 Datenbank
+[[d1_databases]]
+binding = "DB"
+database_name = "sicherda-db"
+database_id = "1224f58c-fda2-4546-8b77-104159631a51"
+
+# Cron-Job für Überfälligkeits-Check
+[[triggers]]
+cron = "*/5 * * * *" # Alle 5 Minuten
+
+# Environment Variables (Secrets via wrangler secret)
+[vars]
+# EXPO_ACCESS_TOKEN = "" # Via wrangler secret put EXPO_ACCESS_TOKEN

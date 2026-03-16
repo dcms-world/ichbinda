@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SicherDa - Betreuer Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .add-person { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        input[type="text"]:focus { outline: none; border-color: #667eea; }
+        button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover { background: #5a6fd6; }
+        .person-list { list-style: none; }
+        .person-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid #eee;
+        }
+        .person-id { font-family: monospace; color: #666; font-size: 14px; }
+        .person-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-ok { background: #d4edda; color: #155724; }
+        .status-overdue { background: #f8d7da; color: #721c24; }
+        .status-never { background: #fff3cd; color: #856404; }
+        .last-seen { color: #666; font-size: 14px; margin-top: 4px; }
+        .empty-state { text-align: center; padding: 40px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👀 SicherDa Betreuer</h1>
+        <p class="subtitle">Überwachte Personen im Blick behalten</p>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 15px;">➕ Person hinzufügen</h3>
+            <div class="add-person">
+                <input type="text" id="personId" placeholder="Person ID">
+                <button onclick="addPerson()">Hinzufügen</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 15px;">📋 Meine Personen</h3>
+            <ul class="person-list" id="personList">
+                <li class="empty-state">Noch keine Personen.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+        
+        function getWatcherId() {
+            return localStorage.getItem('sicherda_watcher_id');
+        }
+        
+        async function init() {
+            // Watcher ID erzeugen falls nicht vorhanden
+            if (!getWatcherId()) {
+                const res = await fetch(`${API_URL}/watcher`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ push_token: 'web-' + crypto.randomUUID() })
+                });
+                const data = await res.json();
+                localStorage.setItem('sicherda_watcher_id', data.id);
+            }
+            loadPersons();
+        }
+        
+        async function addPerson() {
+            const personId = document.getElementById('personId').value.trim();
+            if (!personId) return;
+            
+            await fetch(`${API_URL}/watch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    person_id: personId,
+                    watcher_id: getWatcherId(),
+                    check_interval_hours: 24
+                })
+            });
+            
+            document.getElementById('personId').value = '';
+            loadPersons();
+        }
+        
+        async function loadPersons() {
+            const res = await fetch(`${API_URL}/watcher/${getWatcherId()}/persons`);
+            const persons = await res.json();
+            
+            const list = document.getElementById('personList');
+            if (persons.length === 0) {
+                list.innerHTML = '<li class="empty-state">Noch keine Personen.</li>';
+                return;
+            }
+            
+            list.innerHTML = persons.map(p => `
+                <li class="person-item">
+                    <div>
+                        <div class="person-id">${p.id}</div>
+                        <div class="last-seen">${p.last_heartbeat 
+                            ? 'Letzte Meldung: ' + new Date(p.last_heartbeat).toLocaleString('de-DE')
+                            : 'Noch nie gemeldet'}</div>
+                    </div>
+                    <span class="person-status status-${p.status}">${p.status}</span>
+                </li>
+            `).join('');
+        }
+        
+        init();
+        setInterval(loadPersons, 30000); // Alle 30s aktualisieren
+    </script>
+</body>
+</html>
