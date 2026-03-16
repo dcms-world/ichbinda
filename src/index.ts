@@ -8,6 +8,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SicherDa - Ich bin okay</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:20px}
@@ -23,7 +24,15 @@ h1{color:#333;margin-bottom:10px}
 .status.error{background:#f8d7da;color:#721c24}
 .last-checkin{margin-top:20px;color:#666;font-size:14px}
 .setup-info{margin-top:30px;padding:15px;background:#f8f9fa;border-radius:10px;font-size:14px}
-.setup-info code{background:#e9ecef;padding:2px 6px;border-radius:4px;word-break:break-all}
+.id-display{background:#e9ecef;padding:12px;border-radius:8px;font-family:monospace;font-size:16px;word-break:break-all;margin:10px 0;cursor:pointer;transition:background 0.2s}
+.id-display:hover{background:#dee2e6}
+.id-display.copied{background:#d4edda}
+.btn-small{padding:8px 16px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin:5px}
+.btn-qr{background:#667eea;color:white}
+.btn-copy{background:#6c757d;color:white}
+.qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;display:none}
+.qr-container.show{display:block}
+.menu{margin-top:15px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -33,18 +42,124 @@ h1{color:#333;margin-bottom:10px}
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
 <div id="status"></div>
 <div class="last-checkin" id="lastCheckin"></div>
+
 <div class="setup-info" id="setupInfo">
-<strong>Deine ID:</strong><br><code id="personId">-</code><br><br>
-<small>Gib diese ID deinem Betreuer.</small>
+<strong>🔑 Deine ID:</strong>
+<div class="id-display" id="personId" onclick="copyId()" title="Klicken zum Kopieren">-</div>
+<small id="copyHint">Tippe auf die ID zum Kopieren</small>
+
+<div class="menu">
+<button class="btn-small btn-copy" onclick="copyId()">📋 Kopieren</button>
+<button class="btn-small btn-qr" onclick="toggleQR()">📱 QR-Code</button>
+</div>
+
+<div class="qr-container" id="qrContainer">
+<div id="qrcode"></div>
+<small>Der Betreuer kann diesen Code scannen</small>
+</div>
+
+<small style="display:block;margin-top:15px;color:#666">Gib diese ID oder den QR-Code deinem Betreuer.</small>
 </div>
 </div>
+
 <script>
 const API_URL='/api';
-function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
-async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
-async function init(){let personId=getPersonId();if(!personId)personId=await createPerson();document.getElementById('personId').textContent=personId;const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
-async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
-async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
+let currentPersonId = null;
+
+function getPersonId(){
+const params=new URLSearchParams(window.location.search);
+return params.get('id')||localStorage.getItem('sicherda_person_id')
+}
+
+async function createPerson(){
+const res=await fetch(API_URL+'/person',{method:'POST'});
+const data=await res.json();
+localStorage.setItem('sicherda_person_id',data.id);
+return data.id
+}
+
+function copyId(){
+if(!currentPersonId)return;
+navigator.clipboard.writeText(currentPersonId).then(()=>{
+const idEl=document.getElementById('personId');
+idEl.classList.add('copied');
+idEl.textContent='✅ Kopiert!';
+document.getElementById('copyHint').textContent='ID wurde in die Zwischenablage kopiert';
+setTimeout(()=>{
+idEl.classList.remove('copied');
+idEl.textContent=currentPersonId;
+document.getElementById('copyHint').textContent='Tippe auf die ID zum Kopieren';
+},2000);
+});
+}
+
+function toggleQR(){
+const container=document.getElementById('qrContainer');
+if(container.classList.contains('show')){
+container.classList.remove('show');
+}else{
+container.classList.add('show');
+if(currentPersonId){
+document.getElementById('qrcode').innerHTML='';
+new QRCode(document.getElementById('qrcode'),{
+text:currentPersonId,
+width:200,
+height:200,
+colorDark:"#000000",
+colorLight:"#ffffff",
+correctLevel:QRCode.CorrectLevel.M
+});
+}
+}
+}
+
+async function init(){
+let personId=getPersonId();
+if(!personId)personId=await createPerson();
+currentPersonId=personId;
+document.getElementById('personId').textContent=personId;
+const url=new URL(window.location);
+url.searchParams.set('id',personId);
+window.history.replaceState({},'',url);
+loadStatus(personId)
+}
+
+async function sendHeartbeat(){
+const btn=document.getElementById('btnOkay');
+const status=document.getElementById('status');
+const personId=getPersonId();
+btn.disabled=true;
+status.className='status';
+status.textContent='Wird gesendet...';
+try{
+const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});
+if(res.ok){
+const data=await res.json();
+status.className='status success';
+status.textContent='✅ Gemeldet!';
+document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')
+}else throw new Error('Fehler')
+}catch(err){
+status.className='status error';
+status.textContent='❌ Fehler. Bitte erneut versuchen.'
+}finally{
+btn.disabled=false;
+setTimeout(()=>status.textContent='',5000)
+}
+}
+
+async function loadStatus(personId){
+try{
+const res=await fetch(API_URL+'/person/'+personId);
+if(res.ok){
+const data=await res.json();
+if(data.last_heartbeat){
+document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')
+}
+}
+}catch(e){}
+}
+
 init();
 </script>
 </body>
