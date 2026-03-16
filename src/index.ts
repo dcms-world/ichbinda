@@ -158,12 +158,87 @@ button:hover{background:#5a6fd6}
 </div>
 </div>
 <script>
-const API_URL='/api';
-function getWatcherId(){return localStorage.getItem('sicherda_watcher_id')}
-async function init(){if(!getWatcherId()){const res=await fetch(API_URL+'/watcher',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({push_token:'web-'+crypto.randomUUID()})});const data=await res.json();localStorage.setItem('sicherda_watcher_id',data.id)}loadPersons()}
-async function addPerson(){const personId=document.getElementById('personId').value.trim();if(!personId)return;await fetch(API_URL+'/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId,watcher_id:getWatcherId(),check_interval_hours:24})});document.getElementById('personId').value='';loadPersons()}
-async function loadPersons(){const res=await fetch(API_URL+'/watcher/'+getWatcherId()+'/persons');const persons=await res.json();const list=document.getElementById('personList');if(persons.length===0){list.innerHTML='<li class="empty-state">Noch keine Personen.</li>';return}list.innerHTML=persons.map(p=>'<li class="person-item"><div><div class="person-id">'+p.id+'</div><div class="last-seen">'+(p.last_heartbeat?'Letzte Meldung: '+new Date(p.last_heartbeat).toLocaleString('de-DE'):'Noch nie gemeldet')+'</div></div><span class="person-status status-'+p.status+'">'+p.status+'</span></li>').join('')}
-init();setInterval(loadPersons,30000);
+const API_URL = '/api';
+
+function getWatcherId() {
+  return localStorage.getItem('sicherda_watcher_id');
+}
+
+async function init() {
+  if (!getWatcherId()) {
+    const res = await fetch(API_URL + '/watcher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ push_token: 'web-' + crypto.randomUUID() })
+    });
+    const data = await res.json();
+    localStorage.setItem('sicherda_watcher_id', data.id);
+  }
+  loadPersons();
+}
+
+async function addPerson() {
+  const personId = document.getElementById('personId').value.trim();
+  if (!personId) return;
+  await fetch(API_URL + '/watch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_hours: 24 })
+  });
+  document.getElementById('personId').value = '';
+  loadPersons();
+}
+
+async function updateInterval(personId, hours) {
+  await fetch(API_URL + '/watch', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_hours: parseInt(hours) })
+  });
+  loadPersons();
+}
+
+function buildIntervalSelect(p) {
+  const intervals = [6, 12, 24, 48];
+  let html = '<select onchange="updateInterval(&quot;' + p.id + '&quot;, this.value)" style="padding:2px 6px;border:1px solid #ddd;border-radius:4px">';
+  for (const h of intervals) {
+    const selected = p.check_interval_hours == h ? ' selected' : '';
+    html += '<option value="' + h + '"' + selected + '>' + h + 'h</option>';
+  }
+  html += '</select>';
+  return html;
+}
+
+function buildPersonRow(p) {
+  const lastSeen = p.last_heartbeat 
+    ? 'Letzte Meldung: ' + new Date(p.last_heartbeat).toLocaleString('de-DE')
+    : 'Noch nie gemeldet';
+  
+  return '<li class="person-item">' +
+    '<div>' +
+      '<div class="person-id">' + p.id + '</div>' +
+      '<div class="last-seen">' + lastSeen + '</div>' +
+      '<div style="margin-top:8px;font-size:12px;color:#888">' +
+        '⏰ Alarm nach: ' + buildIntervalSelect(p) +
+      '</div>' +
+    '</div>' +
+    '<span class="person-status status-' + p.status + '">' + p.status + '</span>' +
+  '</li>';
+}
+
+async function loadPersons() {
+  const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
+  const persons = await res.json();
+  const list = document.getElementById('personList');
+  if (persons.length === 0) {
+    list.innerHTML = '<li class="empty-state">Noch keine Personen.</li>';
+    return;
+  }
+  list.innerHTML = persons.map(buildPersonRow).join('');
+}
+
+init();
+setInterval(loadPersons, 30000);
 </script>
 </body>
 </html>`;
@@ -236,6 +311,16 @@ app.post('/api/watch', async (c) => {
      ON CONFLICT(person_id, watcher_id) DO UPDATE SET
      check_interval_hours = excluded.check_interval_hours`
   ).bind(person_id, watcher_id, check_interval_hours).run();
+  return c.json({ success: true, person_id, watcher_id, check_interval_hours });
+});
+
+// API: Intervall für überwachte Person aktualisieren
+app.put('/api/watch', async (c) => {
+  const { person_id, watcher_id, check_interval_hours } = await c.req.json();
+  if (!person_id || !watcher_id || !check_interval_hours) return c.json({ error: 'person_id, watcher_id and check_interval_hours required' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE watch_relations SET check_interval_hours = ? WHERE person_id = ? AND watcher_id = ?`
+  ).bind(check_interval_hours, person_id, watcher_id).run();
   return c.json({ success: true, person_id, watcher_id, check_interval_hours });
 });
 
