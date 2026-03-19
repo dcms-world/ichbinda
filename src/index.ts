@@ -250,6 +250,7 @@ button:hover{background:#5a6fd6}
         <option value="720">12 Std</option>
         <option value="1440">24 Std</option>
         <option value="2880">48 Std</option>
+        <option value="4320">72 Std</option>
       </select>
     </div>
     <div class="edit-actions">
@@ -271,7 +272,8 @@ const INTERVALS = [
   { min: 360, label: '6 Std' },
   { min: 720, label: '12 Std' },
   { min: 1440, label: '24 Std' },
-  { min: 2880, label: '48 Std' }
+  { min: 2880, label: '48 Std' },
+  { min: 4320, label: '72 Std' }
 ];
 let cameraStream = null;
 let scanFrameRequestId = 0;
