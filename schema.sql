@@ -20,3 +20,9 @@ CREATE TABLE IF NOT EXISTS watch_relations (
   FOREIGN KEY (person_id) REFERENCES persons(id),
   FOREIGN KEY (watcher_id) REFERENCES watchers(id)
 );
+
+-- Rate Limiting für Heartbeats (1 pro 5 Minuten pro Gerät)
+CREATE TABLE IF NOT EXISTS device_rate_limits (
+  device_id TEXT PRIMARY KEY,
+  last_heartbeat_at TEXT NOT NULL
+);

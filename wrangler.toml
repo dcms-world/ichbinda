@@ -15,3 +15,4 @@ cron = "*/5 * * * *" # Alle 5 Minuten
 # Environment Variables (Secrets via wrangler secret)
 [vars]
 # EXPO_ACCESS_TOKEN = "" # Via wrangler secret put EXPO_ACCESS_TOKEN
+# API_KEYS = ""          # Via wrangler secret put API_KEYS (comma/newline separated)

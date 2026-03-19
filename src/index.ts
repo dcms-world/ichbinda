@@ -273,6 +273,121 @@ setInterval(loadPersons, 30000);
 interface Env {
   DB: D1Database;
   EXPO_ACCESS_TOKEN?: string;
+  API_KEYS?: string;  // Comma or newline separated API keys
+}
+
+interface RateLimitRow {
+  last_heartbeat_at: string;
+}
+
+const RATE_LIMIT_WINDOW_MS = 10 * 1000; // 10 seconds (for testing)
+
+// Security: Constant-time string comparison to prevent timing attacks
+function constantTimeEquals(left: string, right: string): boolean {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length);
+  let mismatch = leftBytes.length === rightBytes.length ? 0 : 1;
+
+  for (let index = 0; index < maxLength; index += 1) {
+    mismatch |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+
+  return mismatch === 0;
+}
+
+// Security: Validate API Key from X-API-Key header
+function isAuthorized(request: Request, env: Env): boolean {
+  const providedKey = request.headers.get("X-API-Key");
+  if (!providedKey) {
+    return false;
+  }
+
+  const allowedKeys = (env.API_KEYS ?? "")
+    .split(/[\n,]/)
+    .map((key) => key.trim())
+    .filter(Boolean);
+
+  if (allowedKeys.length === 0) {
+    return false;
+  }
+
+  return allowedKeys.some((key) => constantTimeEquals(providedKey, key));
+}
+
+// Security: Check rate limit for person_id (max 1 per 5 minutes)
+async function checkRateLimit(
+  db: D1Database,
+  personId: string
+): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const cutoffIso = new Date(now.getTime() - RATE_LIMIT_WINDOW_MS).toISOString();
+
+  // Get previous rate limit entry
+  const previousRateLimit = await db.prepare(
+    "SELECT last_heartbeat_at FROM device_rate_limits WHERE device_id = ?1"
+  )
+    .bind(personId)
+    .first<RateLimitRow>();
+
+  // Try to update rate limit atomically (only if enough time passed)
+  const rateLimitResult = await db.prepare(
+    `
+      INSERT INTO device_rate_limits (device_id, last_heartbeat_at)
+      VALUES (?1, ?2)
+      ON CONFLICT(device_id) DO UPDATE SET last_heartbeat_at = excluded.last_heartbeat_at
+      WHERE unixepoch(device_rate_limits.last_heartbeat_at) <= unixepoch(?3)
+    `
+  )
+    .bind(personId, nowIso, cutoffIso)
+    .run();
+
+  const rateLimitUpdated = (rateLimitResult.meta?.changes ?? 0) > 0;
+
+  if (!rateLimitUpdated) {
+    // Calculate retry-after
+    const lastHeartbeatMs = previousRateLimit?.last_heartbeat_at
+      ? Date.parse(previousRateLimit.last_heartbeat_at)
+      : 0;
+    const retryAfterMs = lastHeartbeatMs + RATE_LIMIT_WINDOW_MS - now.getTime();
+    const retryAfterSeconds = retryAfterMs > 0 ? Math.ceil(retryAfterMs / 1000) : 0;
+
+    return { allowed: false, retryAfterSeconds };
+  }
+
+  return { allowed: true };
+}
+
+// Rollback rate limit on DB error (best effort)
+async function rollbackRateLimit(
+  db: D1Database,
+  personId: string,
+  previousTimestamp: string | null,
+  currentTimestamp: string
+): Promise<void> {
+  try {
+    if (previousTimestamp) {
+      await db.prepare(
+        `
+          UPDATE device_rate_limits
+          SET last_heartbeat_at = ?1
+          WHERE device_id = ?2 AND last_heartbeat_at = ?3
+        `
+      )
+        .bind(previousTimestamp, personId, currentTimestamp)
+        .run();
+      return;
+    }
+
+    await db.prepare(
+      "DELETE FROM device_rate_limits WHERE device_id = ?1 AND last_heartbeat_at = ?2"
+    )
+      .bind(personId, currentTimestamp)
+      .run();
+  } catch (rollbackError) {
+    console.error("Failed to rollback rate limit state", rollbackError);
+  }
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -300,16 +415,62 @@ app.post('/api/person', async (c) => {
   }
 });
 
-// API: Heartbeat senden
+// API: Heartbeat senden (ohne API-Key, mit Rate Limiting)
 app.post('/api/heartbeat', async (c) => {
-  const { person_id } = await c.req.json<{ person_id: string }>();
-  if (!person_id) return c.json({ error: 'person_id required' }, 400);
-  const now = new Date().toISOString();
-  await c.env.DB.prepare(
-    `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
-     ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`
-  ).bind(person_id, now).run();
-  return c.json({ success: true, person_id, timestamp: now });
+  // 1. Parse and validate request body
+  const body = await c.req.json<{ person_id?: string; status?: string }>().catch(() => ({}));
+  const person_id = typeof body.person_id === 'string' ? body.person_id.trim() : '';
+  const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
+
+  if (!person_id) {
+    return c.json({ error: 'person_id required' }, 400);
+  }
+
+  if (person_id.length > 255 || status.length > 64) {
+    return c.json({ error: 'person_id or status is too long' }, 400);
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  // 2. Check rate limit (max 1 per 5 minutes per person)
+  const rateLimitCheck = await checkRateLimit(c.env.DB, person_id);
+  if (!rateLimitCheck.allowed) {
+    return c.json({
+      error: 'Too many requests',
+      retry_after_seconds: rateLimitCheck.retryAfterSeconds
+    }, 429);
+  }
+
+  // 3. Store heartbeat
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
+       ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`
+    ).bind(person_id, nowIso).run();
+
+    return c.json({
+      success: true,
+      person_id,
+      status,
+      timestamp: nowIso
+    });
+  } catch (error) {
+    // Rollback rate limit on error (best effort)
+    const previousRateLimit = await c.env.DB.prepare(
+      "SELECT last_heartbeat_at FROM device_rate_limits WHERE device_id = ?1"
+    ).bind(person_id).first<RateLimitRow>();
+
+    await rollbackRateLimit(
+      c.env.DB,
+      person_id,
+      previousRateLimit?.last_heartbeat_at ?? null,
+      nowIso
+    );
+
+    console.error('Error storing heartbeat:', error);
+    return c.json({ error: 'Failed to store heartbeat' }, 500);
+  }
 });
 
 // API: Status einer Person abfragen
