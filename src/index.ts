@@ -38,6 +38,8 @@ h1{color:#333;margin-bottom:10px}
 .id-display{background:#e9ecef;padding:12px;border-radius:8px;font-family:monospace;font-size:14px;word-break:break-all;margin:10px 0;cursor:pointer;transition:background 0.2s}
 .id-display:hover{background:#dee2e6}
 .id-display.copied{background:#d4edda}
+.name-label{display:block;color:#555;font-size:14px;font-weight:600;margin-bottom:6px}
+.name-display{background:white;border:2px solid #e9ecef;padding:14px;border-radius:10px;font-size:24px;font-weight:700;line-height:1.2;color:#2f3b59;word-break:break-word}
 .btn-small{padding:10px 20px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin:5px}
 .btn-close{position:absolute;top:15px;left:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666}
 .btn-close:hover{color:#333}
@@ -86,6 +88,11 @@ h1{color:#333;margin-bottom:10px}
 </div>
 
 <div class="settings-section">
+<span class="name-label">Dein Name:</span>
+<div class="name-display" id="personNameDisplay">-</div>
+</div>
+
+<div class="settings-section">
 <h3>📱 QR-Code für Betreuer</h3>
 <div class="qr-container" id="qrContainer">
 <div id="qrcode"></div>
@@ -120,7 +127,8 @@ async function createPerson(){const res=await fetch(API_URL+'/person',{method:'P
 
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
 function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});document.getElementById('qrPayloadText').textContent=qrPayload}
-function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderQrCode()}
+function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
+function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
@@ -130,7 +138,7 @@ function askForPersonName(){return new Promise((resolve)=>{const overlay=documen
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
-async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
+async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;renderPersonName();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
 
 async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
 
