@@ -155,6 +155,7 @@ const WATCHER_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IchBinDa - Betreuer Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;background:#f5f7fa;padding:20px}
@@ -357,18 +358,36 @@ async function handleQrFileChange(event) {
   const file = input.files && input.files[0];
   if (!file) return;
 
-  if (!('BarcodeDetector' in window)) {
-    alert('QR-Scan wird hier nicht unterstützt. Bitte QR-JSON manuell einfügen.');
-    input.value = '';
-    return;
-  }
-
   try {
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const bitmap = await createImageBitmap(file);
-    const barcodes = await detector.detect(bitmap);
-    if (bitmap.close) bitmap.close();
-    const qrText = barcodes[0] && barcodes[0].rawValue ? barcodes[0].rawValue.trim() : '';
+    if (typeof window.jsQR !== 'function') {
+      throw new Error('jsQR nicht geladen');
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    const imageLoaded = new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+    });
+    image.src = imageUrl;
+    await imageLoaded;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context || !canvas.width || !canvas.height) {
+      throw new Error('Bild konnte nicht verarbeitet werden');
+    }
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
+    const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+    URL.revokeObjectURL(imageUrl);
+
     if (!qrText) throw new Error('Kein QR-Code erkannt');
     document.getElementById('personId').value = qrText;
     await addPerson();
