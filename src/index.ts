@@ -35,12 +35,8 @@ h1{color:#333;margin-bottom:10px}
 .settings-title{font-size:24px;margin-bottom:20px;color:#333}
 .settings-section{margin:20px 0;padding:15px;background:#f8f9fa;border-radius:10px}
 .settings-section h3{margin-bottom:10px;color:#555;font-size:16px}
-.id-display{background:#e9ecef;padding:12px;border-radius:8px;font-family:monospace;font-size:14px;word-break:break-all;margin:10px 0;cursor:pointer;transition:background 0.2s}
-.id-display:hover{background:#dee2e6}
-.id-display.copied{background:#d4edda}
 .name-label{display:block;color:#555;font-size:14px;font-weight:600;margin-bottom:6px}
 .name-display{background:white;border:2px solid #e9ecef;padding:14px;border-radius:10px;font-size:24px;font-weight:700;line-height:1.2;color:#2f3b59;word-break:break-word}
-.btn-small{padding:10px 20px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin:5px}
 .btn-close{position:absolute;top:15px;left:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666}
 .btn-close:hover{color:#333}
 .qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;text-align:center}
@@ -77,15 +73,6 @@ h1{color:#333;margin-bottom:10px}
 <div class="settings-panel" id="settingsPanel">
 <button class="btn-close" onclick="closeSettings()">✕</button>
 <h2 class="settings-title">⚙️ Einstellungen</h2>
-
-<div class="settings-section">
-<h3>🔑 Deine ID</h3>
-<div class="id-display" id="personId" onclick="copyId()" title="Klicken zum Kopieren">-</div>
-<small id="copyHint">Tippe auf die ID zum Kopieren</small>
-<div style="margin-top:10px">
-<button class="btn-small" style="background:#6c757d;color:white" onclick="copyId()">📋 Kopieren</button>
-</div>
-</div>
 
 <div class="settings-section">
 <span class="name-label">Dein Name:</span>
@@ -132,13 +119,11 @@ function openSettings(){document.getElementById('settingsPanel').classList.add('
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
-function copyId(){if(!currentPersonId)return;navigator.clipboard.writeText(currentPersonId).then(()=>{const idEl=document.getElementById('personId');idEl.classList.add('copied');idEl.textContent='✅ Kopiert!';document.getElementById('copyHint').textContent='ID wurde kopiert';setTimeout(()=>{idEl.classList.remove('copied');idEl.textContent=currentPersonId;document.getElementById('copyHint').textContent='Tippe auf die ID zum Kopieren'},2000)})}
-
 function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
-async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;renderPersonName();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
+async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;renderPersonName();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
 
 async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
 
