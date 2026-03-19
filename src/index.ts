@@ -161,6 +161,7 @@ button{padding:12px 24px;background:#667eea;color:white;border:none;border-radiu
 button:hover{background:#5a6fd6}
 .person-list{list-style:none}
 .person-item{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #eee}
+.person-main{flex:1}
 .person-id{font-family:monospace;color:#666;font-size:14px}
 .person-name{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#2f3b59;font-weight:600}
 .person-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase}
@@ -168,6 +169,9 @@ button:hover{background:#5a6fd6}
 .status-overdue{background:#f8d7da;color:#721c24}
 .status-never{background:#fff3cd;color:#856404}
 .last-seen{color:#666;font-size:14px;margin-top:4px}
+.person-actions{display:flex;align-items:center;gap:10px}
+.remove-btn{padding:8px 12px;background:#fff;color:#b42318;border:1px solid #fda29b;border-radius:8px;font-size:14px;cursor:pointer}
+.remove-btn:hover{background:#fee4e2}
 .empty-state{text-align:center;padding:40px;color:#666}
 .scan-hint{display:block;color:#666;font-size:12px;margin-top:8px}
 </style>
@@ -196,9 +200,41 @@ button:hover{background:#5a6fd6}
 <script>
 const API_URL = '/api';
 const PERSON_NAMES_KEY = 'sicherda_person_names';
+const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
+const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
+const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
 
 function getWatcherId() {
   return localStorage.getItem('sicherda_watcher_id');
+}
+
+function getStoredList(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim());
+  } catch (err) {
+    return [];
+  }
+}
+
+function setStoredList(key, values) {
+  const uniqueValues = Array.from(new Set((values || []).filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim())));
+  localStorage.setItem(key, JSON.stringify(uniqueValues));
+}
+
+function addToStoredList(key, value) {
+  if (!value) return;
+  const existing = getStoredList(key);
+  existing.push(value);
+  setStoredList(key, existing);
+}
+
+function removeFromStoredList(key, value) {
+  if (!value) return;
+  const existing = getStoredList(key);
+  setStoredList(key, existing.filter((entry) => entry !== value));
 }
 
 function getPersonNames() {
@@ -215,18 +251,67 @@ function setPersonNames(personNames) {
   localStorage.setItem(PERSON_NAMES_KEY, JSON.stringify(personNames));
 }
 
+function getPersonNameHistory() {
+  try {
+    const raw = localStorage.getItem(PERSON_NAME_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function setPersonNameHistory(personNames) {
+  localStorage.setItem(PERSON_NAME_HISTORY_KEY, JSON.stringify(personNames));
+}
+
 function storePersonName(personId, name) {
   const safeName = (name || '').trim();
   if (!personId || !safeName) return;
   const personNames = getPersonNames();
   personNames[personId] = safeName;
   setPersonNames(personNames);
+  const historyNames = getPersonNameHistory();
+  historyNames[personId] = safeName;
+  setPersonNameHistory(historyNames);
 }
 
 function getPersonName(personId) {
   const personNames = getPersonNames();
   const name = personNames[personId];
   return typeof name === 'string' ? name : '';
+}
+
+function getRememberedPersonName(personId) {
+  const personNames = getPersonNameHistory();
+  const name = personNames[personId];
+  return typeof name === 'string' ? name : '';
+}
+
+function removePersonName(personId) {
+  const personNames = getPersonNames();
+  const existingName = personNames[personId];
+  if (typeof existingName === 'string' && existingName.trim()) {
+    const historyNames = getPersonNameHistory();
+    historyNames[personId] = existingName.trim();
+    setPersonNameHistory(historyNames);
+  }
+  delete personNames[personId];
+  setPersonNames(personNames);
+}
+
+function getHiddenPersonIds() {
+  return getStoredList(HIDDEN_PERSON_IDS_KEY);
+}
+
+function hidePersonFromLocalView(personId) {
+  addToStoredList(HIDDEN_PERSON_IDS_KEY, personId);
+  removeFromStoredList(WATCHED_PERSON_IDS_KEY, personId);
+}
+
+function unhidePersonInLocalView(personId) {
+  removeFromStoredList(HIDDEN_PERSON_IDS_KEY, personId);
+  addToStoredList(WATCHED_PERSON_IDS_KEY, personId);
 }
 
 function escapeHtml(value) {
@@ -306,7 +391,12 @@ async function addPerson() {
   if (!parsedInput) return;
   const personId = parsedInput.personId;
   if (!personId) return;
-  if (parsedInput.name) storePersonName(personId, parsedInput.name);
+  if (parsedInput.name) {
+    storePersonName(personId, parsedInput.name);
+  } else {
+    const rememberedName = getRememberedPersonName(personId);
+    if (rememberedName) storePersonName(personId, rememberedName);
+  }
   
   // Zuerst sicherstellen, dass die Person existiert (automatisch erstellt durch API)
   try {
@@ -326,6 +416,7 @@ async function addPerson() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: 1440 })
     });
+    unhidePersonInLocalView(personId);
     
     document.getElementById('personId').value = '';
     loadPersons();
@@ -372,26 +463,53 @@ function buildPersonRow(p) {
     : '<span class="person-id">' + escapeHtml(p.id) + '</span>';
   
   return '<li class="person-item">' +
-    '<div>' +
+    '<div class="person-main">' +
       '<div>' + idLabel + '</div>' +
       '<div class="last-seen">' + lastSeen + '</div>' +
       '<div style="margin-top:8px;font-size:12px;color:#888">' +
         '⏰ Alarm nach: ' + buildIntervalSelect(p) +
       '</div>' +
     '</div>' +
-    '<span class="person-status status-' + p.status + '">' + p.status + '</span>' +
+    '<div class="person-actions">' +
+      '<span class="person-status status-' + p.status + '">' + p.status + '</span>' +
+      '<button type="button" class="remove-btn" data-person-id="' + escapeHtml(p.id) + '">🗑️ Entfernen</button>' +
+    '</div>' +
   '</li>';
+}
+
+function removePersonFromLocalView(personId) {
+  if (!personId) return;
+  const personName = getPersonName(personId) || getRememberedPersonName(personId);
+  const label = personName ? personName + ' (' + personId + ')' : personId;
+  const confirmed = confirm('Person "' + label + '" nur lokal ausblenden? Die Datenbank bleibt unverändert.');
+  if (!confirmed) return;
+  removePersonName(personId);
+  hidePersonFromLocalView(personId);
+  loadPersons();
 }
 
 async function loadPersons() {
   const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
-  const persons = await res.json();
+  const personsRaw = await res.json();
+  const persons = Array.isArray(personsRaw) ? personsRaw : [];
+  const hiddenPersonIds = new Set(getHiddenPersonIds());
+  const visiblePersons = persons.filter((person) => !hiddenPersonIds.has(person.id));
+  const watchedPersonIds = getStoredList(WATCHED_PERSON_IDS_KEY);
+  for (const person of visiblePersons) watchedPersonIds.push(person.id);
+  setStoredList(WATCHED_PERSON_IDS_KEY, watchedPersonIds);
   const list = document.getElementById('personList');
-  if (persons.length === 0) {
+  if (visiblePersons.length === 0) {
     list.innerHTML = '<li class="empty-state">Noch keine Personen.</li>';
     return;
   }
-  list.innerHTML = persons.map(buildPersonRow).join('');
+  list.innerHTML = visiblePersons.map(buildPersonRow).join('');
+  list.querySelectorAll('.remove-btn').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      const target = event.currentTarget;
+      const personId = target ? target.getAttribute('data-person-id') : '';
+      removePersonFromLocalView(personId || '');
+    });
+  });
 }
 
 init();
