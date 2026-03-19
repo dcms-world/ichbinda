@@ -45,9 +45,27 @@ h1{color:#333;margin-bottom:10px}
 #qrcode{display:inline-block}
 .close-settings{margin-top:30px;padding:12px 24px;background:#dc3545;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;width:100%}
 .close-settings:hover{background:#c82333}
+.name-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
+.name-modal-overlay.open{display:flex}
+.name-modal{background:white;border-radius:14px;padding:24px;width:100%;max-width:360px;box-shadow:0 14px 45px rgba(0,0,0,0.25)}
+.name-modal h2{font-size:24px;color:#333;margin-bottom:8px}
+.name-modal p{color:#666;margin-bottom:16px}
+.name-modal input{width:100%;padding:12px 14px;border:2px solid #ddd;border-radius:8px;font-size:16px;margin-bottom:12px}
+.name-modal input:focus{outline:none;border-color:#667eea}
+.name-modal button{width:100%;padding:12px 14px;border:none;border-radius:8px;background:#11998e;color:white;font-size:16px;font-weight:600;cursor:pointer}
+.name-modal button:hover{background:#0f877e}
 </style>
 </head>
 <body>
+<div class="name-modal-overlay" id="nameModalOverlay">
+<form class="name-modal" id="nameModalForm">
+<h2>Wie heißt du?</h2>
+<p>Bitte gib deinen Namen einmalig ein.</p>
+<input id="personNameInput" type="text" maxlength="80" placeholder="z.B. Oma Erna" required>
+<button type="submit">Speichern</button>
+</form>
+</div>
+
 <button class="menu-btn" onclick="openSettings()" title="Einstellungen">⚙️</button>
 
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
@@ -86,20 +104,29 @@ h1{color:#333;margin-bottom:10px}
 
 <script>
 const API_URL='/api';
+const PERSON_NAME_KEY='sicherda_person_name';
 let currentPersonId=null;
-let qrGenerated=false;
+let currentPersonName='';
 
 function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
+function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
+function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
 
 async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
 
-function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');if(currentPersonId&&!qrGenerated){new QRCode(document.getElementById('qrcode'),{text:currentPersonId,width:180,height:180});qrGenerated=true}}
+function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
+function renderQrCode(){if(!currentPersonId)return;const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:buildQrPayload(),width:180,height:180})}
+function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderQrCode()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
 function copyId(){if(!currentPersonId)return;navigator.clipboard.writeText(currentPersonId).then(()=>{const idEl=document.getElementById('personId');idEl.classList.add('copied');idEl.textContent='✅ Kopiert!';document.getElementById('copyHint').textContent='ID wurde kopiert';setTimeout(()=>{idEl.classList.remove('copied');idEl.textContent=currentPersonId;document.getElementById('copyHint').textContent='Tippe auf die ID zum Kopieren'},2000)})}
 
-async function init(){let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
+function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
+
+async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
+
+async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;document.getElementById('personId').textContent=personId;const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
 
 async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
 
@@ -131,12 +158,14 @@ button:hover{background:#5a6fd6}
 .person-list{list-style:none}
 .person-item{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #eee}
 .person-id{font-family:monospace;color:#666;font-size:14px}
+.person-name{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#2f3b59;font-weight:600}
 .person-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase}
 .status-ok{background:#d4edda;color:#155724}
 .status-overdue{background:#f8d7da;color:#721c24}
 .status-never{background:#fff3cd;color:#856404}
 .last-seen{color:#666;font-size:14px;margin-top:4px}
 .empty-state{text-align:center;padding:40px;color:#666}
+.scan-hint{display:block;color:#666;font-size:12px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -146,9 +175,12 @@ button:hover{background:#5a6fd6}
 <div class="card">
 <h3 style="margin-bottom:15px">➕ Person hinzufügen</h3>
 <div class="add-person">
-<input type="text" id="personId" placeholder="Person ID">
+<input type="text" id="personId" placeholder="Person ID oder QR-Daten">
 <button onclick="addPerson()">Hinzufügen</button>
+<button type="button" onclick="openQrScanner()">QR scannen</button>
 </div>
+<input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none" onchange="handleQrFileChange(event)">
+<small class="scan-hint">QR-Code als Bild/Kamera scannen oder JSON direkt einfügen.</small>
 </div>
 <div class="card">
 <h3 style="margin-bottom:15px">📋 Meine Personen</h3>
@@ -159,9 +191,95 @@ button:hover{background:#5a6fd6}
 </div>
 <script>
 const API_URL = '/api';
+const PERSON_NAMES_KEY = 'sicherda_person_names';
 
 function getWatcherId() {
   return localStorage.getItem('sicherda_watcher_id');
+}
+
+function getPersonNames() {
+  try {
+    const raw = localStorage.getItem(PERSON_NAMES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function setPersonNames(personNames) {
+  localStorage.setItem(PERSON_NAMES_KEY, JSON.stringify(personNames));
+}
+
+function storePersonName(personId, name) {
+  const safeName = (name || '').trim();
+  if (!personId || !safeName) return;
+  const personNames = getPersonNames();
+  personNames[personId] = safeName;
+  setPersonNames(personNames);
+}
+
+function getPersonName(personId) {
+  const personNames = getPersonNames();
+  const name = personNames[personId];
+  return typeof name === 'string' ? name : '';
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function parsePersonInput(rawValue) {
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') {
+      const personId = String(parsed.id || '').trim();
+      const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+      if (personId) return { personId, name };
+    }
+  } catch (err) {}
+
+  try {
+    const parsedUrl = new URL(value);
+    const personIdFromUrl = (parsedUrl.searchParams.get('id') || '').trim();
+    if (personIdFromUrl) return { personId: personIdFromUrl, name: '' };
+  } catch (err) {}
+
+  return { personId: value, name: '' };
+}
+
+function openQrScanner() {
+  document.getElementById('qrFileInput').click();
+}
+
+async function handleQrFileChange(event) {
+  const input = event.target;
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  if (!('BarcodeDetector' in window)) {
+    alert('QR-Scan wird hier nicht unterstützt. Bitte QR-JSON manuell einfügen.');
+    input.value = '';
+    return;
+  }
+
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const bitmap = await createImageBitmap(file);
+    const barcodes = await detector.detect(bitmap);
+    if (bitmap.close) bitmap.close();
+    const qrText = barcodes[0] && barcodes[0].rawValue ? barcodes[0].rawValue.trim() : '';
+    if (!qrText) throw new Error('Kein QR-Code erkannt');
+    document.getElementById('personId').value = qrText;
+    await addPerson();
+  } catch (err) {
+    alert('QR-Code konnte nicht gelesen werden.');
+  } finally {
+    input.value = '';
+  }
 }
 
 async function init() {
@@ -178,8 +296,13 @@ async function init() {
 }
 
 async function addPerson() {
-  const personId = document.getElementById('personId').value.trim();
+  const inputValue = document.getElementById('personId').value.trim();
+  if (!inputValue) return;
+  const parsedInput = parsePersonInput(inputValue);
+  if (!parsedInput) return;
+  const personId = parsedInput.personId;
   if (!personId) return;
+  if (parsedInput.name) storePersonName(personId, parsedInput.name);
   
   // Zuerst sicherstellen, dass die Person existiert (automatisch erstellt durch API)
   try {
@@ -239,10 +362,14 @@ function buildPersonRow(p) {
   const lastSeen = p.last_heartbeat 
     ? 'Letzte Meldung: ' + new Date(p.last_heartbeat).toLocaleString('de-DE')
     : 'Noch nie gemeldet';
+  const personName = getPersonName(p.id);
+  const idLabel = personName
+    ? '<span class="person-name">' + escapeHtml(personName) + '</span> <span class="person-id">(' + escapeHtml(p.id) + ')</span>'
+    : '<span class="person-id">' + escapeHtml(p.id) + '</span>';
   
   return '<li class="person-item">' +
     '<div>' +
-      '<div class="person-id">' + p.id + '</div>' +
+      '<div>' + idLabel + '</div>' +
       '<div class="last-seen">' + lastSeen + '</div>' +
       '<div style="margin-top:8px;font-size:12px;color:#888">' +
         '⏰ Alarm nach: ' + buildIntervalSelect(p) +
