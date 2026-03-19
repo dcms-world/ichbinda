@@ -43,6 +43,8 @@ h1{color:#333;margin-bottom:10px}
 .btn-close:hover{color:#333}
 .qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;text-align:center}
 #qrcode{display:inline-block}
+.qr-raw-label{display:block;margin-top:12px;margin-bottom:6px;color:#555;font-size:13px}
+.qr-raw{margin:0;padding:10px;background:#e9ecef;border-radius:8px;font-family:monospace;font-size:12px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text}
 .close-settings{margin-top:30px;padding:12px 24px;background:#dc3545;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;width:100%}
 .close-settings:hover{background:#c82333}
 .name-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
@@ -87,6 +89,8 @@ h1{color:#333;margin-bottom:10px}
 <h3>📱 QR-Code für Betreuer</h3>
 <div class="qr-container" id="qrContainer">
 <div id="qrcode"></div>
+<label class="qr-raw-label" for="qrPayloadText">QR-Code Inhalt (zum Kopieren):</label>
+<pre class="qr-raw" id="qrPayloadText"></pre>
 </div>
 <small>Der Betreuer kann diesen Code scannen.</small>
 </div>
@@ -115,7 +119,7 @@ function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
 async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
 
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
-function renderQrCode(){if(!currentPersonId)return;const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:buildQrPayload(),width:180,height:180})}
+function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});document.getElementById('qrPayloadText').textContent=qrPayload}
 function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderQrCode()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
