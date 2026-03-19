@@ -148,7 +148,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;m
 h1{color:#333;margin-bottom:10px}
 .subtitle{color:#666;margin-bottom:30px}
 .card{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.add-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.person-counter{font-size:13px;font-weight:600;color:#475467}
 .add-person{display:flex;gap:10px;margin-bottom:20px}
+.limit-message{display:none;margin-top:10px;color:#b42318;font-size:13px;font-weight:600}
+.limit-message.show{display:block}
+.limit-hide{display:none !important}
 input[type="text"]{flex:1;padding:12px 16px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px}
 input[type="text"]:focus{outline:none;border-color:#667eea}
 button{padding:12px 24px;background:#667eea;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer}
@@ -212,12 +217,16 @@ button:hover{background:#5a6fd6}
 <h1>👀 IchBinDa Betreuer</h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
 <div class="card">
-<h3 style="margin-bottom:15px">➕ Person hinzufügen</h3>
+<div class="add-header">
+<h3>➕ Person hinzufügen</h3>
+<span id="personCounter" class="person-counter">0/2 Personen</span>
+</div>
 <div class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
-<button onclick="addPerson()">Hinzufügen</button>
-<button type="button" onclick="openQrScanner()">Kamera starten</button>
+<button id="addPersonBtn" onclick="addPerson()">Hinzufügen</button>
+<button type="button" id="openQrScannerBtn" onclick="openQrScanner()">Kamera starten</button>
 </div>
+<div id="personLimitMessage" class="limit-message">Maximal 2 Personen möglich.</div>
 <small class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
 </div>
 <div class="card">
@@ -283,6 +292,8 @@ const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
 const PERSON_PHOTOS_KEY = 'sicherda_person_photos';
 const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
+const MAX_WATCHED_PERSONS = 2;
+const PERSON_LIMIT_ALERT_TEXT = 'Maximal 2 Personen können überwacht werden.';
 const INTERVALS = [
   { min: 1, label: '1 Min' },
   { min: 60, label: '1 Std' },
@@ -297,6 +308,7 @@ let scanFrameRequestId = 0;
 let scanContext = null;
 let visiblePersonsById = {};
 let activeEditPersonId = '';
+let currentPersonCount = 0;
 
 function getWatcherId() {
   return localStorage.getItem('sicherda_watcher_id');
@@ -496,6 +508,63 @@ function parsePersonInput(rawValue) {
   return { personId: value, name: '' };
 }
 
+function applyPersonCount(count) {
+  const safeCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+  currentPersonCount = safeCount;
+  updatePersonLimitUi();
+  return currentPersonCount;
+}
+
+function updatePersonLimitUi() {
+  const isLimitReached = currentPersonCount >= MAX_WATCHED_PERSONS;
+  const counter = document.getElementById('personCounter');
+  const personInput = document.getElementById('personId');
+  const addButton = document.getElementById('addPersonBtn');
+  const limitMessage = document.getElementById('personLimitMessage');
+
+  if (counter) {
+    counter.textContent = String(currentPersonCount) + '/' + String(MAX_WATCHED_PERSONS) + ' Personen';
+  }
+  if (personInput) {
+    personInput.disabled = isLimitReached;
+    personInput.classList.toggle('limit-hide', isLimitReached);
+    if (isLimitReached) personInput.value = '';
+  }
+  if (addButton) {
+    addButton.disabled = isLimitReached;
+    addButton.classList.toggle('limit-hide', isLimitReached);
+  }
+  if (limitMessage) {
+    limitMessage.classList.toggle('show', isLimitReached);
+  }
+}
+
+function showPersonLimitAlert() {
+  alert(PERSON_LIMIT_ALERT_TEXT);
+}
+
+async function refreshPersonCount() {
+  try {
+    const response = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
+    if (!response.ok) throw new Error('count-fetch-failed');
+    const personsRaw = await response.json();
+    const persons = Array.isArray(personsRaw) ? personsRaw : [];
+    return applyPersonCount(persons.length);
+  } catch (err) {
+    updatePersonLimitUi();
+    return currentPersonCount;
+  }
+}
+
+async function ensureCanAddPerson() {
+  const count = await refreshPersonCount();
+  if (count >= MAX_WATCHED_PERSONS) {
+    showPersonLimitAlert();
+    return false;
+  }
+  return true;
+}
+
 function setCameraStatus(message, isError) {
   const statusElement = document.getElementById('cameraStatus');
   statusElement.textContent = message;
@@ -546,13 +615,16 @@ function scanQrFrame() {
       });
       const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
       if (qrText) {
-        const parsedInput = parsePersonInput(qrText);
-        const personId = parsedInput && parsedInput.personId ? parsedInput.personId : qrText;
-        document.getElementById('personId').value = personId;
-        if (parsedInput && parsedInput.name) {
-          storePersonName(personId, parsedInput.name);
-        }
         closeQrScanner();
+        ensureCanAddPerson().then((canAdd) => {
+          if (!canAdd) return;
+          const parsedInput = parsePersonInput(qrText);
+          const personId = parsedInput && parsedInput.personId ? parsedInput.personId : qrText;
+          document.getElementById('personId').value = personId;
+          if (parsedInput && parsedInput.name) {
+            storePersonName(personId, parsedInput.name);
+          }
+        });
         return;
       }
     }
@@ -562,6 +634,8 @@ function scanQrFrame() {
 }
 
 async function openQrScanner() {
+  const canAdd = await ensureCanAddPerson();
+  if (!canAdd) return;
   const overlay = document.getElementById('cameraOverlay');
   overlay.classList.add('open');
   setCameraStatus('Kamera wird gestartet...', false);
@@ -610,6 +684,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init() {
+  updatePersonLimitUi();
   if (!getWatcherId()) {
     const res = await fetch(API_URL + '/watcher', {
       method: 'POST',
@@ -623,6 +698,8 @@ async function init() {
 }
 
 async function addPerson() {
+  const canAdd = await ensureCanAddPerson();
+  if (!canAdd) return;
   const inputValue = document.getElementById('personId').value.trim();
   if (!inputValue) return;
   const parsedInput = parsePersonInput(inputValue);
@@ -657,7 +734,7 @@ async function addPerson() {
     unhidePersonInLocalView(personId);
     
     document.getElementById('personId').value = '';
-    loadPersons();
+    await loadPersons();
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
@@ -799,6 +876,7 @@ async function loadPersons() {
   const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
   const personsRaw = await res.json();
   const persons = Array.isArray(personsRaw) ? personsRaw : [];
+  applyPersonCount(persons.length);
   const hiddenPersonIds = new Set(getHiddenPersonIds());
   const visiblePersons = persons.filter((person) => !hiddenPersonIds.has(person.id));
   visiblePersonsById = {};
