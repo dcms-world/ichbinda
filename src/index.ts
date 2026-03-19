@@ -156,6 +156,11 @@ button:hover{background:#5a6fd6}
 .person-list{list-style:none}
 .person-item{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #eee}
 .person-main{flex:1}
+.person-head{display:flex;align-items:center;gap:10px}
+.person-avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;flex-shrink:0;object-fit:cover;background:#d0d5dd;color:#475467;font-weight:600}
+.person-avatar-thumb{width:36px;height:36px;font-size:14px}
+.person-avatar-large{width:96px;height:96px;font-size:32px}
+.person-avatar-placeholder{background:#d0d5dd;color:#667085}
 .person-id{font-family:monospace;color:#666;font-size:14px}
 .person-name{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#2f3b59;font-weight:600}
 .person-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase}
@@ -164,7 +169,7 @@ button:hover{background:#5a6fd6}
 .status-never{background:#fff3cd;color:#856404}
 .last-seen{color:#666;font-size:14px;margin-top:4px}
 .person-actions{display:flex;align-items:center;gap:10px}
-.edit-btn{padding:8px 12px;font-size:14px}
+.edit-btn{padding:8px 10px;font-size:16px;line-height:1}
 .remove-btn{padding:8px 12px;background:#fff;color:#b42318;border:1px solid #fda29b;border-radius:8px;font-size:14px;cursor:pointer}
 .remove-btn:hover{background:#fee4e2}
 .secondary-btn{padding:8px 12px;background:#fff;color:#344054;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;cursor:pointer}
@@ -188,6 +193,9 @@ button:hover{background:#5a6fd6}
 .edit-label{font-size:13px;color:#666;margin-bottom:4px}
 .edit-value{font-size:15px;color:#101828}
 .edit-interval{width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:15px}
+.edit-photo-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.edit-photo-input{max-width:100%}
+.edit-photo-help{margin-top:6px;font-size:12px;color:#667085}
 .edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 @media (max-width:640px){
   body{padding:12px}
@@ -242,6 +250,14 @@ button:hover{background:#5a6fd6}
       <div id="editPersonName" class="edit-value"></div>
     </div>
     <div class="edit-field">
+      <div class="edit-label">Foto</div>
+      <div class="edit-photo-row">
+        <div id="editPhotoPreview"></div>
+        <input type="file" id="editPhotoInput" class="edit-photo-input" accept="image/*" onchange="handleEditPhotoChange(event)">
+      </div>
+      <div class="edit-photo-help">Wird nur lokal im Browser gespeichert.</div>
+    </div>
+    <div class="edit-field">
       <label for="editIntervalSelect" class="edit-label">Alarmintervall</label>
       <select id="editIntervalSelect" class="edit-interval">
         <option value="1">1 Min</option>
@@ -264,6 +280,7 @@ button:hover{background:#5a6fd6}
 const API_URL = '/api';
 const PERSON_NAMES_KEY = 'sicherda_person_names';
 const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
+const PERSON_PHOTOS_KEY = 'sicherda_person_photos';
 const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
 const INTERVALS = [
@@ -340,6 +357,68 @@ function getPersonNameHistory() {
 
 function setPersonNameHistory(personNames) {
   localStorage.setItem(PERSON_NAME_HISTORY_KEY, JSON.stringify(personNames));
+}
+
+function getPersonPhotos() {
+  try {
+    const raw = localStorage.getItem(PERSON_PHOTOS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function setPersonPhotos(personPhotos) {
+  localStorage.setItem(PERSON_PHOTOS_KEY, JSON.stringify(personPhotos));
+}
+
+function getPersonPhoto(personId) {
+  const personPhotos = getPersonPhotos();
+  const photo = personPhotos[personId];
+  return typeof photo === 'string' && photo.startsWith('data:image/') ? photo : '';
+}
+
+function storePersonPhoto(personId, photoDataUrl) {
+  if (!personId || !photoDataUrl) return;
+  const personPhotos = getPersonPhotos();
+  personPhotos[personId] = photoDataUrl;
+  setPersonPhotos(personPhotos);
+}
+
+function getPersonInitial(personId) {
+  const base = (getPersonName(personId) || getRememberedPersonName(personId) || personId || '?').trim();
+  return base ? base.charAt(0).toUpperCase() : '?';
+}
+
+function buildPersonAvatarMarkup(personId, sizeClass) {
+  const photo = getPersonPhoto(personId);
+  if (photo) {
+    return '<img src="' + escapeHtml(photo) + '" alt="" class="person-avatar ' + sizeClass + '">';
+  }
+  return '<div class="person-avatar person-avatar-placeholder ' + sizeClass + '">' + escapeHtml(getPersonInitial(personId)) + '</div>';
+}
+
+function renderEditPhotoPreview(personId) {
+  const preview = document.getElementById('editPhotoPreview');
+  if (!preview) return;
+  preview.innerHTML = buildPersonAvatarMarkup(personId, 'person-avatar-large');
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result.startsWith('data:image/')) {
+        reject(new Error('invalid-image'));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error('read-failed'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function storePersonName(personId, name) {
@@ -612,11 +691,16 @@ function openEditModal(personId) {
   if (intervalSelect.value !== String(person.check_interval_minutes)) {
     intervalSelect.value = '1440';
   }
+  renderEditPhotoPreview(personId);
+  const photoInput = document.getElementById('editPhotoInput');
+  if (photoInput) photoInput.value = '';
   document.getElementById('personEditOverlay').classList.add('open');
 }
 
 function closeEditModal() {
   activeEditPersonId = '';
+  const photoInput = document.getElementById('editPhotoInput');
+  if (photoInput) photoInput.value = '';
   document.getElementById('personEditOverlay').classList.remove('open');
 }
 
@@ -649,18 +733,44 @@ function removePersonFromModal() {
   if (removed) closeEditModal();
 }
 
+async function handleEditPhotoChange(event) {
+  if (!activeEditPersonId) return;
+  const input = event && event.target ? event.target : null;
+  const file = input && input.files && input.files[0] ? input.files[0] : null;
+  if (!file) return;
+  if (typeof file.type === 'string' && !file.type.startsWith('image/')) {
+    alert('Bitte eine Bilddatei auswählen.');
+    if (input) input.value = '';
+    return;
+  }
+
+  try {
+    const photoDataUrl = await fileToDataUrl(file);
+    storePersonPhoto(activeEditPersonId, photoDataUrl);
+    renderEditPhotoPreview(activeEditPersonId);
+    await loadPersons();
+  } catch (err) {
+    alert('Foto konnte nicht gespeichert werden.');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
 function buildPersonRow(p) {
   const lastSeen = p.last_heartbeat 
     ? 'Letzte Meldung: ' + new Date(p.last_heartbeat).toLocaleString('de-DE')
     : 'Noch nie gemeldet';
   const personName = getPersonName(p.id);
   const idLabel = personName
-    ? '<span class="person-name">' + escapeHtml(personName) + '</span> <span class="person-id">(' + escapeHtml(p.id) + ')</span>'
+    ? '<span class="person-name">' + escapeHtml(personName) + '</span>'
     : '<span class="person-id">' + escapeHtml(p.id) + '</span>';
   
   return '<li class="person-item">' +
     '<div class="person-main">' +
-      '<div>' + idLabel + '</div>' +
+      '<div class="person-head">' +
+        buildPersonAvatarMarkup(p.id, 'person-avatar-thumb') +
+        '<div>' + idLabel + '</div>' +
+      '</div>' +
       '<div class="last-seen">' + lastSeen + '</div>' +
       '<div style="margin-top:8px;font-size:12px;color:#888">' +
         '⏰ Alarm nach: ' + escapeHtml(getIntervalLabel(p.check_interval_minutes)) +
@@ -668,7 +778,7 @@ function buildPersonRow(p) {
     '</div>' +
     '<div class="person-actions">' +
       '<span class="person-status status-' + p.status + '">' + p.status + '</span>' +
-      '<button type="button" class="edit-btn" data-person-id="' + escapeHtml(p.id) + '">Bearbeiten</button>' +
+      '<button type="button" class="edit-btn" data-person-id="' + escapeHtml(p.id) + '" aria-label="Bearbeiten" title="Bearbeiten">✏️</button>' +
     '</div>' +
   '</li>';
 }
