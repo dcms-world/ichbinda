@@ -7,7 +7,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SicherDa - Ich bin okay</title>
+<title>IchBinDa - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -99,7 +99,7 @@ h1{color:#333;margin-bottom:10px}
 </div>
 
 <div class="container">
-<h1>👋 SicherDa</h1>
+<h1>👋 IchBinDa</h1>
 <p class="subtitle">Einmal drücken = "Ich bin okay"</p>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
 <div id="status"></div>
@@ -146,7 +146,7 @@ const WATCHER_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SicherDa - Betreuer Dashboard</title>
+<title>IchBinDa - Betreuer Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;background:#f5f7fa;padding:20px}
@@ -174,7 +174,7 @@ button:hover{background:#5a6fd6}
 </head>
 <body>
 <div class="container">
-<h1>👀 SicherDa Betreuer</h1>
+<h1>👀 IchBinDa Betreuer</h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
 <div class="card">
 <h3 style="margin-bottom:15px">➕ Person hinzufügen</h3>
@@ -524,7 +524,7 @@ async function rollbackRateLimit(
 const app = new Hono<{ Bindings: Env }>();
 
 // Static HTML routes
-app.get('/', (c) => c.html('<h1>SicherDa</h1><p><a href="/person.html">Person UI</a> | <a href="/watcher.html">Betreuer UI</a></p>'));
+app.get('/', (c) => c.html('<h1>IchBinDa</h1><p><a href="/person.html">Person UI</a> | <a href="/watcher.html">Betreuer UI</a></p>'));
 app.get('/person.html', (c) => c.html(PERSON_HTML));
 app.get('/watcher.html', (c) => c.html(WATCHER_HTML));
 
@@ -689,7 +689,7 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${expoToken}` },
         body: JSON.stringify({
           to: item.push_token,
-          title: 'SicherDa Alarm',
+          title: 'IchBinDa Alarm',
           body: `Keine Meldung seit ${hours} Stunden`,
           data: { person_id: item.person_id },
         }),

@@ -1,4 +1,4 @@
-# SicherDa 🛡️
+# IchBinDa 🛡️
 
 Welfare-Check App für Senioren, Kinder oder Menschen, die Unterstützung brauchen.
 

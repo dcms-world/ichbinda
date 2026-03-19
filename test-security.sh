@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test-Skript für SicherDa API mit API-Key Auth
+# Test-Skript für IchBinDa API mit API-Key Auth
 
 set -euo pipefail
 
@@ -7,7 +7,7 @@ WORKER_URL="${WORKER_URL:-http://127.0.0.1:8787}"
 API_KEY="${API_KEY:-your-api-key-here}"
 PERSON_ID="${PERSON_ID:-test-person-123}"
 
-echo "=== SicherDa API Security Tests ==="
+echo "=== IchBinDa API Security Tests ==="
 echo "URL: $WORKER_URL"
 echo ""
 
