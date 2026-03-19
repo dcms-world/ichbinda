@@ -164,8 +164,11 @@ button:hover{background:#5a6fd6}
 .status-never{background:#fff3cd;color:#856404}
 .last-seen{color:#666;font-size:14px;margin-top:4px}
 .person-actions{display:flex;align-items:center;gap:10px}
+.edit-btn{padding:8px 12px;font-size:14px}
 .remove-btn{padding:8px 12px;background:#fff;color:#b42318;border:1px solid #fda29b;border-radius:8px;font-size:14px;cursor:pointer}
 .remove-btn:hover{background:#fee4e2}
+.secondary-btn{padding:8px 12px;background:#fff;color:#344054;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;cursor:pointer}
+.secondary-btn:hover{background:#f9fafb}
 .empty-state{text-align:center;padding:40px;color:#666}
 .scan-hint{display:block;color:#666;font-size:12px;margin-top:8px}
 .camera-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.66);display:none;align-items:center;justify-content:center;padding:16px;z-index:2000}
@@ -177,11 +180,22 @@ button:hover{background:#5a6fd6}
 .camera-video{display:block;width:100%;max-height:70vh;border-radius:10px;background:#111;object-fit:cover}
 .camera-actions{display:flex;justify-content:flex-end;margin-top:14px}
 .camera-canvas{display:none}
+.edit-overlay{position:fixed;inset:0;background:rgba(16,24,40,0.66);display:none;align-items:center;justify-content:center;padding:16px;z-index:2100}
+.edit-overlay.open{display:flex}
+.edit-modal{width:100%;max-width:540px;background:#fff;border-radius:14px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,0.2)}
+.edit-title{margin-bottom:16px}
+.edit-field{margin-bottom:14px}
+.edit-label{font-size:13px;color:#666;margin-bottom:4px}
+.edit-value{font-size:15px;color:#101828}
+.edit-interval{width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;font-size:15px}
+.edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 @media (max-width:640px){
   body{padding:12px}
   .add-person{flex-direction:column}
   .add-person button{width:100%}
   .camera-actions button{width:100%}
+  .edit-actions{flex-direction:column-reverse}
+  .edit-actions button{width:100%}
 }
 </style>
 </head>
@@ -216,15 +230,54 @@ button:hover{background:#5a6fd6}
     </div>
   </div>
 </div>
+<div id="personEditOverlay" class="edit-overlay" onclick="handleEditOverlayClick(event)">
+  <div class="edit-modal">
+    <h3 class="edit-title">Person bearbeiten</h3>
+    <div class="edit-field">
+      <div class="edit-label">Person ID</div>
+      <div id="editPersonId" class="edit-value person-id"></div>
+    </div>
+    <div class="edit-field">
+      <div class="edit-label">Name</div>
+      <div id="editPersonName" class="edit-value"></div>
+    </div>
+    <div class="edit-field">
+      <label for="editIntervalSelect" class="edit-label">Alarmintervall</label>
+      <select id="editIntervalSelect" class="edit-interval">
+        <option value="1">1 Min</option>
+        <option value="60">1 Std</option>
+        <option value="360">6 Std</option>
+        <option value="720">12 Std</option>
+        <option value="1440">24 Std</option>
+        <option value="2880">48 Std</option>
+      </select>
+    </div>
+    <div class="edit-actions">
+      <button type="button" class="secondary-btn" onclick="closeEditModal()">Abbrechen</button>
+      <button type="button" class="remove-btn" onclick="removePersonFromModal()">Entfernen</button>
+      <button type="button" id="editSaveBtn" onclick="saveEditedPerson()">Speichern</button>
+    </div>
+  </div>
+</div>
 <script>
 const API_URL = '/api';
 const PERSON_NAMES_KEY = 'sicherda_person_names';
 const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
 const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
+const INTERVALS = [
+  { min: 1, label: '1 Min' },
+  { min: 60, label: '1 Std' },
+  { min: 360, label: '6 Std' },
+  { min: 720, label: '12 Std' },
+  { min: 1440, label: '24 Std' },
+  { min: 2880, label: '48 Std' }
+];
 let cameraStream = null;
 let scanFrameRequestId = 0;
 let scanContext = null;
+let visiblePersonsById = {};
+let activeEditPersonId = '';
 
 function getWatcherId() {
   return localStorage.getItem('sicherda_watcher_id');
@@ -470,7 +523,9 @@ async function openQrScanner() {
 }
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeQrScanner();
+  if (event.key !== 'Escape') return;
+  closeQrScanner();
+  closeEditModal();
 });
 
 async function init() {
@@ -528,31 +583,68 @@ async function addPerson() {
 }
 
 async function updateInterval(personId, minutes) {
-  await fetch(API_URL + '/watch', {
+  const response = await fetch(API_URL + '/watch', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: parseInt(minutes) })
+    body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: parseInt(minutes, 10) })
   });
-  loadPersons();
+  if (!response.ok) {
+    throw new Error('Intervall konnte nicht gespeichert werden.');
+  }
 }
 
-function buildIntervalSelect(p) {
-  // Werte in Minuten: 1min, 1h, 6h, 12h, 24h, 48h
-  const intervals = [
-    { min: 1, label: '1 Min' },
-    { min: 60, label: '1 Std' },
-    { min: 360, label: '6 Std' },
-    { min: 720, label: '12 Std' },
-    { min: 1440, label: '24 Std' },
-    { min: 2880, label: '48 Std' }
-  ];
-  let html = '<select onchange="updateInterval(&quot;' + p.id + '&quot;, this.value)" style="padding:2px 6px;border:1px solid #ddd;border-radius:4px">';
-  for (const iv of intervals) {
-    const selected = p.check_interval_minutes == iv.min ? ' selected' : '';
-    html += '<option value="' + iv.min + '"' + selected + '>' + iv.label + '</option>';
+function getIntervalLabel(minutes) {
+  const match = INTERVALS.find((interval) => interval.min === Number(minutes));
+  return match ? match.label : String(minutes) + ' Min';
+}
+
+function openEditModal(personId) {
+  const person = visiblePersonsById[personId];
+  if (!person) return;
+  activeEditPersonId = personId;
+  const personName = getPersonName(personId) || getRememberedPersonName(personId);
+  document.getElementById('editPersonId').textContent = personId;
+  document.getElementById('editPersonName').textContent = personName || 'Nicht gesetzt';
+  const intervalSelect = document.getElementById('editIntervalSelect');
+  intervalSelect.value = String(person.check_interval_minutes);
+  if (intervalSelect.value !== String(person.check_interval_minutes)) {
+    intervalSelect.value = '1440';
   }
-  html += '</select>';
-  return html;
+  document.getElementById('personEditOverlay').classList.add('open');
+}
+
+function closeEditModal() {
+  activeEditPersonId = '';
+  document.getElementById('personEditOverlay').classList.remove('open');
+}
+
+function handleEditOverlayClick(event) {
+  if (event.target === event.currentTarget) closeEditModal();
+}
+
+async function saveEditedPerson() {
+  if (!activeEditPersonId) return;
+  const personId = activeEditPersonId;
+  const saveButton = document.getElementById('editSaveBtn');
+  const intervalSelect = document.getElementById('editIntervalSelect');
+  const selectedMinutes = intervalSelect.value;
+  saveButton.disabled = true;
+  try {
+    await updateInterval(personId, selectedMinutes);
+    closeEditModal();
+    await loadPersons();
+  } catch (err) {
+    alert(err && err.message ? err.message : 'Intervall konnte nicht gespeichert werden.');
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+function removePersonFromModal() {
+  if (!activeEditPersonId) return;
+  const personId = activeEditPersonId;
+  const removed = removePersonFromLocalView(personId);
+  if (removed) closeEditModal();
 }
 
 function buildPersonRow(p) {
@@ -569,12 +661,12 @@ function buildPersonRow(p) {
       '<div>' + idLabel + '</div>' +
       '<div class="last-seen">' + lastSeen + '</div>' +
       '<div style="margin-top:8px;font-size:12px;color:#888">' +
-        '⏰ Alarm nach: ' + buildIntervalSelect(p) +
+        '⏰ Alarm nach: ' + escapeHtml(getIntervalLabel(p.check_interval_minutes)) +
       '</div>' +
     '</div>' +
     '<div class="person-actions">' +
       '<span class="person-status status-' + p.status + '">' + p.status + '</span>' +
-      '<button type="button" class="remove-btn" data-person-id="' + escapeHtml(p.id) + '">🗑️ Entfernen</button>' +
+      '<button type="button" class="edit-btn" data-person-id="' + escapeHtml(p.id) + '">Bearbeiten</button>' +
     '</div>' +
   '</li>';
 }
@@ -584,10 +676,11 @@ function removePersonFromLocalView(personId) {
   const personName = getPersonName(personId) || getRememberedPersonName(personId);
   const label = personName ? personName + ' (' + personId + ')' : personId;
   const confirmed = confirm('Person "' + label + '" nur lokal ausblenden? Die Datenbank bleibt unverändert.');
-  if (!confirmed) return;
+  if (!confirmed) return false;
   removePersonName(personId);
   hidePersonFromLocalView(personId);
   loadPersons();
+  return true;
 }
 
 async function loadPersons() {
@@ -596,20 +689,27 @@ async function loadPersons() {
   const persons = Array.isArray(personsRaw) ? personsRaw : [];
   const hiddenPersonIds = new Set(getHiddenPersonIds());
   const visiblePersons = persons.filter((person) => !hiddenPersonIds.has(person.id));
+  visiblePersonsById = {};
+  for (const person of visiblePersons) visiblePersonsById[person.id] = person;
   const watchedPersonIds = getStoredList(WATCHED_PERSON_IDS_KEY);
   for (const person of visiblePersons) watchedPersonIds.push(person.id);
   setStoredList(WATCHED_PERSON_IDS_KEY, watchedPersonIds);
   const list = document.getElementById('personList');
   if (visiblePersons.length === 0) {
     list.innerHTML = '<li class="empty-state">Noch keine Personen.</li>';
+    closeEditModal();
     return;
   }
   list.innerHTML = visiblePersons.map(buildPersonRow).join('');
-  list.querySelectorAll('.remove-btn').forEach((button) => {
+  if (activeEditPersonId && !visiblePersonsById[activeEditPersonId]) {
+    closeEditModal();
+  }
+  list.querySelectorAll('.edit-btn').forEach((button) => {
     button.addEventListener('click', (event) => {
       const target = event.currentTarget;
       const personId = target ? target.getAttribute('data-person-id') : '';
-      removePersonFromLocalView(personId || '');
+      if (!personId) return;
+      openEditModal(personId);
     });
   });
 }
