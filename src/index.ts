@@ -183,6 +183,21 @@ button:hover{background:#5a6fd6}
 .remove-btn:hover{background:#fee4e2}
 .empty-state{text-align:center;padding:40px;color:#666}
 .scan-hint{display:block;color:#666;font-size:12px;margin-top:8px}
+.camera-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.66);display:none;align-items:center;justify-content:center;padding:16px;z-index:2000}
+.camera-overlay.open{display:flex}
+.camera-modal{width:100%;max-width:540px;background:#fff;border-radius:14px;padding:16px}
+.camera-title{margin-bottom:10px}
+.camera-status{color:#556;font-size:14px;margin-bottom:12px}
+.camera-status.error{color:#b42318}
+.camera-video{display:block;width:100%;max-height:70vh;border-radius:10px;background:#111;object-fit:cover}
+.camera-actions{display:flex;justify-content:flex-end;margin-top:14px}
+.camera-canvas{display:none}
+@media (max-width:640px){
+  body{padding:12px}
+  .add-person{flex-direction:column}
+  .add-person button{width:100%}
+  .camera-actions button{width:100%}
+}
 </style>
 </head>
 <body>
@@ -194,10 +209,9 @@ button:hover{background:#5a6fd6}
 <div class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
 <button onclick="addPerson()">Hinzufügen</button>
-<button type="button" onclick="openQrScanner()">QR scannen</button>
+<button type="button" onclick="openQrScanner()">Kamera starten</button>
 </div>
-<input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none" onchange="handleQrFileChange(event)">
-<small class="scan-hint">QR-Code als Bild/Kamera scannen oder JSON direkt einfügen.</small>
+<small class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
 </div>
 <div class="card">
 <h3 style="margin-bottom:15px">📋 Meine Personen</h3>
@@ -206,12 +220,26 @@ button:hover{background:#5a6fd6}
 </ul>
 </div>
 </div>
+<div id="cameraOverlay" class="camera-overlay" onclick="handleCameraOverlayClick(event)">
+  <div class="camera-modal">
+    <h3 class="camera-title">📷 QR-Code scannen</h3>
+    <p id="cameraStatus" class="camera-status">Kamera wird gestartet...</p>
+    <video id="cameraVideo" class="camera-video" autoplay playsinline muted></video>
+    <canvas id="cameraCanvas" class="camera-canvas"></canvas>
+    <div class="camera-actions">
+      <button type="button" onclick="closeQrScanner()">Abbrechen</button>
+    </div>
+  </div>
+</div>
 <script>
 const API_URL = '/api';
 const PERSON_NAMES_KEY = 'sicherda_person_names';
 const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
 const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
+let cameraStream = null;
+let scanFrameRequestId = 0;
+let scanContext = null;
 
 function getWatcherId() {
   return localStorage.getItem('sicherda_watcher_id');
@@ -349,54 +377,116 @@ function parsePersonInput(rawValue) {
   return { personId: value, name: '' };
 }
 
-function openQrScanner() {
-  document.getElementById('qrFileInput').click();
+function setCameraStatus(message, isError) {
+  const statusElement = document.getElementById('cameraStatus');
+  statusElement.textContent = message;
+  statusElement.className = isError ? 'camera-status error' : 'camera-status';
 }
 
-async function handleQrFileChange(event) {
-  const input = event.target;
-  const file = input.files && input.files[0];
-  if (!file) return;
+function stopQrScanner() {
+  if (scanFrameRequestId) {
+    cancelAnimationFrame(scanFrameRequestId);
+    scanFrameRequestId = 0;
+  }
+  const video = document.getElementById('cameraVideo');
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+  }
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  scanContext = null;
+}
 
+function closeQrScanner() {
+  stopQrScanner();
+  document.getElementById('cameraOverlay').classList.remove('open');
+}
+
+function handleCameraOverlayClick(event) {
+  if (event.target === event.currentTarget) closeQrScanner();
+}
+
+function scanQrFrame() {
+  if (!cameraStream) return;
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  if (!video || !canvas) return;
+
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    if (!scanContext) scanContext = canvas.getContext('2d', { willReadFrequently: true });
+    if (scanContext) {
+      scanContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = scanContext.getImageData(0, 0, canvas.width, canvas.height);
+      const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth'
+      });
+      const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+      if (qrText) {
+        const parsedInput = parsePersonInput(qrText);
+        const personId = parsedInput && parsedInput.personId ? parsedInput.personId : qrText;
+        document.getElementById('personId').value = personId;
+        if (parsedInput && parsedInput.name) {
+          storePersonName(personId, parsedInput.name);
+        }
+        closeQrScanner();
+        return;
+      }
+    }
+  }
+
+  scanFrameRequestId = requestAnimationFrame(scanQrFrame);
+}
+
+async function openQrScanner() {
+  const overlay = document.getElementById('cameraOverlay');
+  overlay.classList.add('open');
+  setCameraStatus('Kamera wird gestartet...', false);
+
+  if (typeof window.jsQR !== 'function') {
+    setCameraStatus('QR-Scanner konnte nicht geladen werden.', true);
+    return;
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    setCameraStatus('Dieser Browser unterstützt keine Kamera im Web.', true);
+    return;
+  }
+
+  stopQrScanner();
   try {
-    if (typeof window.jsQR !== 'function') {
-      throw new Error('jsQR nicht geladen');
-    }
-
-    const imageUrl = URL.createObjectURL(file);
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    const imageLoaded = new Promise((resolve, reject) => {
-      image.onload = resolve;
-      image.onerror = reject;
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
     });
-    image.src = imageUrl;
-    await imageLoaded;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth || image.width;
-    canvas.height = image.naturalHeight || image.height;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context || !canvas.width || !canvas.height) {
-      throw new Error('Bild konnte nicht verarbeitet werden');
-    }
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'attemptBoth'
-    });
-    const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
-    URL.revokeObjectURL(imageUrl);
-
-    if (!qrText) throw new Error('Kein QR-Code erkannt');
-    document.getElementById('personId').value = qrText;
-    await addPerson();
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    await video.play();
+    setCameraStatus('QR-Code vor die Kamera halten.', false);
+    scanQrFrame();
   } catch (err) {
-    alert('QR-Code konnte nicht gelesen werden.');
-  } finally {
-    input.value = '';
+    stopQrScanner();
+    const errorName = err && err.name ? err.name : '';
+    if (errorName === 'NotAllowedError') {
+      setCameraStatus('Kamerazugriff verweigert. Bitte Berechtigung im Browser erlauben.', true);
+    } else if (errorName === 'NotFoundError' || errorName === 'OverconstrainedError') {
+      setCameraStatus('Keine geeignete Kamera gefunden.', true);
+    } else {
+      setCameraStatus('Kamera konnte nicht gestartet werden.', true);
+    }
   }
 }
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeQrScanner();
+});
 
 async function init() {
   if (!getWatcherId()) {
