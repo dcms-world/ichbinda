@@ -221,13 +221,13 @@ button:hover{background:#5a6fd6}
 <h3>➕ Person hinzufügen</h3>
 <span id="personCounter" class="person-counter">0/2 Personen</span>
 </div>
-<div class="add-person">
+<div id="addPersonControls" class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
 <button id="addPersonBtn" onclick="addPerson()">Hinzufügen</button>
 <button type="button" id="openQrScannerBtn" onclick="openQrScanner()">QR scannen</button>
 </div>
 <div id="personLimitMessage" class="limit-message">Maximal 2 Personen möglich.</div>
-<small class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
+<small id="addPersonScanHint" class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
 </div>
 <div class="card">
 <h3 style="margin-bottom:15px">📋 Meine Personen</h3>
@@ -518,17 +518,22 @@ function applyPersonCount(count) {
 function updatePersonLimitUi() {
   const isLimitReached = currentPersonCount >= MAX_WATCHED_PERSONS;
   const counter = document.getElementById('personCounter');
+  const addControls = document.getElementById('addPersonControls');
   const personInput = document.getElementById('personId');
   const addButton = document.getElementById('addPersonBtn');
   const qrButton = document.getElementById('openQrScannerBtn');
   const limitMessage = document.getElementById('personLimitMessage');
+  const scanHint = document.getElementById('addPersonScanHint');
 
   if (counter) {
     counter.textContent = String(currentPersonCount) + '/' + String(MAX_WATCHED_PERSONS) + ' Personen';
   }
+  if (addControls) {
+    addControls.classList.toggle('limit-hide', isLimitReached);
+  }
   if (personInput) {
-    personInput.disabled = false;
-    personInput.classList.remove('limit-hide');
+    personInput.disabled = isLimitReached;
+    personInput.classList.toggle('limit-hide', isLimitReached);
   }
   if (addButton) {
     addButton.disabled = isLimitReached;
@@ -540,6 +545,9 @@ function updatePersonLimitUi() {
   }
   if (limitMessage) {
     limitMessage.classList.toggle('show', isLimitReached);
+  }
+  if (scanHint) {
+    scanHint.classList.toggle('limit-hide', isLimitReached);
   }
 }
 
