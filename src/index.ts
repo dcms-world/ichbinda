@@ -161,7 +161,7 @@ function setLocationEnabled(enabled){localStorage.setItem(LOCATION_ENABLED_KEY,e
 
 function updateLocationToggleUi(){const toggle=document.getElementById('locationToggle');if(!toggle)return;toggle.classList.toggle('active',isLocationEnabled())}
 
-async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Der Betreuer sieht dann, wo du dich befindest.');if(!confirmed)return;setLocationEnabled(true)}else{setLocationEnabled(false)}}
+async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Der Betreuer sieht dann, wo du dich befindest.');if(!confirmed)return;try{await getCurrentPosition();setLocationEnabled(true)}catch(e){console.log('Location permission denied',e);setLocationEnabled(false);alert('Standort nicht verfügbar. Bitte Standortzugriff im Browser erlauben.')}}else{setLocationEnabled(false)}}
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
@@ -173,7 +173,7 @@ function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=s
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;status.className='status success';status.textContent='✅ Bereit zum Melden!';setTimeout(()=>status.textContent='',2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId};if(isLocationEnabled()){try{const pos=await getCurrentPosition();payload.lat=pos.lat;payload.lng=pos.lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e)}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
@@ -1137,6 +1137,19 @@ async function rollbackRateLimit(
   }
 }
 
+function parseCoordinate(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 // Static HTML routes
@@ -1150,7 +1163,7 @@ app.use('/api/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELE
 // API: Neue Person erstellen (oder bestehende zurückgeben)
 app.post('/api/person', async (c) => {
   try {
-    const body = await c.req.json<{ id?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ id?: string }>().catch((): { id?: string } => ({}));
     const personId = body.id || crypto.randomUUID();
     await c.env.DB.prepare(
       'INSERT OR IGNORE INTO persons (id) VALUES (?)'
@@ -1165,11 +1178,15 @@ app.post('/api/person', async (c) => {
 // API: Heartbeat senden (ohne API-Key, mit Rate Limiting)
 app.post('/api/heartbeat', async (c) => {
   // 1. Parse and validate request body
-  const body = await c.req.json<{ person_id?: string; status?: string; lat?: number; lng?: number }>().catch(() => ({}));
+  const body = await c.req
+    .json<{ person_id?: string; status?: string; lat?: unknown; lng?: unknown }>()
+    .catch((): { person_id?: string; status?: string; lat?: unknown; lng?: unknown } => ({}));
   const person_id = typeof body.person_id === 'string' ? body.person_id.trim() : '';
   const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
-  const lat = typeof body.lat === 'number' ? body.lat : null;
-  const lng = typeof body.lng === 'number' ? body.lng : null;
+  const hasLat = body.lat !== undefined && body.lat !== null && body.lat !== '';
+  const hasLng = body.lng !== undefined && body.lng !== null && body.lng !== '';
+  const lat = hasLat ? parseCoordinate(body.lat) : null;
+  const lng = hasLng ? parseCoordinate(body.lng) : null;
 
   if (!person_id) {
     return c.json({ error: 'person_id required' }, 400);
@@ -1179,7 +1196,15 @@ app.post('/api/heartbeat', async (c) => {
     return c.json({ error: 'person_id or status is too long' }, 400);
   }
 
-  // Validate coordinates if provided
+  if (hasLat !== hasLng) {
+    return c.json({ error: 'lat and lng must be provided together' }, 400);
+  }
+
+  if ((hasLat && lat === null) || (hasLng && lng === null)) {
+    return c.json({ error: 'Invalid coordinates' }, 400);
+  }
+
+  // Validate coordinate ranges if provided
   if (lat !== null && (lat < -90 || lat > 90)) {
     return c.json({ error: 'Invalid latitude' }, 400);
   }
