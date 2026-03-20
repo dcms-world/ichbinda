@@ -11,64 +11,68 @@ const PERSON_HTML = `<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:20px}
-.container{background:white;border-radius:20px;padding:40px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative}
-h1{color:#333;margin-bottom:10px}
-.subtitle{color:#666;margin-bottom:30px}
-.btn-okay{width:200px;height:200px;border-radius:50%;border:none;background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%);color:white;font-size:24px;font-weight:bold;cursor:pointer;box-shadow:0 10px 30px rgba(17,153,142,0.4);transition:transform 0.2s,box-shadow 0.2s}
-.btn-okay:hover{transform:scale(1.05);box-shadow:0 15px 40px rgba(17,153,142,0.5)}
-.btn-okay:active{transform:scale(0.95)}
-.btn-okay:disabled{background:#ccc;cursor:not-allowed;transform:none}
-.status{margin-top:30px;padding:15px;border-radius:10px;font-weight:500}
-.status.success{background:#d4edda;color:#155724}
-.status.error{background:#f8d7da;color:#721c24}
-.status.rate-limit{background:#fff3cd;color:#856404}
-.last-checkin{margin-top:20px;color:#666;font-size:14px}
-.cooldown-container{margin-top:20px;padding:15px;background:#f8f9fa;border-radius:10px;display:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Segoe UI',sans-serif;font-size:19px;line-height:1.45;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e9edf3;color:#111827;padding:20px}
+.container{position:relative;background:#fff;border:2px solid #c7d0dc;border-radius:28px;padding:34px 24px 28px;max-width:460px;width:100%;text-align:center;box-shadow:0 10px 30px rgba(15,23,42,0.12)}
+h1{color:#111827;font-size:36px;line-height:1.2;font-weight:800;margin-bottom:10px}
+.subtitle{color:#1f2937;font-size:22px;line-height:1.35;margin-bottom:26px}
+.btn-okay{width:100%;min-height:220px;border:none;border-radius:30px;background:#007aff;color:#fff;font-size:48px;line-height:1.15;font-weight:800;cursor:pointer;padding:24px}
+.btn-okay:disabled{background:#808793;color:#f8fafc;cursor:not-allowed}
+.status{margin-top:22px;padding:16px 14px;border-radius:14px;border:2px solid #94a3b8;font-size:21px;font-weight:700;color:#0f172a;background:#f8fafc}
+.status:empty{display:none}
+.status.success{background:#dcfce7;color:#14532d;border-color:#166534}
+.status.error{background:#fee2e2;color:#7f1d1d;border-color:#991b1b}
+.status.rate-limit{background:#fff7ed;color:#7c2d12;border-color:#9a3412}
+.last-checkin{margin-top:18px;color:#1f2937;font-size:19px;font-weight:600}
+.cooldown-container{margin-top:20px;padding:16px;border:2px solid #cbd5e1;background:#f8fafc;border-radius:14px;display:none}
 .cooldown-container.active{display:block}
-.cooldown-text{color:#666;font-size:14px;margin-bottom:10px}
-.cooldown-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden}
-.cooldown-progress{height:100%;background:linear-gradient(90deg,#11998e,#38ef7d);width:0%;transition:width 1s linear}
-.cooldown-countdown{font-size:24px;font-weight:bold;color:#11998e;margin-top:10px}
+.cooldown-text{color:#334155;font-size:18px;font-weight:600;margin-bottom:10px}
+.cooldown-bar{height:12px;background:#dbe4ee;border-radius:8px;overflow:hidden}
+.cooldown-progress{height:100%;background:#2563eb;width:0%}
+.cooldown-countdown{font-size:34px;font-weight:800;color:#1d4ed8;margin-top:10px}
 
-.menu-btn{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.9);border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:100}
-.menu-btn:hover{background:white;transform:scale(1.1)}
+.menu-btn{position:fixed;top:16px;right:16px;width:56px;height:56px;border-radius:16px;border:2px solid #c7d0dc;background:#fff;color:#0f172a;font-size:30px;cursor:pointer;z-index:260}
 
-.settings-panel{position:fixed;top:0;left:100%;width:100%;max-width:400px;height:100vh;background:white;box-shadow:-5px 0 20px rgba(0,0,0,0.2);z-index:200;padding:60px 20px 20px;overflow-y:auto;transition:left 0.3s;visibility:hidden}
-.settings-panel.open{left:0;visibility:visible}
-.settings-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);opacity:0;visibility:hidden;transition:opacity 0.3s;z-index:150}
-.settings-overlay.open{opacity:1;visibility:visible}
-
-.settings-title{font-size:24px;margin-bottom:20px;color:#333}
-.settings-section{margin:20px 0;padding:15px;background:#f8f9fa;border-radius:10px}
-.settings-section h3{margin-bottom:10px;color:#555;font-size:16px}
-.name-label{display:block;color:#555;font-size:14px;font-weight:600;margin-bottom:6px}
-.name-display{background:white;border:2px solid #e9ecef;padding:14px;border-radius:10px;font-size:24px;font-weight:700;line-height:1.2;color:#2f3b59;word-break:break-word}
-.btn-close{position:absolute;top:15px;left:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666}
-.btn-close:hover{color:#333}
-.qr-container{margin:15px 0;padding:15px;background:white;border-radius:10px;text-align:center}
+.settings-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.46);display:none;z-index:250}
+.settings-overlay.open{display:block}
+.settings-panel{position:fixed;inset:0;background:#eef2f7;z-index:300;padding:88px 20px 28px;overflow-y:auto;display:none}
+.settings-panel.open{display:block}
+.settings-title{font-size:34px;line-height:1.2;margin-bottom:18px;color:#111827}
+.settings-section{margin:16px 0;padding:18px;background:#fff;border:2px solid #d3dae4;border-radius:18px}
+.settings-section h3{margin-bottom:10px;color:#111827;font-size:24px;line-height:1.25}
+.name-label{display:block;color:#374151;font-size:18px;font-weight:700;margin-bottom:8px}
+.name-display{background:#fff;border:2px solid #cbd5e1;padding:14px;border-radius:12px;font-size:30px;font-weight:800;line-height:1.2;color:#0f172a;word-break:break-word}
+.btn-close{position:absolute;top:20px;left:20px;width:52px;height:52px;border-radius:14px;border:2px solid #c7d0dc;background:#fff;font-size:30px;line-height:1;color:#0f172a;cursor:pointer}
+.qr-container{margin:12px 0 6px;padding:14px;border:2px solid #d6dde7;background:#fff;border-radius:14px;text-align:center}
 #qrcode{display:inline-block}
-.qr-raw-label{display:block;margin-top:12px;margin-bottom:6px;color:#555;font-size:13px}
-.qr-raw{margin:0;padding:10px;background:#e9ecef;border-radius:8px;font-family:monospace;font-size:12px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text}
-.close-settings{margin-top:30px;padding:12px 24px;background:#dc3545;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;width:100%}
-.close-settings:hover{background:#c82333}
-.name-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
+.qr-raw-label{display:block;margin-top:12px;margin-bottom:8px;color:#374151;font-size:18px;font-weight:700}
+.qr-raw{margin:0;padding:12px;background:#e8edf4;border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:18px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text;color:#0f172a}
+.settings-help{display:block;color:#1f2937;font-size:18px;line-height:1.35}
+.close-settings{margin-top:22px;min-height:56px;padding:12px 20px;background:#1f2937;color:#fff;border:none;border-radius:14px;font-size:22px;font-weight:700;cursor:pointer;width:100%}
+.name-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
 .name-modal-overlay.open{display:flex}
-.name-modal{background:white;border-radius:14px;padding:24px;width:100%;max-width:360px;box-shadow:0 14px 45px rgba(0,0,0,0.25)}
-.name-modal h2{font-size:24px;color:#333;margin-bottom:8px}
-.name-modal p{color:#666;margin-bottom:16px}
-.name-modal input{width:100%;padding:12px 14px;border:2px solid #ddd;border-radius:8px;font-size:16px;margin-bottom:12px}
-.name-modal input:focus{outline:none;border-color:#667eea}
-.name-modal button{width:100%;padding:12px 14px;border:none;border-radius:8px;background:#11998e;color:white;font-size:16px;font-weight:600;cursor:pointer}
-.name-modal button:hover{background:#0f877e}
+.name-modal{background:#fff;border:2px solid #d3dae4;border-radius:18px;padding:24px;width:100%;max-width:420px;box-shadow:0 14px 45px rgba(15,23,42,0.2)}
+.name-modal h2{font-size:32px;color:#111827;line-height:1.2;margin-bottom:10px}
+.name-modal p{color:#334155;font-size:20px;line-height:1.35;margin-bottom:16px}
+.name-modal input{width:100%;min-height:56px;padding:12px 14px;border:2px solid #9ca3af;border-radius:12px;font-size:20px;margin-bottom:12px}
+.name-modal button{width:100%;min-height:56px;padding:12px 14px;border:none;border-radius:12px;background:#007aff;color:#fff;font-size:22px;font-weight:700;cursor:pointer}
 
-.location-toggle{display:flex;align-items:center;justify-content:space-between;padding:12px;background:white;border-radius:8px;margin-top:10px}
-.location-toggle-label{color:#333;font-size:14px}
-.location-toggle-help{color:#666;font-size:12px;margin-top:4px}
-.toggle-switch{position:relative;width:50px;height:26px;background:#ccc;border-radius:13px;cursor:pointer;transition:background 0.3s}
-.toggle-switch.active{background:#11998e}
-.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;background:white;border-radius:50%;transition:left 0.3s}
-.toggle-switch.active::after{left:27px}
+.location-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#fff;border:2px solid #cbd5e1;border-radius:14px;margin-top:10px}
+.location-toggle-label{color:#111827;font-size:21px;font-weight:700;line-height:1.2}
+.location-toggle-help{color:#334155;font-size:18px;line-height:1.3;margin-top:6px}
+.toggle-switch{position:relative;flex-shrink:0;width:84px;height:48px;background:#6b7280;border-radius:24px;cursor:pointer;border:2px solid #4b5563}
+.toggle-switch.active{background:#007aff;border-color:#005fd1}
+.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:38px;height:38px;background:#fff;border-radius:50%}
+.toggle-switch.active::after{left:39px}
+
+button,input,.toggle-switch{touch-action:manipulation}
+button:focus-visible,input:focus-visible,.toggle-switch:focus-visible{outline:3px solid #ff9500;outline-offset:2px}
+@media (max-width:520px){
+body{padding:12px}
+.container{padding:28px 16px 22px}
+h1{font-size:32px}
+.btn-okay{font-size:44px;min-height:200px}
+.settings-title{font-size:30px}
+}
 </style>
 </head>
 <body>
@@ -81,13 +85,13 @@ h1{color:#333;margin-bottom:10px}
 </form>
 </div>
 
-<button class="menu-btn" onclick="openSettings()" title="Einstellungen">⚙️</button>
+<button class="menu-btn" onclick="openSettings()" title="Einstellungen" aria-label="Einstellungen öffnen">⚙</button>
 
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
 
 <div class="settings-panel" id="settingsPanel">
-<button class="btn-close" onclick="closeSettings()">✕</button>
-<h2 class="settings-title">⚙️ Einstellungen</h2>
+<button class="btn-close" onclick="closeSettings()" aria-label="Einstellungen schließen">✕</button>
+<h2 class="settings-title">Einstellungen</h2>
 
 <div class="settings-section">
 <span class="name-label">Dein Name:</span>
@@ -95,17 +99,17 @@ h1{color:#333;margin-bottom:10px}
 </div>
 
 <div class="settings-section">
-<h3>📱 QR-Code für Betreuer</h3>
+<h3>QR-Code für Betreuung</h3>
 <div class="qr-container" id="qrContainer">
 <div id="qrcode"></div>
 <label class="qr-raw-label" for="qrPayloadText">QR-Code Inhalt (zum Kopieren):</label>
 <pre class="qr-raw" id="qrPayloadText"></pre>
 </div>
-<small>Der Betreuer kann diesen Code scannen.</small>
+<small class="settings-help">Die Betreuungsperson kann diesen Code scannen.</small>
 </div>
 
 <div class="settings-section">
-<h3>📍 Standort</h3>
+<h3>Standort</h3>
 <div class="location-toggle">
 <div>
 <div class="location-toggle-label">Standort mitteilen</div>
@@ -119,12 +123,12 @@ h1{color:#333;margin-bottom:10px}
 </div>
 
 <div class="container">
-<h1>👋 IchBinDa</h1>
-<p class="subtitle">Einmal drücken = "Ich bin okay"</p>
+<h1>IchBinDa</h1>
+<p class="subtitle">Einmal tippen: Ich bin okay</p>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
 <div id="status"></div>
 <div class="cooldown-container" id="cooldownContainer">
-<div class="cooldown-text">⏳ Bitte warten...</div>
+<div class="cooldown-text">Bitte warten...</div>
 <div class="cooldown-bar"><div class="cooldown-progress" id="cooldownProgress"></div></div>
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
