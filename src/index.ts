@@ -549,6 +549,20 @@ async function startDeviceQrScan() {
 async function handleNewDeviceScanned(personId) {
   if (!personId) return;
   
+  // Prüfe ob Person bereits einem Watcher zugeordnet ist
+  try {
+    const checkRes = await fetch(API_URL + '/person/' + encodeURIComponent(personId) + '/has-watcher');
+    const checkData = await checkRes.json();
+    
+    if (checkData.has_watcher) {
+      const confirmed = confirm('Dieses Gerät ist bereits mit einem Betreuer verknüpft. Möchtest du es wirklich zu deinem Gerät hinzufügen?');
+      if (!confirmed) return;
+    }
+  } catch (e) {
+    console.error('Watcher check failed', e);
+    // Bei Fehler trotzdem fortfahren
+  }
+  
   // Speichere person_id
   localStorage.setItem('sicherda_person_id', personId);
   currentPersonId = personId;
@@ -1888,6 +1902,22 @@ app.get('/api/person/:id', async (c) => {
   const person = await c.env.DB.prepare('SELECT * FROM persons WHERE id = ?').bind(personId).first();
   if (!person) return c.json({ error: 'Person not found' }, 404);
   return c.json(person);
+});
+
+// API: Prüfen ob Person bereits einem Watcher zugeordnet ist
+app.get('/api/person/:id/has-watcher', async (c) => {
+  const personId = c.req.param('id').trim();
+  if (!personId) return c.json({ error: 'person_id required' }, 400);
+
+  const result = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1'
+  ).bind(personId).first<{ count: number | string }>();
+
+  const watcherCount = Number(result?.count ?? 0);
+  return c.json({
+    has_watcher: watcherCount > 0,
+    watcher_count: watcherCount
+  });
 });
 
 // API: Geräte einer Person
