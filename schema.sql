@@ -23,6 +23,18 @@ CREATE TABLE IF NOT EXISTS watch_relations (
   FOREIGN KEY (watcher_id) REFERENCES watchers(id)
 );
 
+-- Geräte pro Person (Multi-Device Support)
+CREATE TABLE IF NOT EXISTS person_devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id TEXT NOT NULL,
+  device_id TEXT NOT NULL UNIQUE,
+  device_model TEXT NOT NULL,
+  last_seen DATETIME NOT NULL,
+  FOREIGN KEY (person_id) REFERENCES persons(id)
+);
+CREATE INDEX IF NOT EXISTS idx_person_devices_person_id_last_seen
+  ON person_devices(person_id, last_seen DESC);
+
 -- Rate Limiting für Heartbeats (1 pro 5 Minuten pro Gerät)
 CREATE TABLE IF NOT EXISTS device_rate_limits (
   device_id TEXT PRIMARY KEY,

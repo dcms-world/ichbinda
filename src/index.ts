@@ -225,6 +225,52 @@ font-weight:700;
 cursor:pointer;
 width:100%;
 }
+.device-list{display:flex;flex-direction:column;gap:10px}
+.device-row{
+display:flex;
+align-items:flex-start;
+justify-content:space-between;
+gap:12px;
+padding:12px;
+border:2px solid #d6dde7;
+border-radius:14px;
+background:#f8fafc;
+}
+.device-main{min-width:0}
+.device-title{font-size:20px;font-weight:800;color:var(--text);line-height:1.25}
+.device-meta{margin-top:4px;font-size:16px;color:#475569;line-height:1.35}
+.device-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.device-badge{
+display:inline-flex;
+align-items:center;
+padding:3px 8px;
+border-radius:999px;
+font-size:13px;
+font-weight:700;
+line-height:1;
+}
+.device-badge.current{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+.device-badge.last{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.device-delete-btn{
+flex-shrink:0;
+min-height:44px;
+padding:10px 12px;
+border-radius:12px;
+border:2px solid #fecaca;
+background:#fff1f2;
+color:#b91c1c;
+font-size:16px;
+font-weight:700;
+cursor:pointer;
+}
+.device-delete-btn:disabled{
+cursor:not-allowed;
+background:#e5e7eb;
+border-color:#cbd5e1;
+color:#64748b;
+}
+.device-empty{font-size:18px;color:#475569;padding:6px 2px}
+.device-error{font-size:18px;color:#b91c1c;padding:6px 2px}
 .name-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
 .name-modal-overlay.open{display:flex}
 .name-modal{
@@ -309,6 +355,12 @@ h1{font-size:34px}
 </div>
 </div>
 
+<div class="settings-section">
+<h3>Geräte</h3>
+<div class="device-list" id="deviceList"><div class="device-empty">Geräte werden geladen...</div></div>
+<small class="settings-help">Verknüpfte Geräte für diese Person. Das letzte Gerät bleibt immer bestehen.</small>
+</div>
+
 <button class="close-settings" onclick="closeSettings()">Schließen</button>
 </div>
 
@@ -328,12 +380,18 @@ h1{font-size:34px}
 <script>
 const API_URL='/api';
 const PERSON_NAME_KEY='sicherda_person_name';
+const DEVICE_ID_KEY='sicherda_device_id';
 let currentPersonId=null;
 let currentPersonName='';
+let currentDeviceId='';
 
 function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
 function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
+function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();return 'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
+function getOrCreateDeviceId(){const existing=(localStorage.getItem(DEVICE_ID_KEY)||'').trim();if(existing)return existing;const created=createDeviceId();localStorage.setItem(DEVICE_ID_KEY,created);return created}
+function escapeHtml(value){return String(value).replace(/[&<>"']/g,(char)=>{if(char==='&')return'&amp;';if(char==='<')return'&lt;';if(char==='>')return'&gt;';if(char==='"')return'&quot;';return'&#39;'})}
+function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time))return 'Unbekannt';return new Date(time).toLocaleString('de-DE')}
 
 async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
 
@@ -343,7 +401,7 @@ function setQrCopyStatus(message,isError){const statusEl=document.getElementById
 async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
 function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
-function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode()}
+function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode();loadDevices()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
@@ -365,7 +423,7 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
-async function init(){try{currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -373,9 +431,17 @@ function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=s
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;status.className='status success';status.textContent='✅ Bereit zum Melden!';setTimeout(()=>status.textContent='',2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
+
+async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
+
+async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed=confirm('Gerät wirklich entfernen?');if(!confirmed)return;try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(res.ok){await loadDevices();return}const data=await res.json().catch(()=>({}));if(res.status===409){alert(data.error||'Das letzte Gerät kann nicht gelöscht werden.');return}throw new Error(data.error||'Löschen fehlgeschlagen')}catch(e){console.error('Delete device failed',e);alert('Gerät konnte nicht gelöscht werden. Bitte erneut versuchen.')}}
+
+function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}const onlyOneDevice=devices.length<=1;listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===currentDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');if(onlyOneDevice)badges.push('<span class="device-badge last">Letztes Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div><button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'" '+(onlyOneDevice?'disabled':'')+'>'+(onlyOneDevice?'Nicht möglich':'Löschen')+'</button></div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
+
+async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const devicesRaw=await res.json();const devices=Array.isArray(devicesRaw)?devicesRaw:[];renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
 
 init();
 </script>
@@ -1226,6 +1292,14 @@ interface RateLimitRow {
   last_heartbeat_at: string;
 }
 
+interface PersonDeviceRow {
+  id: number;
+  person_id: string;
+  device_id: string;
+  device_model: string;
+  last_seen: string;
+}
+
 const RATE_LIMIT_WINDOW_MS = 20 * 1000; // 20 seconds (for testing)
 
 // Security: Constant-time string comparison to prevent timing attacks
@@ -1347,6 +1421,49 @@ function parseCoordinate(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function detectDeviceModel(userAgent: string | null): string {
+  const agent = (userAgent || '').toLowerCase();
+  if (!agent) return 'Desktop';
+  if (agent.includes('iphone')) return 'iPhone';
+  if (agent.includes('ipad') || (agent.includes('macintosh') && agent.includes('mobile'))) return 'iPad';
+  if (agent.includes('android')) return 'Android';
+  return 'Desktop';
+}
+
+async function ensurePersonDevicesTable(db: D1Database): Promise<void> {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS person_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      person_id TEXT NOT NULL,
+      device_id TEXT NOT NULL UNIQUE,
+      device_model TEXT NOT NULL,
+      last_seen DATETIME NOT NULL,
+      FOREIGN KEY (person_id) REFERENCES persons(id)
+    )`
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_person_devices_person_id_last_seen ON person_devices(person_id, last_seen DESC)'
+  ).run();
+}
+
+async function upsertPersonDevice(
+  db: D1Database,
+  personId: string,
+  deviceId: string,
+  deviceModel: string,
+  lastSeenIso: string
+): Promise<void> {
+  if (!deviceId) return;
+  await db.prepare(
+    `INSERT INTO person_devices (person_id, device_id, device_model, last_seen)
+     VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT(device_id) DO UPDATE SET
+       person_id = excluded.person_id,
+       device_model = excluded.device_model,
+       last_seen = excluded.last_seen`
+  ).bind(personId, deviceId, deviceModel, lastSeenIso).run();
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -1527,10 +1644,11 @@ app.post('/api/person', async (c) => {
 app.post('/api/heartbeat', async (c) => {
   // 1. Parse and validate request body
   const body = await c.req
-    .json<{ person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean }>()
-    .catch((): { person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean } => ({}));
+    .json<{ person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean; device_id?: string }>()
+    .catch((): { person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean; device_id?: string } => ({}));
   const person_id = typeof body.person_id === 'string' ? body.person_id.trim() : '';
   const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
+  const device_id = typeof body.device_id === 'string' ? body.device_id.trim() : '';
   const locEnabled = body.loc === true;
   const hasLat = Object.prototype.hasOwnProperty.call(body, 'lat');
   const hasLng = Object.prototype.hasOwnProperty.call(body, 'lng');
@@ -1543,8 +1661,8 @@ app.post('/api/heartbeat', async (c) => {
     return c.json({ error: 'person_id required' }, 400);
   }
 
-  if (person_id.length > 255 || status.length > 64) {
-    return c.json({ error: 'person_id or status is too long' }, 400);
+  if (person_id.length > 255 || status.length > 64 || device_id.length > 255) {
+    return c.json({ error: 'person_id, status or device_id is too long' }, 400);
   }
 
   // Validate coordinates only if location is enabled and coordinates are provided
@@ -1600,9 +1718,21 @@ app.post('/api/heartbeat', async (c) => {
       ).bind(person_id, nowIso).run();
     }
 
+    if (device_id) {
+      await ensurePersonDevicesTable(c.env.DB);
+      await upsertPersonDevice(
+        c.env.DB,
+        person_id,
+        device_id,
+        detectDeviceModel(c.req.header('user-agent') ?? ''),
+        nowIso
+      );
+    }
+
     return c.json({
       success: true,
       person_id,
+      device_id: device_id || null,
       status,
       timestamp: nowIso,
       location: lat !== null && lng !== null ? { lat, lng } : null,
@@ -1632,6 +1762,81 @@ app.get('/api/person/:id', async (c) => {
   const person = await c.env.DB.prepare('SELECT * FROM persons WHERE id = ?').bind(personId).first();
   if (!person) return c.json({ error: 'Person not found' }, 404);
   return c.json(person);
+});
+
+// API: Geräte einer Person
+app.get('/api/person/:id/devices', async (c) => {
+  const personId = c.req.param('id').trim();
+  if (!personId) return c.json({ error: 'person_id required' }, 400);
+
+  await ensurePersonDevicesTable(c.env.DB);
+  const devices = await c.env.DB.prepare(
+    `SELECT id, person_id, device_id, device_model, last_seen
+     FROM person_devices
+     WHERE person_id = ?1
+     ORDER BY datetime(last_seen) DESC, id DESC`
+  ).bind(personId).all<PersonDeviceRow>();
+
+  return c.json(devices.results ?? []);
+});
+
+app.post('/api/person/:id/devices', async (c) => {
+  const personId = c.req.param('id').trim();
+  const body = await c.req.json<{ device_id?: string }>().catch((): { device_id?: string } => ({}));
+  const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
+  if (!personId || !deviceId) {
+    return c.json({ error: 'person_id and device_id required' }, 400);
+  }
+  if (personId.length > 255 || deviceId.length > 255) {
+    return c.json({ error: 'person_id or device_id is too long' }, 400);
+  }
+
+  const nowIso = new Date().toISOString();
+  const deviceModel = detectDeviceModel(c.req.header('user-agent') ?? '');
+  await ensurePersonDevicesTable(c.env.DB);
+  await c.env.DB.prepare('INSERT OR IGNORE INTO persons (id) VALUES (?1)').bind(personId).run();
+  await upsertPersonDevice(c.env.DB, personId, deviceId, deviceModel, nowIso);
+
+  return c.json({
+    success: true,
+    person_id: personId,
+    device_id: deviceId,
+    device_model: deviceModel,
+    last_seen: nowIso
+  });
+});
+
+app.delete('/api/person/:id/devices', async (c) => {
+  const personId = c.req.param('id').trim();
+  const body = await c.req.json<{ device_id?: string }>().catch((): { device_id?: string } => ({}));
+  const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
+  if (!personId || !deviceId) {
+    return c.json({ error: 'person_id and device_id required' }, 400);
+  }
+
+  await ensurePersonDevicesTable(c.env.DB);
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM person_devices WHERE person_id = ?1 AND device_id = ?2'
+  ).bind(personId, deviceId).first<{ id: number }>();
+
+  if (!existing) {
+    return c.json({ error: 'Device not found' }, 404);
+  }
+
+  const countRow = await c.env.DB.prepare(
+    'SELECT COUNT(*) as count FROM person_devices WHERE person_id = ?1'
+  ).bind(personId).first<{ count: number | string }>();
+  const deviceCount = Number(countRow?.count ?? 0);
+
+  if (deviceCount <= 1) {
+    return c.json({ error: 'Das letzte Gerät kann nicht gelöscht werden.' }, 409);
+  }
+
+  await c.env.DB.prepare(
+    'DELETE FROM person_devices WHERE person_id = ?1 AND device_id = ?2'
+  ).bind(personId, deviceId).run();
+
+  return c.json({ success: true, person_id: personId, device_id: deviceId });
 });
 
 // API: Betreuer registrieren
