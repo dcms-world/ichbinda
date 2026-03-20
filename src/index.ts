@@ -361,6 +361,13 @@ h1{font-size:34px}
 <small class="settings-help">Verknüpfte Geräte für diese Person. Das letzte Gerät bleibt immer bestehen.</small>
 </div>
 
+<div class="settings-section">
+<h3>Neues Gerät hinzufügen</h3>
+<p class="settings-help">QR-Code eines anderen Geräts scannen, um dieses Gerät hinzuzufügen.</p>
+<button type="button" class="qr-scan-btn" onclick="startDeviceQrScan()">QR-Code scannen</button>
+<div id="deviceQrScanner" class="qr-scanner-container"></div>
+</div>
+
 <button class="close-settings" onclick="closeSettings()">Schließen</button>
 </div>
 
@@ -442,6 +449,103 @@ async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed
 function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}const onlyOneDevice=devices.length<=1;listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===currentDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');if(onlyOneDevice)badges.push('<span class="device-badge last">Letztes Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div><button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'" '+(onlyOneDevice?'disabled':'')+'>'+(onlyOneDevice?'Nicht möglich':'Löschen')+'</button></div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
 
 async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const devicesRaw=await res.json();const devices=Array.isArray(devicesRaw)?devicesRaw:[];renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
+
+// QR Scanner für neues Gerät
+let deviceQrScanStream = null;
+let deviceQrScanActive = false;
+
+async function startDeviceQrScan() {
+  const container = document.getElementById('deviceQrScanner');
+  if (!container) return;
+  
+  if (deviceQrScanActive) {
+    stopDeviceQrScan();
+    return;
+  }
+  
+  container.innerHTML = '<video id="deviceQrVideo" class="qr-video" autoplay playsinline muted></video><canvas id="deviceQrCanvas" class="qr-canvas"></canvas><button type="button" class="qr-scan-cancel" onclick="stopDeviceQrScan()">Abbrechen</button>';
+  container.style.display = 'block';
+  deviceQrScanActive = true;
+  
+  try {
+    deviceQrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('deviceQrVideo');
+    video.srcObject = deviceQrScanStream;
+    
+    const canvas = document.getElementById('deviceQrCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    function scanFrame() {
+      if (!deviceQrScanActive) return;
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+        
+        if (code) {
+          try {
+            const data = JSON.parse(code.data);
+            if (data.id) {
+              stopDeviceQrScan();
+              handleNewDeviceScanned(data.id);
+              return;
+            }
+          } catch (e) {
+            // Kein gültiger JSON QR Code
+          }
+        }
+      }
+      
+      requestAnimationFrame(scanFrame);
+    }
+    
+    scanFrame();
+  } catch (err) {
+    console.error('QR scan failed', err);
+    alert('Kamera konnte nicht gestartet werden. Bitte Kamera-Zugriff erlauben.');
+    stopDeviceQrScan();
+  }
+}
+
+function stopDeviceQrScan() {
+  deviceQrScanActive = false;
+  if (deviceQrScanStream) {
+    deviceQrScanStream.getTracks().forEach(track => track.stop());
+    deviceQrScanStream = null;
+  }
+  const container = document.getElementById('deviceQrScanner');
+  if (container) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+}
+
+async function handleNewDeviceScanned(personId) {
+  if (!personId) return;
+  
+  // Speichere person_id
+  localStorage.setItem('sicherda_person_id', personId);
+  currentPersonId = personId;
+  
+  // Update URL
+  const url = new URL(window.location);
+  url.searchParams.set('id', personId);
+  window.history.replaceState({}, '', url);
+  
+  // Registriere dieses Gerät
+  try {
+    await registerCurrentDevice(personId);
+    alert('Gerät erfolgreich hinzugefügt!');
+    loadDevices();
+    renderPersonName();
+  } catch (e) {
+    alert('Fehler beim Hinzufügen: ' + e.message);
+  }
+}
 
 init();
 </script>
