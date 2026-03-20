@@ -10,67 +10,255 @@ const PERSON_HTML = `<!DOCTYPE html>
 <title>IchBinDa - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
+:root{
+--bg-top:#eff4fb;
+--bg-bottom:#dfe7f1;
+--panel-bg:rgba(255,255,255,0.93);
+--text:#0f172a;
+--muted:#334155;
+--line:#ccd7e3;
+--ok-green-a:#22c55e;
+--ok-green-b:#11998e;
+--ok-green-shadow:#0f766e;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Segoe UI',sans-serif;font-size:19px;line-height:1.45;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e9edf3;color:#111827;padding:20px}
-.container{position:relative;background:#fff;border:2px solid #c7d0dc;border-radius:28px;padding:34px 24px 28px;max-width:460px;width:100%;text-align:center;box-shadow:0 10px 30px rgba(15,23,42,0.12)}
-h1{color:#111827;font-size:36px;line-height:1.2;font-weight:800;margin-bottom:10px}
-.subtitle{color:#1f2937;font-size:22px;line-height:1.35;margin-bottom:26px}
-.btn-okay{width:100%;min-height:220px;border:none;border-radius:30px;background:#007aff;color:#fff;font-size:48px;line-height:1.15;font-weight:800;cursor:pointer;padding:24px}
-.btn-okay:disabled{background:#808793;color:#f8fafc;cursor:not-allowed}
-.status{margin-top:22px;padding:16px 14px;border-radius:14px;border:2px solid #94a3b8;font-size:21px;font-weight:700;color:#0f172a;background:#f8fafc}
+body{
+font-family:'SF Pro Text','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+font-size:20px;
+line-height:1.5;
+min-height:100vh;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:24px;
+color:var(--text);
+background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bottom) 100%);
+position:relative;
+overflow-x:hidden;
+}
+body::before{
+content:'';
+position:fixed;
+inset:0;
+pointer-events:none;
+background-image:radial-gradient(rgba(255,255,255,0.65) 1px,transparent 1px);
+background-size:18px 18px;
+opacity:0.4;
+}
+.container{
+position:relative;
+z-index:1;
+width:100%;
+max-width:480px;
+text-align:center;
+padding:36px 24px 30px;
+border-radius:34px;
+border:1px solid var(--line);
+background:var(--panel-bg);
+box-shadow:0 20px 45px rgba(15,23,42,0.14),0 4px 14px rgba(15,23,42,0.08);
+backdrop-filter:blur(8px);
+}
+h1{
+color:var(--text);
+font-size:40px;
+line-height:1.15;
+font-weight:800;
+letter-spacing:-0.01em;
+margin-bottom:10px;
+}
+.subtitle{
+color:#1e293b;
+font-size:24px;
+line-height:1.35;
+font-weight:600;
+margin-bottom:24px;
+}
+.btn-okay{
+width:248px;
+height:248px;
+max-width:100%;
+margin:0 auto;
+border:none;
+border-radius:50%;
+background:linear-gradient(180deg,var(--ok-green-a) 0%,var(--ok-green-b) 100%);
+color:#ffffff;
+font-size:56px;
+line-height:1;
+font-weight:800;
+letter-spacing:0.02em;
+cursor:pointer;
+display:flex;
+align-items:center;
+justify-content:center;
+flex-direction:column;
+gap:10px;
+box-shadow:0 14px 28px rgba(17,153,142,0.3),0 6px 0 var(--ok-green-shadow),inset 0 2px 7px rgba(255,255,255,0.35);
+transition:transform 140ms ease,filter 140ms ease,box-shadow 140ms ease;
+}
+.btn-okay .btn-sub{
+font-size:30px;
+font-weight:700;
+letter-spacing:0;
+}
+.btn-okay:hover{
+filter:brightness(1.03);
+transform:translateY(-1px);
+}
+.btn-okay:active{
+transform:translateY(3px);
+box-shadow:0 7px 14px rgba(17,153,142,0.26),0 2px 0 var(--ok-green-shadow),inset 0 2px 6px rgba(255,255,255,0.28);
+}
+.btn-okay:disabled{
+background:linear-gradient(180deg,#94a3b8 0%,#64748b 100%);
+box-shadow:0 6px 14px rgba(51,65,85,0.26),0 3px 0 #475569;
+color:#f8fafc;
+cursor:not-allowed;
+transform:none;
+}
+.status{
+margin-top:22px;
+padding:16px 14px;
+border-radius:14px;
+border:2px solid #94a3b8;
+font-size:22px;
+font-weight:700;
+color:var(--text);
+background:#f8fafc;
+}
 .status:empty{display:none}
 .status.success{background:#dcfce7;color:#14532d;border-color:#166534}
 .status.error{background:#fee2e2;color:#7f1d1d;border-color:#991b1b}
 .status.rate-limit{background:#fff7ed;color:#7c2d12;border-color:#9a3412}
-.last-checkin{margin-top:18px;color:#1f2937;font-size:19px;font-weight:600}
-.cooldown-container{margin-top:20px;padding:16px;border:2px solid #cbd5e1;background:#f8fafc;border-radius:14px;display:none}
+.last-checkin{
+margin-top:18px;
+color:#1f2937;
+font-size:20px;
+font-weight:600;
+}
+.cooldown-container{
+margin-top:20px;
+padding:16px;
+border:2px solid #cbd5e1;
+background:#f8fafc;
+border-radius:14px;
+display:none;
+}
 .cooldown-container.active{display:block}
-.cooldown-text{color:#334155;font-size:18px;font-weight:600;margin-bottom:10px}
+.cooldown-text{color:#334155;font-size:19px;font-weight:600;margin-bottom:10px}
 .cooldown-bar{height:12px;background:#dbe4ee;border-radius:8px;overflow:hidden}
 .cooldown-progress{height:100%;background:#2563eb;width:0%}
 .cooldown-countdown{font-size:34px;font-weight:800;color:#1d4ed8;margin-top:10px}
 
-.menu-btn{position:fixed;top:16px;right:16px;width:56px;height:56px;border-radius:16px;border:2px solid #c7d0dc;background:#fff;color:#0f172a;font-size:30px;cursor:pointer;z-index:260}
+.menu-btn{
+position:fixed;
+top:18px;
+right:18px;
+width:62px;
+height:62px;
+border-radius:18px;
+border:2px solid var(--line);
+background:rgba(255,255,255,0.96);
+color:var(--text);
+font-size:34px;
+font-weight:700;
+line-height:1;
+cursor:pointer;
+z-index:260;
+box-shadow:0 8px 20px rgba(15,23,42,0.14);
+}
 
 .settings-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.46);display:none;z-index:250}
 .settings-overlay.open{display:block}
-.settings-panel{position:fixed;inset:0;background:#eef2f7;z-index:300;padding:88px 20px 28px;overflow-y:auto;display:none}
+.settings-panel{
+position:fixed;
+inset:0;
+background:#edf2f8;
+z-index:300;
+padding:92px 20px 28px;
+overflow-y:auto;
+display:none;
+}
 .settings-panel.open{display:block}
-.settings-title{font-size:34px;line-height:1.2;margin-bottom:18px;color:#111827}
-.settings-section{margin:16px 0;padding:18px;background:#fff;border:2px solid #d3dae4;border-radius:18px}
-.settings-section h3{margin-bottom:10px;color:#111827;font-size:24px;line-height:1.25}
-.name-label{display:block;color:#374151;font-size:18px;font-weight:700;margin-bottom:8px}
-.name-display{background:#fff;border:2px solid #cbd5e1;padding:14px;border-radius:12px;font-size:30px;font-weight:800;line-height:1.2;color:#0f172a;word-break:break-word}
-.btn-close{position:absolute;top:20px;left:20px;width:52px;height:52px;border-radius:14px;border:2px solid #c7d0dc;background:#fff;font-size:30px;line-height:1;color:#0f172a;cursor:pointer}
-.qr-container{margin:12px 0 6px;padding:14px;border:2px solid #d6dde7;background:#fff;border-radius:14px;text-align:center}
+.settings-title{font-size:36px;line-height:1.2;margin-bottom:18px;color:var(--text)}
+.settings-section{
+margin:16px 0;
+padding:18px;
+background:#fff;
+border:2px solid #d4dce7;
+border-radius:20px;
+box-shadow:0 7px 18px rgba(15,23,42,0.06);
+}
+.settings-section h3{margin-bottom:10px;color:var(--text);font-size:26px;line-height:1.2}
+.name-label{display:block;color:#334155;font-size:19px;font-weight:700;margin-bottom:8px}
+.name-display{background:#fff;border:2px solid #cbd5e1;padding:14px;border-radius:14px;font-size:32px;font-weight:800;line-height:1.2;color:var(--text);word-break:break-word}
+.btn-close{
+position:absolute;
+top:22px;
+left:20px;
+width:56px;
+height:56px;
+border-radius:16px;
+border:2px solid var(--line);
+background:#fff;
+font-size:30px;
+line-height:1;
+color:var(--text);
+cursor:pointer;
+}
+.qr-container{margin:12px 0 6px;padding:14px;border:2px solid #d6dde7;background:#fff;border-radius:16px;text-align:center}
 #qrcode{display:inline-block}
-.qr-raw-label{display:block;margin-top:12px;margin-bottom:8px;color:#374151;font-size:18px;font-weight:700}
-.qr-raw{margin:0;padding:12px;background:#e8edf4;border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:18px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text;color:#0f172a}
-.settings-help{display:block;color:#1f2937;font-size:18px;line-height:1.35}
-.close-settings{margin-top:22px;min-height:56px;padding:12px 20px;background:#1f2937;color:#fff;border:none;border-radius:14px;font-size:22px;font-weight:700;cursor:pointer;width:100%}
+.qr-raw-label{display:block;margin-top:12px;margin-bottom:8px;color:#374151;font-size:19px;font-weight:700}
+.qr-raw{margin:0;padding:12px;background:#e8edf4;border-radius:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:18px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text;color:var(--text)}
+.settings-help{display:block;color:#1f2937;font-size:19px;line-height:1.35}
+.close-settings{
+margin-top:22px;
+min-height:56px;
+padding:12px 20px;
+background:#1f2937;
+color:#fff;
+border:none;
+border-radius:14px;
+font-size:24px;
+font-weight:700;
+cursor:pointer;
+width:100%;
+}
 .name-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
 .name-modal-overlay.open{display:flex}
-.name-modal{background:#fff;border:2px solid #d3dae4;border-radius:18px;padding:24px;width:100%;max-width:420px;box-shadow:0 14px 45px rgba(15,23,42,0.2)}
-.name-modal h2{font-size:32px;color:#111827;line-height:1.2;margin-bottom:10px}
-.name-modal p{color:#334155;font-size:20px;line-height:1.35;margin-bottom:16px}
-.name-modal input{width:100%;min-height:56px;padding:12px 14px;border:2px solid #9ca3af;border-radius:12px;font-size:20px;margin-bottom:12px}
-.name-modal button{width:100%;min-height:56px;padding:12px 14px;border:none;border-radius:12px;background:#007aff;color:#fff;font-size:22px;font-weight:700;cursor:pointer}
+.name-modal{
+background:#fff;
+border:2px solid #d3dae4;
+border-radius:20px;
+padding:24px;
+width:100%;
+max-width:430px;
+box-shadow:0 14px 45px rgba(15,23,42,0.2);
+}
+.name-modal h2{font-size:34px;color:var(--text);line-height:1.2;margin-bottom:10px}
+.name-modal p{color:#334155;font-size:21px;line-height:1.35;margin-bottom:16px}
+.name-modal input{width:100%;min-height:58px;padding:12px 14px;border:2px solid #9ca3af;border-radius:14px;font-size:21px;margin-bottom:12px}
+.name-modal button{width:100%;min-height:58px;padding:12px 14px;border:none;border-radius:14px;background:#2563eb;color:#fff;font-size:23px;font-weight:700;cursor:pointer}
 
 .location-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#fff;border:2px solid #cbd5e1;border-radius:14px;margin-top:10px}
-.location-toggle-label{color:#111827;font-size:21px;font-weight:700;line-height:1.2}
-.location-toggle-help{color:#334155;font-size:18px;line-height:1.3;margin-top:6px}
+.location-toggle-label{color:var(--text);font-size:22px;font-weight:700;line-height:1.2}
+.location-toggle-help{color:var(--muted);font-size:18px;line-height:1.3;margin-top:6px}
 .toggle-switch{position:relative;flex-shrink:0;width:84px;height:48px;background:#6b7280;border-radius:24px;cursor:pointer;border:2px solid #4b5563}
-.toggle-switch.active{background:#007aff;border-color:#005fd1}
+.toggle-switch.active{background:#2563eb;border-color:#1e40af}
 .toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:38px;height:38px;background:#fff;border-radius:50%}
 .toggle-switch.active::after{left:39px}
 
-button,input,.toggle-switch{touch-action:manipulation}
+button,input,.toggle-switch{min-height:44px;touch-action:manipulation}
 button:focus-visible,input:focus-visible,.toggle-switch:focus-visible{outline:3px solid #ff9500;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){
+*{transition:none !important}
+}
 @media (max-width:520px){
 body{padding:12px}
 .container{padding:28px 16px 22px}
-h1{font-size:32px}
-.btn-okay{font-size:44px;min-height:200px}
+h1{font-size:34px}
+.subtitle{font-size:22px}
+.btn-okay{width:224px;height:224px;font-size:48px}
+.btn-okay .btn-sub{font-size:27px}
 .settings-title{font-size:30px}
 }
 </style>
@@ -79,13 +267,13 @@ h1{font-size:32px}
 <div class="name-modal-overlay" id="nameModalOverlay">
 <form class="name-modal" id="nameModalForm">
 <h2>Wie heißt du?</h2>
-<p>Bitte gib deinen Namen einmalig ein.</p>
+<p>Bitte gib deinen Namen einmal ein.</p>
 <input id="personNameInput" type="text" maxlength="80" placeholder="z.B. Oma Erna" required>
 <button type="submit">Speichern</button>
 </form>
 </div>
 
-<button class="menu-btn" onclick="openSettings()" title="Einstellungen" aria-label="Einstellungen öffnen">⚙</button>
+<button class="menu-btn" onclick="openSettings()" title="Menü" aria-label="Menü öffnen">☰</button>
 
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
 
@@ -113,7 +301,7 @@ h1{font-size:32px}
 <div class="location-toggle">
 <div>
 <div class="location-toggle-label">Standort mitteilen</div>
-<div class="location-toggle-help">Bei jedem "Okay" wird dein Standort gesendet</div>
+<div class="location-toggle-help">Bei jedem OK senden wir deinen Standort mit</div>
 </div>
 <div class="toggle-switch" id="locationToggle" onclick="toggleLocation()"></div>
 </div>
@@ -124,11 +312,11 @@ h1{font-size:32px}
 
 <div class="container">
 <h1>IchBinDa</h1>
-<p class="subtitle">Einmal tippen: Ich bin okay</p>
-<button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
-<div id="status"></div>
+<p class="subtitle">Einmal tippen: Alles okay</p>
+<button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()" aria-label="Okay senden">OK<span class="btn-sub">Alles gut</span></button>
+<div id="status" class="status" aria-live="polite"></div>
 <div class="cooldown-container" id="cooldownContainer">
-<div class="cooldown-text">Bitte warten...</div>
+<div class="cooldown-text">Bitte kurz warten...</div>
 <div class="cooldown-bar"><div class="cooldown-progress" id="cooldownProgress"></div></div>
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
