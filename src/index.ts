@@ -753,9 +753,8 @@ function getLastLocation(person) {
 }
 
 function buildMapsLinkHtml(lat, lng) {
-  const coordinates = lat.toFixed(4) + ', ' + lng.toFixed(4);
   const mapsUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
-  return '<a href="' + escapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#667eea;text-decoration:none;">' + escapeHtml(coordinates) + '</a>';
+  return '<a href="' + escapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#667eea;text-decoration:none;">Standort</a>';
 }
 
 function buildPersonLocationHtml(person) {
