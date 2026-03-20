@@ -34,8 +34,8 @@ h1{color:#333;margin-bottom:10px}
 .menu-btn{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.9);border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:100}
 .menu-btn:hover{background:white;transform:scale(1.1)}
 
-.settings-panel{position:fixed;top:0;right:-100%;width:100%;max-width:400px;height:100vh;background:white;box-shadow:-5px 0 20px rgba(0,0,0,0.2);transition:right 0.3s;z-index:200;padding:60px 20px 20px;overflow-y:auto}
-.settings-panel.open{right:0}
+.settings-panel{position:fixed;top:0;left:100%;width:100%;max-width:400px;height:100vh;background:white;box-shadow:-5px 0 20px rgba(0,0,0,0.2);z-index:200;padding:60px 20px 20px;overflow-y:auto;transition:left 0.3s;visibility:hidden}
+.settings-panel.open{left:0;visibility:visible}
 .settings-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);opacity:0;visibility:hidden;transition:opacity 0.3s;z-index:150}
 .settings-overlay.open{opacity:1;visibility:visible}
 
@@ -61,6 +61,14 @@ h1{color:#333;margin-bottom:10px}
 .name-modal input:focus{outline:none;border-color:#667eea}
 .name-modal button{width:100%;padding:12px 14px;border:none;border-radius:8px;background:#11998e;color:white;font-size:16px;font-weight:600;cursor:pointer}
 .name-modal button:hover{background:#0f877e}
+
+.location-toggle{display:flex;align-items:center;justify-content:space-between;padding:12px;background:white;border-radius:8px;margin-top:10px}
+.location-toggle-label{color:#333;font-size:14px}
+.location-toggle-help{color:#666;font-size:12px;margin-top:4px}
+.toggle-switch{position:relative;width:50px;height:26px;background:#ccc;border-radius:13px;cursor:pointer;transition:background 0.3s}
+.toggle-switch.active{background:#11998e}
+.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;background:white;border-radius:50%;transition:left 0.3s}
+.toggle-switch.active::after{left:27px}
 </style>
 </head>
 <body>
@@ -96,6 +104,17 @@ h1{color:#333;margin-bottom:10px}
 <small>Der Betreuer kann diesen Code scannen.</small>
 </div>
 
+<div class="settings-section">
+<h3>📍 Standort</h3>
+<div class="location-toggle">
+<div>
+<div class="location-toggle-label">Standort mitteilen</div>
+<div class="location-toggle-help">Bei jedem "Okay" wird dein Standort gesendet</div>
+</div>
+<div class="toggle-switch" id="locationToggle" onclick="toggleLocation()"></div>
+</div>
+</div>
+
 <button class="close-settings" onclick="closeSettings()">Schließen</button>
 </div>
 
@@ -127,7 +146,7 @@ async function createPerson(){const res=await fetch(API_URL+'/person',{method:'P
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
 function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});document.getElementById('qrPayloadText').textContent=qrPayload}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
-function openSettings(){document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode()}
+function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
@@ -135,7 +154,18 @@ function askForPersonName(){return new Promise((resolve)=>{const overlay=documen
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
-async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;renderPersonName();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
+const LOCATION_ENABLED_KEY='sicherda_location_enabled';
+
+function isLocationEnabled(){return localStorage.getItem(LOCATION_ENABLED_KEY)==='true'}
+function setLocationEnabled(enabled){localStorage.setItem(LOCATION_ENABLED_KEY,enabled?'true':'false');updateLocationToggleUi()}
+
+function updateLocationToggleUi(){const toggle=document.getElementById('locationToggle');if(!toggle)return;toggle.classList.toggle('active',isLocationEnabled())}
+
+async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Der Betreuer sieht dann, wo du dich befindest.');if(!confirmed)return;setLocationEnabled(true)}else{setLocationEnabled(false)}}
+
+function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
+
+async function init(){try{currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -143,7 +173,7 @@ function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=s
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;status.className='status success';status.textContent='✅ Bereit zum Melden!';setTimeout(()=>status.textContent='',2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(cooldownInterval){return}status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{throw new Error('Fehler')}}catch(err){if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId};if(isLocationEnabled()){try{const pos=await getCurrentPosition();payload.lat=pos.lat;payload.lng=pos.lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e)}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
@@ -874,6 +904,15 @@ function buildPersonRow(p) {
     ? '<span class="person-name">' + escapeHtml(personName) + '</span>'
     : '<span class="person-id">' + escapeHtml(p.id) + '</span>';
   
+  let locationHtml = '';
+  if (p.last_location_lat && p.last_location_lng) {
+    const mapsUrl = 'https://www.google.com/maps?q=' + p.last_location_lat + ',' + p.last_location_lng;
+    locationHtml = '<div style="margin-top:6px;font-size:12px;">' +
+      '📍 <a href="' + mapsUrl + '" target="_blank" style="color:#667eea;text-decoration:none;">' +
+      p.last_location_lat.toFixed(4) + ', ' + p.last_location_lng.toFixed(4) + '</a>' +
+    '</div>';
+  }
+  
   return '<li class="person-item">' +
     '<div class="person-main">' +
       '<div class="person-head">' +
@@ -881,6 +920,7 @@ function buildPersonRow(p) {
         '<div>' + idLabel + '</div>' +
       '</div>' +
       '<div class="last-seen">' + lastSeen + '</div>' +
+      locationHtml +
       '<div style="margin-top:8px;font-size:12px;color:#888">' +
         '⏰ Alarm nach: ' + escapeHtml(getIntervalLabel(p.check_interval_minutes)) +
       '</div>' +
@@ -1096,9 +1136,11 @@ app.post('/api/person', async (c) => {
 // API: Heartbeat senden (ohne API-Key, mit Rate Limiting)
 app.post('/api/heartbeat', async (c) => {
   // 1. Parse and validate request body
-  const body = await c.req.json<{ person_id?: string; status?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ person_id?: string; status?: string; lat?: number; lng?: number }>().catch(() => ({}));
   const person_id = typeof body.person_id === 'string' ? body.person_id.trim() : '';
   const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
+  const lat = typeof body.lat === 'number' ? body.lat : null;
+  const lng = typeof body.lng === 'number' ? body.lng : null;
 
   if (!person_id) {
     return c.json({ error: 'person_id required' }, 400);
@@ -1106,6 +1148,14 @@ app.post('/api/heartbeat', async (c) => {
 
   if (person_id.length > 255 || status.length > 64) {
     return c.json({ error: 'person_id or status is too long' }, 400);
+  }
+
+  // Validate coordinates if provided
+  if (lat !== null && (lat < -90 || lat > 90)) {
+    return c.json({ error: 'Invalid latitude' }, 400);
+  }
+  if (lng !== null && (lng < -180 || lng > 180)) {
+    return c.json({ error: 'Invalid longitude' }, 400);
   }
 
   const now = new Date();
@@ -1120,18 +1170,29 @@ app.post('/api/heartbeat', async (c) => {
     }, 429);
   }
 
-  // 3. Store heartbeat
+  // 3. Store heartbeat with optional location
   try {
-    await c.env.DB.prepare(
-      `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
-       ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`
-    ).bind(person_id, nowIso).run();
+    if (lat !== null && lng !== null) {
+      await c.env.DB.prepare(
+        `INSERT INTO persons (id, last_heartbeat, last_location_lat, last_location_lng) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET 
+         last_heartbeat = excluded.last_heartbeat,
+         last_location_lat = excluded.last_location_lat,
+         last_location_lng = excluded.last_location_lng`
+      ).bind(person_id, nowIso, lat, lng).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
+         ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`
+      ).bind(person_id, nowIso).run();
+    }
 
     return c.json({
       success: true,
       person_id,
       status,
-      timestamp: nowIso
+      timestamp: nowIso,
+      location: lat !== null && lng !== null ? { lat, lng } : null
     });
   } catch (error) {
     // Rollback rate limit on error (best effort)
@@ -1203,6 +1264,8 @@ app.get('/api/watcher/:id/persons', async (c) => {
     `SELECT 
       p.id,
       p.last_heartbeat,
+      p.last_location_lat,
+      p.last_location_lng,
       wr.check_interval_minutes,
       CASE 
         WHEN p.last_heartbeat IS NULL THEN 'never'

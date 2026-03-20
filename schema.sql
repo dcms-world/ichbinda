@@ -1,7 +1,9 @@
 -- Person (die Überwachte) - anonym, nur UUID
 CREATE TABLE IF NOT EXISTS persons (
   id TEXT PRIMARY KEY,
-  last_heartbeat DATETIME
+  last_heartbeat DATETIME,
+  last_location_lat REAL,
+  last_location_lng REAL
 );
 
 -- Betreuer (Watcher) - Push-Token nötig für Benachrichtigung
