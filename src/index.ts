@@ -224,7 +224,7 @@ button:hover{background:#5a6fd6}
 <div class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
 <button id="addPersonBtn" onclick="addPerson()">Hinzufügen</button>
-<button type="button" id="openQrScannerBtn" onclick="openQrScanner()">Kamera starten</button>
+<button type="button" id="openQrScannerBtn" onclick="openQrScanner()">QR scannen</button>
 </div>
 <div id="personLimitMessage" class="limit-message">Maximal 2 Personen möglich.</div>
 <small class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
@@ -520,19 +520,23 @@ function updatePersonLimitUi() {
   const counter = document.getElementById('personCounter');
   const personInput = document.getElementById('personId');
   const addButton = document.getElementById('addPersonBtn');
+  const qrButton = document.getElementById('openQrScannerBtn');
   const limitMessage = document.getElementById('personLimitMessage');
 
   if (counter) {
     counter.textContent = String(currentPersonCount) + '/' + String(MAX_WATCHED_PERSONS) + ' Personen';
   }
   if (personInput) {
-    personInput.disabled = isLimitReached;
-    personInput.classList.toggle('limit-hide', isLimitReached);
-    if (isLimitReached) personInput.value = '';
+    personInput.disabled = false;
+    personInput.classList.remove('limit-hide');
   }
   if (addButton) {
     addButton.disabled = isLimitReached;
     addButton.classList.toggle('limit-hide', isLimitReached);
+  }
+  if (qrButton) {
+    qrButton.disabled = isLimitReached;
+    qrButton.classList.toggle('limit-hide', isLimitReached);
   }
   if (limitMessage) {
     limitMessage.classList.toggle('show', isLimitReached);
@@ -549,7 +553,9 @@ async function refreshPersonCount() {
     if (!response.ok) throw new Error('count-fetch-failed');
     const personsRaw = await response.json();
     const persons = Array.isArray(personsRaw) ? personsRaw : [];
-    return applyPersonCount(persons.length);
+    const hiddenPersonIds = new Set(getHiddenPersonIds());
+    const visibleCount = persons.filter((person) => !hiddenPersonIds.has(person.id)).length;
+    return applyPersonCount(visibleCount);
   } catch (err) {
     updatePersonLimitUi();
     return currentPersonCount;
@@ -868,6 +874,11 @@ function removePersonFromLocalView(personId) {
   if (!confirmed) return false;
   removePersonName(personId);
   hidePersonFromLocalView(personId);
+  const visiblePersonIds = Object.keys(visiblePersonsById);
+  const recalculatedCount = visiblePersonIds.includes(personId)
+    ? visiblePersonIds.length - 1
+    : visiblePersonIds.length;
+  applyPersonCount(recalculatedCount);
   loadPersons();
   return true;
 }
@@ -876,9 +887,9 @@ async function loadPersons() {
   const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
   const personsRaw = await res.json();
   const persons = Array.isArray(personsRaw) ? personsRaw : [];
-  applyPersonCount(persons.length);
   const hiddenPersonIds = new Set(getHiddenPersonIds());
   const visiblePersons = persons.filter((person) => !hiddenPersonIds.has(person.id));
+  applyPersonCount(visiblePersons.length);
   visiblePersonsById = {};
   for (const person of visiblePersons) visiblePersonsById[person.id] = person;
   const watchedPersonIds = getStoredList(WATCHED_PERSON_IDS_KEY);
