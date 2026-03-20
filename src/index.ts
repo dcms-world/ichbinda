@@ -539,6 +539,7 @@ function escapeHtml(value) {
 }
 
 function toFiniteNumber(value) {
+  if (value === null || value === undefined) return null;
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -565,7 +566,7 @@ function buildPersonLocationHtml(person) {
 
 function buildEditLocationHtml(person) {
   const location = getLastLocation(person);
-  if (!location) return 'Kein Standort gemeldet';
+  if (!location) return 'Ohne Standort';
   return '📍 ' + buildMapsLinkHtml(location.lat, location.lng);
 }
 
