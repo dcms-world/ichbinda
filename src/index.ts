@@ -307,6 +307,10 @@ button:hover{background:#5a6fd6}
       <div id="editPersonName" class="edit-value"></div>
     </div>
     <div class="edit-field">
+      <div class="edit-label">Letzter Standort</div>
+      <div id="editPersonLocation" class="edit-value"></div>
+    </div>
+    <div class="edit-field">
       <div class="edit-label">Foto</div>
       <div class="edit-photo-row">
         <div id="editPhotoPreview"></div>
@@ -532,6 +536,37 @@ function unhidePersonInLocalView(personId) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function toFiniteNumber(value) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getLastLocation(person) {
+  if (!person || typeof person !== 'object') return null;
+  const lat = toFiniteNumber(person.last_location_lat);
+  const lng = toFiniteNumber(person.last_location_lng);
+  if (lat === null || lng === null) return null;
+  return { lat, lng };
+}
+
+function buildMapsLinkHtml(lat, lng) {
+  const coordinates = lat.toFixed(4) + ', ' + lng.toFixed(4);
+  const mapsUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng);
+  return '<a href="' + escapeHtml(mapsUrl) + '" target="_blank" rel="noopener noreferrer" style="color:#667eea;text-decoration:none;">' + escapeHtml(coordinates) + '</a>';
+}
+
+function buildPersonLocationHtml(person) {
+  const location = getLastLocation(person);
+  if (!location) return '';
+  return '<div style="margin-top:6px;font-size:12px;">📍 ' + buildMapsLinkHtml(location.lat, location.lng) + '</div>';
+}
+
+function buildEditLocationHtml(person) {
+  const location = getLastLocation(person);
+  if (!location) return 'Kein Standort gemeldet';
+  return '📍 ' + buildMapsLinkHtml(location.lat, location.lng);
 }
 
 function parsePersonInput(rawValue) {
@@ -825,6 +860,7 @@ function openEditModal(personId) {
   const personName = getPersonName(personId) || getRememberedPersonName(personId);
   document.getElementById('editPersonId').textContent = personId;
   document.getElementById('editPersonName').textContent = personName || 'Nicht gesetzt';
+  document.getElementById('editPersonLocation').innerHTML = buildEditLocationHtml(person);
   const intervalSelect = document.getElementById('editIntervalSelect');
   intervalSelect.value = String(person.check_interval_minutes);
   if (intervalSelect.value !== String(person.check_interval_minutes)) {
@@ -903,15 +939,7 @@ function buildPersonRow(p) {
   const idLabel = personName
     ? '<span class="person-name">' + escapeHtml(personName) + '</span>'
     : '<span class="person-id">' + escapeHtml(p.id) + '</span>';
-  
-  let locationHtml = '';
-  if (p.last_location_lat && p.last_location_lng) {
-    const mapsUrl = 'https://www.google.com/maps?q=' + p.last_location_lat + ',' + p.last_location_lng;
-    locationHtml = '<div style="margin-top:6px;font-size:12px;">' +
-      '📍 <a href="' + mapsUrl + '" target="_blank" style="color:#667eea;text-decoration:none;">' +
-      p.last_location_lat.toFixed(4) + ', ' + p.last_location_lng.toFixed(4) + '</a>' +
-    '</div>';
-  }
+  const locationHtml = buildPersonLocationHtml(p);
   
   return '<li class="person-item">' +
     '<div class="person-main">' +
