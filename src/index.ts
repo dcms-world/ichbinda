@@ -206,9 +206,11 @@ color:var(--text);
 cursor:pointer;
 }
 .qr-container{margin:12px 0 6px;padding:14px;border:2px solid #d6dde7;background:#fff;border-radius:16px;text-align:center}
-#qrcode{display:inline-block}
-.qr-raw-label{display:block;margin-top:12px;margin-bottom:8px;color:#374151;font-size:19px;font-weight:700}
-.qr-raw{margin:0;padding:12px;background:#e8edf4;border-radius:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:18px;line-height:1.4;word-break:break-all;white-space:pre-wrap;text-align:left;user-select:text;color:var(--text)}
+#qrcode{display:inline-block;cursor:pointer}
+.qr-copy-btn{display:block;margin:12px auto 0;padding:10px 14px;background:#eef2ff;color:#1e3a8a;border:2px solid #c7d2fe;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer}
+.qr-copy-btn:active{transform:scale(0.99)}
+.qr-copy-status{display:block;min-height:24px;margin-top:8px;font-size:17px;color:#1e40af}
+.qr-copy-status.error{color:#b91c1c}
 .settings-help{display:block;color:#1f2937;font-size:19px;line-height:1.35}
 .close-settings{
 margin-top:22px;
@@ -290,8 +292,8 @@ h1{font-size:34px}
 <h3>QR-Code für Betreuung</h3>
 <div class="qr-container" id="qrContainer">
 <div id="qrcode"></div>
-<label class="qr-raw-label" for="qrPayloadText">QR-Code Inhalt (zum Kopieren):</label>
-<pre class="qr-raw" id="qrPayloadText"></pre>
+<button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">JSON kopieren</button>
+<small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
 </div>
 <small class="settings-help">Die Betreuungsperson kann diesen Code scannen.</small>
 </div>
@@ -336,7 +338,10 @@ function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
 async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
 
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
-function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});document.getElementById('qrPayloadText').textContent=qrPayload}
+let qrCopyStatusTimeout=null;
+function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
+async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
+function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
 function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode()}
 
