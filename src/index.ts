@@ -22,7 +22,14 @@ h1{color:#333;margin-bottom:10px}
 .status{margin-top:30px;padding:15px;border-radius:10px;font-weight:500}
 .status.success{background:#d4edda;color:#155724}
 .status.error{background:#f8d7da;color:#721c24}
+.status.rate-limit{background:#fff3cd;color:#856404}
 .last-checkin{margin-top:20px;color:#666;font-size:14px}
+.cooldown-container{margin-top:20px;padding:15px;background:#f8f9fa;border-radius:10px;display:none}
+.cooldown-container.active{display:block}
+.cooldown-text{color:#666;font-size:14px;margin-bottom:10px}
+.cooldown-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden}
+.cooldown-progress{height:100%;background:linear-gradient(90deg,#11998e,#38ef7d);width:0%;transition:width 1s linear}
+.cooldown-countdown{font-size:24px;font-weight:bold;color:#11998e;margin-top:10px}
 
 .menu-btn{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.9);border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:100}
 .menu-btn:hover{background:white;transform:scale(1.1)}
@@ -97,6 +104,11 @@ h1{color:#333;margin-bottom:10px}
 <p class="subtitle">Einmal drücken = "Ich bin okay"</p>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()">✅<br>OKAY</button>
 <div id="status"></div>
+<div class="cooldown-container" id="cooldownContainer">
+<div class="cooldown-text">⏳ Bitte warten...</div>
+<div class="cooldown-bar"><div class="cooldown-progress" id="cooldownProgress"></div></div>
+<div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
+</div>
 <div class="last-checkin" id="lastCheckin"></div>
 </div>
 
@@ -125,7 +137,13 @@ async function ensurePersonName(){const savedName=getPersonName();if(savedName)r
 
 async function init(){currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId)personId=await createPerson();currentPersonId=personId;renderPersonName();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}
 
-async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();btn.disabled=true;status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE')}else throw new Error('Fehler')}catch(err){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.'}finally{btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}
+let cooldownInterval=null;let cooldownEndTime=null;
+
+function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=seconds%60;return mins+':'+(secs<10?'0':'')+secs}
+
+function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;status.className='status success';status.textContent='✅ Bereit zum Melden!';setTimeout(()=>status.textContent='',2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
+
+async function sendHeartbeat(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(cooldownInterval){return}status.className='status';status.textContent='Wird gesendet...';try{const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:personId})});if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(()=>status.textContent='',3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{throw new Error('Fehler')}}catch(err){if(!cooldownInterval){status.className='status error';status.textContent='❌ Fehler. Bitte erneut versuchen.';btn.disabled=false;setTimeout(()=>status.textContent='',5000)}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
@@ -940,7 +958,7 @@ interface RateLimitRow {
   last_heartbeat_at: string;
 }
 
-const RATE_LIMIT_WINDOW_MS = 10 * 1000; // 10 seconds (for testing)
+const RATE_LIMIT_WINDOW_MS = 20 * 1000; // 20 seconds (for testing)
 
 // Security: Constant-time string comparison to prevent timing attacks
 function constantTimeEquals(left: string, right: string): boolean {
