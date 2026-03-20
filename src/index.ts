@@ -9,6 +9,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IchBinDa - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
 :root{
 --bg-top:#eff4fb;
@@ -271,6 +272,10 @@ color:#64748b;
 }
 .device-empty{font-size:18px;color:#475569;padding:6px 2px}
 .device-error{font-size:18px;color:#b91c1c;padding:6px 2px}
+.qr-scanner-container{margin-top:12px;display:none}
+.qr-video{width:100%;max-width:300px;border-radius:12px}
+.qr-canvas{display:none}
+.qr-scan-cancel{margin-top:10px;padding:10px 16px;background:#f3f4f6;border:2px solid #d1d5db;border-radius:10px;color:#374151;font-size:16px;font-weight:600;cursor:pointer}
 .name-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
 .name-modal-overlay.open{display:flex}
 .name-modal{
@@ -450,77 +455,94 @@ function renderDeviceList(devices){const listEl=document.getElementById('deviceL
 
 async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const devicesRaw=await res.json();const devices=Array.isArray(devicesRaw)?devicesRaw:[];renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
 
-// QR Scanner für neues Gerät
-let deviceQrScanStream = null;
-let deviceQrScanActive = false;
+// QR Scanner für neues Gerät (verbesserte Version aus watcher.html)
+let deviceCameraStream = null;
+let deviceScanFrameRequestId = 0;
+let deviceScanContext = null;
 
-async function startDeviceQrScan() {
-  const container = document.getElementById('deviceQrScanner');
-  if (!container) return;
-  
-  if (deviceQrScanActive) {
-    stopDeviceQrScan();
-    return;
+function stopDeviceQrScanner() {
+  if (deviceScanFrameRequestId) {
+    cancelAnimationFrame(deviceScanFrameRequestId);
+    deviceScanFrameRequestId = 0;
   }
-  
-  container.innerHTML = '<video id="deviceQrVideo" class="qr-video" autoplay playsinline muted></video><canvas id="deviceQrCanvas" class="qr-canvas"></canvas><button type="button" class="qr-scan-cancel" onclick="stopDeviceQrScan()">Abbrechen</button>';
-  container.style.display = 'block';
-  deviceQrScanActive = true;
-  
-  try {
-    deviceQrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const video = document.getElementById('deviceQrVideo');
-    video.srcObject = deviceQrScanStream;
-    
-    const canvas = document.getElementById('deviceQrCanvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    
-    function scanFrame() {
-      if (!deviceQrScanActive) return;
-      
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-        
-        if (code) {
-          try {
-            const data = JSON.parse(code.data);
-            if (data.id) {
-              stopDeviceQrScan();
-              handleNewDeviceScanned(data.id);
-              return;
-            }
-          } catch (e) {
-            // Kein gültiger JSON QR Code
-          }
-        }
-      }
-      
-      requestAnimationFrame(scanFrame);
-    }
-    
-    scanFrame();
-  } catch (err) {
-    console.error('QR scan failed', err);
-    alert('Kamera konnte nicht gestartet werden. Bitte Kamera-Zugriff erlauben.');
-    stopDeviceQrScan();
-  }
-}
-
-function stopDeviceQrScan() {
-  deviceQrScanActive = false;
-  if (deviceQrScanStream) {
-    deviceQrScanStream.getTracks().forEach(track => track.stop());
-    deviceQrScanStream = null;
+  deviceScanContext = null;
+  if (deviceCameraStream) {
+    deviceCameraStream.getTracks().forEach((track) => track.stop());
+    deviceCameraStream = null;
   }
   const container = document.getElementById('deviceQrScanner');
   if (container) {
     container.style.display = 'none';
     container.innerHTML = '';
+  }
+}
+
+async function scanDeviceQrFrame() {
+  const video = document.getElementById('deviceQrVideo');
+  const canvas = document.getElementById('deviceQrCanvas');
+  if (!video || !canvas || !deviceCameraStream) return;
+  
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    if (!deviceScanContext) {
+      deviceScanContext = canvas.getContext('2d', { willReadFrequently: true });
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    deviceScanContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const imageData = deviceScanContext.getImageData(0, 0, canvas.width, canvas.height);
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
+    
+    if (result && result.data) {
+      try {
+        const data = JSON.parse(result.data);
+        if (data.id) {
+          stopDeviceQrScanner();
+          handleNewDeviceScanned(data.id);
+          return;
+        }
+      } catch (e) {
+        // Kein gültiger JSON QR Code, weiter scannen
+      }
+    }
+  }
+  
+  deviceScanFrameRequestId = requestAnimationFrame(scanDeviceQrFrame);
+}
+
+async function startDeviceQrScan() {
+  const container = document.getElementById('deviceQrScanner');
+  if (!container) return;
+  
+  if (deviceCameraStream) {
+    stopDeviceQrScanner();
+    return;
+  }
+  
+  if (typeof window.jsQR !== 'function') {
+    alert('QR-Scanner nicht verfügbar. Bitte Seite neu laden.');
+    return;
+  }
+  
+  container.innerHTML = '<video id="deviceQrVideo" class="qr-video" autoplay playsinline muted></video><canvas id="deviceQrCanvas" class="qr-canvas" style="display:none;"></canvas><button type="button" class="qr-scan-cancel" onclick="stopDeviceQrScanner()">Abbrechen</button>';
+  container.style.display = 'block';
+  
+  try {
+    deviceCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+    const video = document.getElementById('deviceQrVideo');
+    video.srcObject = deviceCameraStream;
+    video.onloadedmetadata = () => {
+      video.play();
+      scanDeviceQrFrame();
+    };
+  } catch (err) {
+    console.error('QR scan failed', err);
+    alert('Kamera konnte nicht gestartet werden. Bitte Kamera-Zugriff erlauben.');
+    stopDeviceQrScanner();
   }
 }
 
