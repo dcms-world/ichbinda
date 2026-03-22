@@ -451,7 +451,7 @@ async function registerCurrentDevice(personId){const deviceId=currentDeviceId||g
 
 async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed=confirm('Gerät wirklich entfernen?');if(!confirmed)return;try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(res.ok){await loadDevices();return}const data=await res.json().catch(()=>({}));if(res.status===409){alert(data.error||'Das letzte Gerät kann nicht gelöscht werden.');return}throw new Error(data.error||'Löschen fehlgeschlagen')}catch(e){console.error('Delete device failed',e);alert('Gerät konnte nicht gelöscht werden. Bitte erneut versuchen.')}}
 
-function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}const onlyOneDevice=devices.length<=1;listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===currentDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');if(onlyOneDevice)badges.push('<span class="device-badge last">Letztes Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div><button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'" '+(onlyOneDevice?'disabled':'')+'>'+(onlyOneDevice?'Nicht möglich':'Löschen')+'</button></div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
+function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===currentDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div>'+(isCurrent?'':'<button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'">Löschen</button>')+'</div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
 
 async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const devicesRaw=await res.json();const devices=Array.isArray(devicesRaw)?devicesRaw:[];renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
 
@@ -549,17 +549,33 @@ async function startDeviceQrScan() {
 async function handleNewDeviceScanned(personId) {
   if (!personId) return;
   
-  // Prüfe ob Person bereits einem Watcher zugeordnet ist
+  // Prüfe ob Person bereits existiert und ein Name gesetzt ist
   try {
-    const checkRes = await fetch(API_URL + '/person/' + encodeURIComponent(personId) + '/has-watcher');
-    const checkData = await checkRes.json();
-    
-    if (checkData.has_watcher) {
-      const confirmed = confirm('Dieses Gerät ist bereits mit einem Betreuer verknüpft. Möchtest du es wirklich zu deinem Gerät hinzufügen?');
-      if (!confirmed) return;
+    const personRes = await fetch(API_URL + '/person/' + encodeURIComponent(personId));
+    if (personRes.ok) {
+      const personData = await personRes.json();
+      
+      // Wenn die Person bereits existiert, übernehme ihren Namen
+      if (personData.id) {
+        // Prüfe ob dieses Gerät bereits einer anderen Person zugeordnet ist
+        // (durch Abgleich mit localStorage - jedes Gerät kennt nur seine eigene person_id)
+        const existingPersonId = localStorage.getItem('sicherda_person_id');
+        if (existingPersonId && existingPersonId !== personId) {
+          alert('Dieses Gerät ist bereits mit einer anderen Person verknüpft und kann nicht übertragen werden.');
+          return;
+        }
+        
+        // Name aus der bestehenden Person übernehmen
+        if (personData.name && personData.name !== getPersonName()) {
+          const confirmed = confirm('Diese Person existiert bereits mit dem Namen "' + personData.name + '"\. Möchtest du diesen Namen übernehmen?');
+          if (confirmed) {
+            setPersonName(personData.name);
+          }
+        }
+      }
     }
   } catch (e) {
-    console.error('Watcher check failed', e);
+    console.error('Person check failed', e);
     // Bei Fehler trotzdem fortfahren
   }
   
