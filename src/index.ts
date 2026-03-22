@@ -1541,10 +1541,10 @@ async function lookupApiKey(db: D1Database, apiKey: string): Promise<boolean> {
   return row !== null;
 }
 
-// Security: Check rate limit for person_id (max 1 per 5 minutes)
+// Security: Check rate limit per device (max 1 per 5 minutes)
 async function checkRateLimit(
   db: D1Database,
-  personId: string
+  deviceKey: string
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const now = new Date();
   const nowIso = now.toISOString();
@@ -1554,7 +1554,7 @@ async function checkRateLimit(
   const previousRateLimit = await db.prepare(
     "SELECT last_heartbeat_at FROM device_rate_limits WHERE device_id = ?1"
   )
-    .bind(personId)
+    .bind(deviceKey)
     .first<RateLimitRow>();
 
   // Try to update rate limit atomically (only if enough time passed)
@@ -1566,7 +1566,7 @@ async function checkRateLimit(
       WHERE unixepoch(device_rate_limits.last_heartbeat_at) <= unixepoch(?3)
     `
   )
-    .bind(personId, nowIso, cutoffIso)
+    .bind(deviceKey, nowIso, cutoffIso)
     .run();
 
   const rateLimitUpdated = (rateLimitResult.meta?.changes ?? 0) > 0;
@@ -1588,7 +1588,7 @@ async function checkRateLimit(
 // Rollback rate limit on DB error (best effort)
 async function rollbackRateLimit(
   db: D1Database,
-  personId: string,
+  deviceKey: string,
   previousTimestamp: string | null,
   currentTimestamp: string
 ): Promise<void> {
@@ -1601,7 +1601,7 @@ async function rollbackRateLimit(
           WHERE device_id = ?2 AND last_heartbeat_at = ?3
         `
       )
-        .bind(previousTimestamp, personId, currentTimestamp)
+        .bind(previousTimestamp, deviceKey, currentTimestamp)
         .run();
       return;
     }
@@ -1609,7 +1609,7 @@ async function rollbackRateLimit(
     await db.prepare(
       "DELETE FROM device_rate_limits WHERE device_id = ?1 AND last_heartbeat_at = ?2"
     )
-      .bind(personId, currentTimestamp)
+      .bind(deviceKey, currentTimestamp)
       .run();
   } catch (rollbackError) {
     console.error("Failed to rollback rate limit state", rollbackError);
@@ -1962,8 +1962,9 @@ app.post('/api/heartbeat', async (c) => {
   const now = new Date();
   const nowIso = now.toISOString();
 
-  // 2. Check rate limit (max 1 per 5 minutes per person)
-  const rateLimitCheck = await checkRateLimit(c.env.DB, person_id);
+  // 2. Check rate limit (max 1 per 5 minutes per device, fallback to person_id)
+  const rateLimitKey = device_id || person_id;
+  const rateLimitCheck = await checkRateLimit(c.env.DB, rateLimitKey);
   if (!rateLimitCheck.allowed) {
     return c.json({
       error: 'Too many requests',
@@ -2020,11 +2021,11 @@ app.post('/api/heartbeat', async (c) => {
     // Rollback rate limit on error (best effort)
     const previousRateLimit = await c.env.DB.prepare(
       "SELECT last_heartbeat_at FROM device_rate_limits WHERE device_id = ?1"
-    ).bind(person_id).first<RateLimitRow>();
+    ).bind(rateLimitKey).first<RateLimitRow>();
 
     await rollbackRateLimit(
       c.env.DB,
-      person_id,
+      rateLimitKey,
       previousRateLimit?.last_heartbeat_at ?? null,
       nowIso
     );
