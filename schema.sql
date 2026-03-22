@@ -45,5 +45,6 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
 CREATE TABLE IF NOT EXISTS device_keys (
   device_id TEXT PRIMARY KEY,
   key_hash TEXT NOT NULL,
-  created_at DATETIME NOT NULL
+  created_at DATETIME NOT NULL,
+  role TEXT NOT NULL DEFAULT 'person' CHECK(role IN ('person', 'watcher'))
 );

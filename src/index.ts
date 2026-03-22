@@ -412,7 +412,7 @@ function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'
 function setRegistered(){localStorage.setItem('sicherda_registered','1')}
 
 let resolveRegistered=null;
-async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token,role:'person'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
 function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
@@ -793,7 +793,7 @@ const API_URL = '/api';
 function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'}
 function setRegistered(){localStorage.setItem('sicherda_registered','1')}
 let resolveRegistered=null;
-async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId='web-watcher-'+((localStorage.getItem('sicherda_watcher_device')||crypto.randomUUID()));localStorage.setItem('sicherda_watcher_device',deviceId.replace('web-watcher-',''));const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('sicherda_watcher_device')||(()=>{const id=crypto.randomUUID();localStorage.setItem('sicherda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
 const PERSON_NAMES_KEY = 'sicherda_person_names';
@@ -1873,8 +1873,9 @@ app.use('/api/*', async (c, next) => {
 // POST /api/auth/register-device – Turnstile-Check, dann einmalig API-Key ausgeben
 app.post('/api/auth/register-device', async (c) => {
   try {
-    const body = await c.req.json<{ device_id?: string; turnstile_token?: string }>();
+    const body = await c.req.json<{ device_id?: string; turnstile_token?: string; role?: string }>();
     const { device_id, turnstile_token } = body;
+    const role = body.role === 'watcher' ? 'watcher' : 'person';
 
     if (!device_id || !turnstile_token) {
       return c.json({ error: 'device_id und turnstile_token erforderlich' }, 400);
@@ -1889,8 +1890,8 @@ app.post('/api/auth/register-device', async (c) => {
     const keyHash = await hashApiKey(apiKey);
 
     await c.env.DB.prepare(
-      'INSERT OR REPLACE INTO device_keys (device_id, key_hash, created_at) VALUES (?1, ?2, ?3)'
-    ).bind(device_id, keyHash, new Date().toISOString()).run();
+      'INSERT OR REPLACE INTO device_keys (device_id, key_hash, created_at, role) VALUES (?1, ?2, ?3, ?4)'
+    ).bind(device_id, keyHash, new Date().toISOString(), role).run();
 
     const cookieMaxAge = 60 * 60 * 24 * 365; // 1 Jahr
     c.header('Set-Cookie', `api_key=${apiKey}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${cookieMaxAge}`);
