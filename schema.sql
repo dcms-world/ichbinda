@@ -40,3 +40,10 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
   device_id TEXT PRIMARY KEY,
   last_heartbeat_at TEXT NOT NULL
 );
+
+-- API Keys für Gerät-Authentifizierung (nur Hash gespeichert, nie Klartext)
+CREATE TABLE IF NOT EXISTS device_keys (
+  device_id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL,
+  created_at DATETIME NOT NULL
+);

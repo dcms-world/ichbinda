@@ -10,6 +10,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <title>IchBinDa - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 :root{
 --bg-top:#eff4fb;
@@ -376,6 +377,16 @@ h1{font-size:34px}
 <button class="close-settings" onclick="closeSettings()">Schließen</button>
 </div>
 
+<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,0.85);align-items:center;justify-content:center;padding:24px">
+<div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:360px;width:100%;text-align:center">
+<div style="font-size:48px;margin-bottom:12px">🔐</div>
+<h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a">Einmalige Einrichtung</h2>
+<p style="margin:0 0 24px;color:#475569;font-size:15px">Bitte kurz bestätigen, dass du kein Bot bist.</p>
+<div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__" data-callback="onTurnstileSuccess"></div>
+<p id="authStatus" style="margin-top:16px;color:#ef4444;font-size:14px;min-height:20px"></p>
+</div>
+</div>
+
 <div class="container">
 <h1>IchBinDa</h1>
 <p class="subtitle">Einmal tippen: Alles okay</p>
@@ -396,6 +407,13 @@ const DEVICE_ID_KEY='sicherda_device_id';
 let currentPersonId=null;
 let currentPersonName='';
 let currentDeviceId='';
+
+function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'}
+function setRegistered(){localStorage.setItem('sicherda_registered','1')}
+
+let resolveRegistered=null;
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
 function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
@@ -435,7 +453,7 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
-async function init(){try{currentPersonName=await ensurePersonName();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -611,6 +629,7 @@ const WATCHER_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IchBinDa - Betreuer Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;background:#f5f7fa;padding:20px}
@@ -683,6 +702,15 @@ button:hover{background:#5a6fd6}
 </style>
 </head>
 <body>
+<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,0.85);align-items:center;justify-content:center;padding:24px">
+<div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:360px;width:100%;text-align:center">
+<div style="font-size:48px;margin-bottom:12px">🔐</div>
+<h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a">Einmalige Einrichtung</h2>
+<p style="margin:0 0 24px;color:#475569;font-size:15px">Bitte kurz bestätigen, dass du kein Bot bist.</p>
+<div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__" data-callback="onTurnstileSuccess"></div>
+<p id="authStatus" style="margin-top:16px;color:#ef4444;font-size:14px;min-height:20px"></p>
+</div>
+</div>
 <div class="container">
 <h1>👀 IchBinDa Betreuer</h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
@@ -761,6 +789,13 @@ button:hover{background:#5a6fd6}
 </div>
 <script>
 const API_URL = '/api';
+
+function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'}
+function setRegistered(){localStorage.setItem('sicherda_registered','1')}
+let resolveRegistered=null;
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId='web-watcher-'+((localStorage.getItem('sicherda_watcher_device')||crypto.randomUUID()));localStorage.setItem('sicherda_watcher_device',deviceId.replace('web-watcher-',''));const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
+
 const PERSON_NAMES_KEY = 'sicherda_person_names';
 const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
 const PERSON_PHOTOS_KEY = 'sicherda_person_photos';
@@ -1203,6 +1238,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function init() {
+  await ensureRegistered();
   updatePersonLimitUi();
   if (!getWatcherId()) {
     const res = await fetch(API_URL + '/watcher', {
@@ -1441,7 +1477,9 @@ setInterval(loadPersons, 30000);
 interface Env {
   DB: D1Database;
   EXPO_ACCESS_TOKEN?: string;
-  API_KEYS?: string;  // Comma or newline separated API keys
+  TURNSTILE_SITE_KEY: string;
+  TURNSTILE_SECRET_KEY: string;
+  DEV_TOKEN?: string;  // Nur in Dev gesetzt – ermöglicht ?dev_token=... Bypass
 }
 
 interface RateLimitRow {
@@ -1472,23 +1510,35 @@ function constantTimeEquals(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-// Security: Validate API Key from X-API-Key header
-function isAuthorized(request: Request, env: Env): boolean {
-  const providedKey = request.headers.get("X-API-Key");
-  if (!providedKey) {
+// Security: SHA-256 Hash eines API-Keys
+async function hashApiKey(key: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Security: Turnstile-Token serverseitig bei Cloudflare verifizieren
+async function verifyTurnstileToken(token: string, secret: string): Promise<boolean> {
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, response: token }),
+    });
+    const data = await resp.json<{ success: boolean }>();
+    return data.success === true;
+  } catch {
     return false;
   }
+}
 
-  const allowedKeys = (env.API_KEYS ?? "")
-    .split(/[\n,]/)
-    .map((key) => key.trim())
-    .filter(Boolean);
-
-  if (allowedKeys.length === 0) {
-    return false;
-  }
-
-  return allowedKeys.some((key) => constantTimeEquals(providedKey, key));
+// Security: API-Key (als Hash) in D1 nachschlagen
+async function lookupApiKey(db: D1Database, apiKey: string): Promise<boolean> {
+  const hash = await hashApiKey(apiKey);
+  const row = await db.prepare('SELECT 1 FROM device_keys WHERE key_hash = ?1').bind(hash).first();
+  return row !== null;
 }
 
 // Security: Check rate limit for person_id (max 1 per 5 minutes)
@@ -1564,6 +1614,11 @@ async function rollbackRateLimit(
   } catch (rollbackError) {
     console.error("Failed to rollback rate limit state", rollbackError);
   }
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -1775,17 +1830,83 @@ h1{
 </body>
 </html>`)
 );
-app.get('/person.html', (c) => c.html(PERSON_HTML));
-app.get('/watcher.html', (c) => c.html(WATCHER_HTML));
+app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', c.env.TURNSTILE_SITE_KEY ?? '')));
+app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', c.env.TURNSTILE_SITE_KEY ?? '')));
 
 // API routes with CORS
 app.use('/api/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
+
+// Auth-Middleware – alle /api/* Routen außer /api/auth/register-device
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/auth/register-device') return await next();
+
+  // Dev-Modus: ?dev_token=... Query-Parameter akzeptieren (nur wenn DEV_TOKEN gesetzt)
+  if (c.env.DEV_TOKEN) {
+    const devToken = new URL(c.req.url).searchParams.get('dev_token');
+    if (devToken && constantTimeEquals(devToken, c.env.DEV_TOKEN)) {
+      return await next();
+    }
+  }
+
+  // Cookie (Web/PWA)
+  const cookieStr = c.req.header('Cookie') ?? '';
+  for (const part of cookieStr.split(';')) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx === -1) continue;
+    if (part.slice(0, eqIdx).trim() === 'api_key') {
+      const value = part.slice(eqIdx + 1).trim();
+      if (value && await lookupApiKey(c.env.DB, value)) return await next();
+      break;
+    }
+  }
+
+  // Bearer Token (Native App)
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const apiKey = authHeader.slice(7);
+    if (await lookupApiKey(c.env.DB, apiKey)) return await next();
+  }
+
+  return c.json({ error: 'Unauthorized' }, 401);
+});
+
+// POST /api/auth/register-device – Turnstile-Check, dann einmalig API-Key ausgeben
+app.post('/api/auth/register-device', async (c) => {
+  try {
+    const body = await c.req.json<{ device_id?: string; turnstile_token?: string }>();
+    const { device_id, turnstile_token } = body;
+
+    if (!device_id || !turnstile_token) {
+      return c.json({ error: 'device_id und turnstile_token erforderlich' }, 400);
+    }
+
+    const valid = await verifyTurnstileToken(turnstile_token, c.env.TURNSTILE_SECRET_KEY);
+    if (!valid) {
+      return c.json({ error: 'Bot-Check fehlgeschlagen' }, 400);
+    }
+
+    const apiKey = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const keyHash = await hashApiKey(apiKey);
+
+    await c.env.DB.prepare(
+      'INSERT OR REPLACE INTO device_keys (device_id, key_hash, created_at) VALUES (?1, ?2, ?3)'
+    ).bind(device_id, keyHash, new Date().toISOString()).run();
+
+    const cookieMaxAge = 60 * 60 * 24 * 365; // 1 Jahr
+    c.header('Set-Cookie', `api_key=${apiKey}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${cookieMaxAge}`);
+    return c.json({ registered: true }, 201);
+  } catch (e) {
+    console.error('Error registering device:', e);
+    return c.json({ error: 'Interner Fehler' }, 500);
+  }
+});
 
 // API: Neue Person erstellen (oder bestehende zurückgeben)
 app.post('/api/person', async (c) => {
   try {
     const body = await c.req.json<{ id?: string }>().catch((): { id?: string } => ({}));
-    const personId = body.id || crypto.randomUUID();
+    const providedId = typeof body.id === 'string' ? body.id.trim() : '';
+    const personId = (providedId && isValidUUID(providedId)) ? providedId : crypto.randomUUID();
     await c.env.DB.prepare(
       'INSERT OR IGNORE INTO persons (id) VALUES (?)'
     ).bind(personId).run();
@@ -1813,11 +1934,11 @@ app.post('/api/heartbeat', async (c) => {
   // If loc is explicitly false, clear location data
   const clearLocationRequested = body.loc === false;
 
-  if (!person_id) {
-    return c.json({ error: 'person_id required' }, 400);
+  if (!person_id || !isValidUUID(person_id)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
   }
 
-  if (person_id.length > 255 || status.length > 64 || device_id.length > 255) {
+  if (status.length > 64 || device_id.length > 255) {
     return c.json({ error: 'person_id, status or device_id is too long' }, 400);
   }
 

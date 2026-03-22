@@ -5,6 +5,7 @@ package-lock.json
 # Environment
 .env
 .env.bak
+.dev.vars
 
 # Build & Cache
 .wrangler/

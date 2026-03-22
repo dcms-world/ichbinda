@@ -14,5 +14,8 @@ cron = "*/5 * * * *" # Alle 5 Minuten
 
 # Environment Variables (Secrets via wrangler secret)
 [vars]
+TURNSTILE_SITE_KEY = "0x4AAAAAACuh4_5jdfIdTeIC"
 # EXPO_ACCESS_TOKEN = "" # Via wrangler secret put EXPO_ACCESS_TOKEN
-# API_KEYS = ""          # Via wrangler secret put API_KEYS (comma/newline separated)
+# Secrets (nicht hier – via wrangler secret put):
+#   TURNSTILE_SECRET_KEY
+#   DEV_TOKEN (nur für Staging, nicht Prod)
