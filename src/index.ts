@@ -6,437 +6,515 @@ const PERSON_HTML = `<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>IchBinDa - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
-:root{
---bg-top:#eff4fb;
---bg-bottom:#dfe7f1;
---panel-bg:rgba(255,255,255,0.93);
---text:#0f172a;
---muted:#334155;
---line:#ccd7e3;
---ok-green-a:#22c55e;
---ok-green-b:#11998e;
---ok-green-shadow:#0f766e;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-font-family:'SF Pro Text','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-font-size:20px;
-line-height:1.5;
-min-height:100vh;
-display:flex;
-align-items:center;
-justify-content:center;
-padding:24px;
-color:var(--text);
-background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bottom) 100%);
-position:relative;
-overflow-x:hidden;
-}
-body::before{
-content:'';
-position:fixed;
-inset:0;
-pointer-events:none;
-background-image:radial-gradient(rgba(255,255,255,0.65) 1px,transparent 1px);
-background-size:18px 18px;
-opacity:0.4;
-}
-.container{
-position:relative;
-z-index:1;
-width:100%;
-max-width:480px;
-text-align:center;
-padding:36px 24px 30px;
-border-radius:34px;
-border:1px solid var(--line);
-background:var(--panel-bg);
-box-shadow:0 20px 45px rgba(15,23,42,0.14),0 4px 14px rgba(15,23,42,0.08);
-backdrop-filter:blur(8px);
-}
-h1{
-color:var(--text);
-font-size:40px;
-line-height:1.15;
-font-weight:800;
-letter-spacing:-0.01em;
-margin-bottom:34px;
-}
-.btn-okay{
-width:248px;
-height:248px;
-max-width:100%;
-margin:0 auto;
-border:none;
-border-radius:50%;
-background:linear-gradient(180deg,var(--ok-green-a) 0%,var(--ok-green-b) 100%);
-color:#ffffff;
-font-size:56px;
-line-height:1;
-font-weight:800;
-letter-spacing:0.02em;
-cursor:pointer;
-display:flex;
-align-items:center;
-justify-content:center;
-flex-direction:column;
-gap:10px;
-box-shadow:0 14px 28px rgba(17,153,142,0.3),0 6px 0 var(--ok-green-shadow),inset 0 2px 7px rgba(255,255,255,0.35);
-transition:transform 140ms ease,filter 140ms ease,box-shadow 140ms ease;
-}
-.btn-okay .btn-sub{
-font-size:30px;
-font-weight:700;
-letter-spacing:0;
-}
-.btn-okay:hover{
-filter:brightness(1.03);
-transform:translateY(-1px);
-}
-.btn-okay:active{
-transform:translateY(3px);
-box-shadow:0 7px 14px rgba(17,153,142,0.26),0 2px 0 var(--ok-green-shadow),inset 0 2px 6px rgba(255,255,255,0.28);
-}
-.btn-okay:disabled{
-background:linear-gradient(180deg,#94a3b8 0%,#64748b 100%);
-box-shadow:0 6px 14px rgba(51,65,85,0.26),0 3px 0 #475569;
-color:#f8fafc;
-cursor:not-allowed;
-transform:none;
-}
-.btn-okay.error{
-background:linear-gradient(180deg,#ef4444 0%,#dc2626 100%);
-box-shadow:0 14px 28px rgba(220,38,38,0.3),0 6px 0 #b91c1c,inset 0 2px 7px rgba(255,255,255,0.35);
-}
-.send-error-card{
-display:none;
-margin-top:20px;
-padding:18px 16px;
-background:#fee2e2;
-border:2px solid #fca5a5;
-border-radius:16px;
-color:#7f1d1d;
-font-size:20px;
-font-weight:700;
-line-height:1.4;
-}
-.send-error-card.visible{display:block}
-.send-error-card .error-sub{margin-top:8px;font-size:17px;font-weight:600;color:#991b1b}
-.status{
-margin-top:22px;
-padding:16px 14px;
-border-radius:14px;
-border:2px solid transparent;
-font-size:22px;
-font-weight:700;
-color:var(--text);
-min-height:90px;
-display:flex;
-align-items:center;
-justify-content:center;
-}
-.status.idle{font-size:24px;font-weight:600;color:#1e293b;background:transparent}
-.status.success{background:#dcfce7;color:#14532d;border-color:#166534}
-.status.error{background:#fee2e2;color:#7f1d1d;border-color:#991b1b}
-.status.rate-limit{background:#fff7ed;color:#7c2d12;border-color:#9a3412;background:#fff7ed}
-.last-checkin{
-margin-top:18px;
-color:#1f2937;
-font-size:20px;
-font-weight:600;
-}
-.watcher-info{
-margin-top:14px;
-font-size:18px;
-font-weight:600;
-padding:10px 14px;
-border-radius:12px;
-}
-.watcher-info.active{background:#dcfce7;color:#14532d;border:1.5px solid #86efac}
-.watcher-info.none{background:#fff7ed;color:#9a3412;border:1.5px solid #fdba74}
-.watcher-info:empty{display:none}
-.no-watcher-warning{
-display:none;
-margin-top:18px;
-padding:14px 16px;
-background:#fff7ed;
-border:2px solid #fdba74;
-border-radius:14px;
-color:#9a3412;
-font-size:18px;
-font-weight:700;
-line-height:1.4;
-}
-.no-watcher-warning.visible{display:block}
-.watcher-label{cursor:pointer}
-.watcher-ids{display:none}
-.watcher-ids.visible{display:block}
-.watcher-id{margin-top:6px;font-size:13px;font-weight:500;color:#475569;word-break:break-all;font-family:monospace}
-.cooldown-container{
-margin-top:20px;
-padding:16px;
-border:2px solid #cbd5e1;
-background:#f8fafc;
-border-radius:14px;
-display:none;
-}
-.cooldown-container.active{display:block}
-.cooldown-text{color:#334155;font-size:19px;font-weight:600;margin-bottom:10px}
-.cooldown-bar{height:12px;background:#dbe4ee;border-radius:8px;overflow:hidden}
-.cooldown-progress{height:100%;background:#2563eb;width:0%}
-.cooldown-countdown{font-size:34px;font-weight:800;color:#1d4ed8;margin-top:10px}
-
-.menu-btn{
-position:fixed;
-top:18px;
-right:18px;
-width:62px;
-height:62px;
-border-radius:18px;
-border:2px solid var(--line);
-background:rgba(255,255,255,0.96);
-color:var(--text);
-font-size:34px;
-font-weight:700;
-line-height:1;
-cursor:pointer;
-z-index:260;
-box-shadow:0 8px 20px rgba(15,23,42,0.14);
+:root {
+  --system-blue: #007AFF;
+  --system-green: #248A3D;
+  --system-red: #FF3B30;
+  --system-orange: #FF9500;
+  --system-gray: #8E8E93;
+  --system-background: #F2F2F7;
+  --system-secondary-background: #FFFFFF;
+  --system-label: #000000;
+  --system-secondary-label: #3C3C4399;
+  --system-separator: #C6C6C8;
+  --system-fill: #7878801F;
 }
 
-.settings-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.46);display:none;z-index:250}
-.settings-overlay.open{display:block}
-.settings-panel{
-position:fixed;
-inset:0;
-background:#edf2f8;
-z-index:300;
-padding:92px 20px 28px;
-overflow-y:auto;
-display:none;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --system-background: #000000;
+    --system-secondary-background: #1C1C1E;
+    --system-label: #FFFFFF;
+    --system-secondary-label: #EBEBF599;
+    --system-separator: #38383A;
+    --system-fill: #7878805C;
+  }
 }
-.settings-panel.open{display:block}
-.settings-title{font-size:36px;line-height:1.2;margin-bottom:18px;color:var(--text)}
-.settings-section{
-margin:16px 0;
-padding:18px;
-background:#fff;
-border:2px solid #d4dce7;
-border-radius:20px;
-box-shadow:0 7px 18px rgba(15,23,42,0.06);
-}
-.settings-section h3{margin-bottom:10px;color:var(--text);font-size:26px;line-height:1.2}
-.name-label{display:block;color:#334155;font-size:19px;font-weight:700;margin-bottom:8px}
-.name-display{background:#fff;border:2px solid #cbd5e1;padding:14px;border-radius:14px;font-size:32px;font-weight:800;line-height:1.2;color:var(--text);word-break:break-word}
-.btn-close{
-position:absolute;
-top:22px;
-left:20px;
-width:56px;
-height:56px;
-border-radius:16px;
-border:2px solid var(--line);
-background:#fff;
-font-size:30px;
-line-height:1;
-color:var(--text);
-cursor:pointer;
-}
-.qr-container{margin:12px 0 6px;padding:14px;border:2px solid #d6dde7;background:#fff;border-radius:16px;text-align:center}
-#qrcode{display:inline-block;cursor:pointer}
-.qr-copy-btn{display:block;margin:12px auto 0;padding:10px 14px;background:#eef2ff;color:#1e3a8a;border:2px solid #c7d2fe;border-radius:12px;font-size:18px;font-weight:700;cursor:pointer}
-.qr-copy-btn:active{transform:scale(0.99)}
-.qr-copy-status{display:block;min-height:24px;margin-top:8px;font-size:17px;color:#1e40af}
-.qr-copy-status.error{color:#b91c1c}
-.settings-help{display:block;color:#1f2937;font-size:19px;line-height:1.35}
-.close-settings{
-margin-top:22px;
-min-height:56px;
-padding:12px 20px;
-background:#1f2937;
-color:#fff;
-border:none;
-border-radius:14px;
-font-size:24px;
-font-weight:700;
-cursor:pointer;
-width:100%;
-}
-.device-list{display:flex;flex-direction:column;gap:10px}
-.device-row{
-display:flex;
-align-items:flex-start;
-justify-content:space-between;
-gap:12px;
-padding:12px;
-border:2px solid #d6dde7;
-border-radius:14px;
-background:#f8fafc;
-}
-.device-main{min-width:0}
-.device-title{font-size:20px;font-weight:800;color:var(--text);line-height:1.25}
-.device-meta{margin-top:4px;font-size:16px;color:#475569;line-height:1.35}
-.device-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.device-badge{
-display:inline-flex;
-align-items:center;
-padding:3px 8px;
-border-radius:999px;
-font-size:13px;
-font-weight:700;
-line-height:1;
-}
-.device-badge.current{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
-.device-badge.last{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
-.device-delete-btn{
-flex-shrink:0;
-min-height:44px;
-padding:10px 12px;
-border-radius:12px;
-border:2px solid #fecaca;
-background:#fff1f2;
-color:#b91c1c;
-font-size:16px;
-font-weight:700;
-cursor:pointer;
-}
-.device-delete-btn:disabled{
-cursor:not-allowed;
-background:#e5e7eb;
-border-color:#cbd5e1;
-color:#64748b;
-}
-.device-empty{font-size:18px;color:#475569;padding:6px 2px}
-.device-error{font-size:18px;color:#b91c1c;padding:6px 2px}
-.qr-scanner-container{margin-top:12px;display:none}
-.qr-video{width:100%;max-width:300px;border-radius:12px}
-.qr-canvas{display:none}
-.qr-scan-cancel{margin-top:10px;padding:10px 16px;background:#f3f4f6;border:2px solid #d1d5db;border-radius:10px;color:#374151;font-size:16px;font-weight:600;cursor:pointer}
-.name-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:350;padding:20px}
-.name-modal-overlay.open{display:flex}
-.name-modal{
-background:#fff;
-border:2px solid #d3dae4;
-border-radius:20px;
-padding:24px;
-width:100%;
-max-width:430px;
-box-shadow:0 14px 45px rgba(15,23,42,0.2);
-}
-.name-modal h2{font-size:34px;color:var(--text);line-height:1.2;margin-bottom:10px}
-.name-modal p{color:#334155;font-size:21px;line-height:1.35;margin-bottom:16px}
-.name-modal input{width:100%;min-height:58px;padding:12px 14px;border:2px solid #9ca3af;border-radius:14px;font-size:21px;margin-bottom:12px}
-.name-modal button{width:100%;min-height:58px;padding:12px 14px;border:none;border-radius:14px;background:#2563eb;color:#fff;font-size:23px;font-weight:700;cursor:pointer}
 
-.location-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#fff;border:2px solid #cbd5e1;border-radius:14px;margin-top:10px}
-.location-toggle-label{color:var(--text);font-size:22px;font-weight:700;line-height:1.2}
-.location-toggle-help{color:var(--muted);font-size:18px;line-height:1.3;margin-top:6px}
-.toggle-switch{position:relative;flex-shrink:0;width:84px;height:48px;background:#6b7280;border-radius:24px;cursor:pointer;border:2px solid #4b5563}
-.toggle-switch.active{background:#2563eb;border-color:#1e40af}
-.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:38px;height:38px;background:#fff;border-radius:50%}
-.toggle-switch.active::after{left:39px}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 
-button,input,.toggle-switch{min-height:44px;touch-action:manipulation}
-button:focus-visible,input:focus-visible,.toggle-switch:focus-visible{outline:3px solid #ff9500;outline-offset:2px}
-@media (prefers-reduced-motion:reduce){
-*{transition:none !important}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", ui-rounded, "SF Pro Text", system-ui, sans-serif;
+  background-color: var(--system-background);
+  color: var(--system-label);
+  line-height: 1.4;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow: hidden;
 }
-@media (max-width:520px){
-body{padding:12px}
-.container{padding:28px 16px 22px}
-h1{font-size:34px}
-.subtitle{font-size:22px}
-.btn-okay{width:224px;height:224px;font-size:48px}
-.btn-okay .btn-sub{font-size:27px}
-.settings-title{font-size:30px}
+
+/* Main Screen */
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  max-width: 500px;
+  margin: 0 auto;
+  width: 100%;
 }
+
+h1 {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.btn-okay {
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: none;
+  background: var(--system-green);
+  color: #fff;
+  font-size: 64px;
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: 0 10px 40px rgba(36, 138, 61, 0.4);
+  transition: transform 0.15s cubic-bezier(0.17, 0.67, 0.83, 0.67), background 0.2s, box-shadow 0.15s;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.btn-okay:active {
+  transform: scale(0.92);
+  background: #1e6d31;
+  box-shadow: 0 4px 15px rgba(36, 138, 61, 0.3);
+}
+
+.btn-okay .btn-sub {
+  font-size: 24px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.btn-okay:disabled {
+  background: var(--system-gray);
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.btn-okay.error {
+  background: var(--system-red);
+  box-shadow: 0 10px 40px rgba(255, 59, 48, 0.4);
+}
+
+.status {
+  margin-top: 40px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--system-secondary-label);
+  text-align: center;
+  min-height: 2em;
+}
+
+.status.success { color: var(--system-green); }
+.status.error { color: var(--system-red); }
+
+.last-checkin {
+  font-size: 15px;
+  color: var(--system-secondary-label);
+  margin-top: 10px;
+  text-align: center;
+}
+
+.no-watcher-warning {
+  display: none;
+  margin-top: 24px;
+  padding: 12px 16px;
+  background: var(--system-secondary-background);
+  border: 1px solid var(--system-orange);
+  border-radius: 12px;
+  color: var(--system-orange);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+.no-watcher-warning.visible { display: block; }
+
+/* Menu Button */
+.menu-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--system-fill);
+  color: var(--system-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+}
+
+/* Settings Sheet */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s;
+  z-index: 200;
+}
+.settings-overlay.open { opacity: 1; visibility: visible; }
+
+.settings-panel {
+  position: fixed;
+  top: 44px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--system-background);
+  border-radius: 14px 14px 0 0;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.2, 1, 0.3, 1);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.settings-panel.open { transform: translateY(0); }
+
+.settings-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--system-secondary-background);
+  border-bottom: 0.5px solid var(--system-separator);
+  flex-shrink: 0;
+}
+
+.settings-header h2 { font-size: 17px; font-weight: 600; }
+
+.btn-done {
+  color: var(--system-blue);
+  font-weight: 600;
+  background: none;
+  border: none;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 0 40px;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h3, .name-label, .settings-group-title {
+  font-size: 13px;
+  color: var(--system-secondary-label);
+  text-transform: uppercase;
+  margin: 0 32px 8px;
+  font-weight: 400;
+}
+
+.settings-list {
+  background: var(--system-secondary-background);
+  margin: 0 16px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  min-height: 44px;
+}
+.settings-item:not(:last-child) { border-bottom: 0.5px solid var(--system-separator); }
+
+.name-display { font-size: 17px; color: var(--system-label); font-weight: 400; }
+
+.qr-container { padding: 20px; text-align: center; }
+#qrcode { display: inline-block; padding: 10px; background: #fff; border-radius: 12px; }
+.qr-copy-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: var(--system-fill);
+  color: var(--system-blue);
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-help {
+  font-size: 13px;
+  color: var(--system-secondary-label);
+  margin: 8px 32px 0;
+}
+
+/* Location Toggle */
+.location-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.location-toggle-label { font-size: 17px; }
+
+.toggle-switch {
+  width: 51px;
+  height: 31px;
+  background: #E9E9EA;
+  border-radius: 16px;
+  position: relative;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { .toggle-switch { background: #39393D; } }
+.toggle-switch.active { background: var(--system-green); }
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.toggle-switch.active::after { transform: translateX(20px); }
+
+/* Device List */
+.device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+}
+.device-row:not(:last-child) { border-bottom: 0.5px solid var(--system-separator); }
+.device-title { font-size: 17px; font-weight: 500; }
+.device-meta { font-size: 13px; color: var(--system-secondary-label); }
+.device-delete-btn { color: var(--system-red); font-size: 15px; background: none; border: none; cursor: pointer; }
+.device-delete-btn:disabled { color: var(--system-gray); opacity: 0.5; }
+
+.qr-scan-btn {
+  display: block;
+  margin: 10px 16px;
+  padding: 12px;
+  background: var(--system-secondary-background);
+  color: var(--system-blue);
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Modals */
+.name-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.name-modal-overlay.open { display: flex; }
+.name-modal {
+  background: var(--system-secondary-background);
+  border-radius: 14px;
+  padding: 24px;
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+.name-modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.name-modal p { font-size: 15px; color: var(--system-secondary-label); margin-bottom: 20px; }
+.name-modal input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--system-separator);
+  border-radius: 10px;
+  background: var(--system-background);
+  color: var(--system-label);
+  font-size: 17px;
+  margin-bottom: 16px;
+}
+.name-modal button {
+  width: 100%;
+  padding: 12px;
+  background: var(--system-blue);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Cooldown */
+.cooldown-container {
+  display: none;
+  margin-top: 24px;
+  width: 100%;
+  max-width: 280px;
+}
+.cooldown-container.active { display: block; }
+.cooldown-text { font-size: 15px; color: var(--system-secondary-label); margin-bottom: 8px; text-align: center; }
+.cooldown-bar { height: 6px; background: var(--system-fill); border-radius: 3px; overflow: hidden; }
+.cooldown-progress { height: 100%; background: var(--system-blue); width: 0%; transition: width 1s linear; }
+.cooldown-countdown { font-size: 24px; font-weight: 700; color: var(--system-blue); margin-top: 8px; text-align: center; }
+
+/* Turnstile / Auth Overlay */
+#authOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0,0,0,0.6);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(10px);
+}
+.auth-modal {
+  background: var(--system-secondary-background);
+  border-radius: 20px;
+  padding: 32px 24px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+.auth-modal h2 { font-size: 22px; font-weight: 700; color: var(--system-label); margin-bottom: 8px; }
+.auth-modal p { color: var(--system-secondary-label); font-size: 15px; margin-bottom: 24px; }
+
+/* QR Scanner */
+.qr-scanner-container { margin-top: 10px; display: none; text-align: center; }
+.qr-video { width: 100%; border-radius: 12px; background: #000; margin-bottom: 10px; }
+.qr-scan-cancel { padding: 8px 16px; background: var(--system-fill); color: var(--system-red); border: none; border-radius: 8px; font-weight: 600; }
+
 </style>
 </head>
 <body>
 <div class="name-modal-overlay" id="nameModalOverlay">
-<form class="name-modal" id="nameModalForm">
-<h2>Wie heißt du?</h2>
+<form class="name-modal" id="nameModalForm" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
+<h2 id="nameModalTitle">Wie heißt du?</h2>
 <p>Bitte gib deinen Namen einmal ein.</p>
 <input id="personNameInput" type="text" maxlength="80" placeholder="z.B. Oma Erna" required>
 <button type="submit">Speichern</button>
 </form>
 </div>
 
-<button class="menu-btn" onclick="openSettings()" title="Menü" aria-label="Menü öffnen">☰</button>
+<button class="menu-btn" onclick="openSettings()" title="Menü" aria-label="Menü öffnen">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+</button>
 
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
 
-<div class="settings-panel" id="settingsPanel">
-<button class="btn-close" onclick="closeSettings()" aria-label="Einstellungen schließen">✕</button>
-<h2 class="settings-title">Einstellungen</h2>
-
-<div class="settings-section">
-<span class="name-label">Dein Name:</span>
-<div class="name-display" id="personNameDisplay">-</div>
+<div class="settings-panel" id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+<div class="settings-header">
+  <h2 id="settingsTitle">Einstellungen</h2>
+  <button class="btn-done" onclick="closeSettings()">Fertig</button>
 </div>
 
-<div class="settings-section">
-<h3>QR-Code für Betreuung</h3>
-<div class="qr-container" id="qrContainer">
-<div id="qrcode"></div>
-<button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
-<small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
+<div class="settings-content">
+  <div class="settings-section">
+    <span class="name-label">Dein Name</span>
+    <div class="settings-list">
+      <div class="settings-item">
+        <div class="name-display" id="personNameDisplay">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <h3>QR-Code für Betreuung</h3>
+    <div class="qr-container" id="qrContainer">
+      <div id="qrcode"></div>
+      <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
+      <small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
+    </div>
+    <small class="settings-help">Die Betreuungsperson kann diesen Code scannen.</small>
+  </div>
+
+  <div class="settings-section">
+    <h3>Standort</h3>
+    <div class="settings-list">
+      <div class="settings-item">
+        <div class="location-toggle">
+          <div class="location-toggle-label">Standort mitteilen</div>
+          <div class="toggle-switch" id="locationToggle" onclick="toggleLocation()"></div>
+        </div>
+      </div>
+    </div>
+    <small class="settings-help">Bei jedem OK senden wir deinen Standort mit.</small>
+  </div>
+
+  <div class="settings-section">
+    <h3>Betreuung</h3>
+    <div id="watcherInfo"></div>
+  </div>
+
+  <div class="settings-section">
+    <h3>Geräte</h3>
+    <div class="settings-list" id="deviceList">
+      <div class="settings-item"><div class="device-empty">Wird geladen...</div></div>
+    </div>
+    <small class="settings-help">Verknüpfte Geräte für diese Person.</small>
+  </div>
+
+  <div class="settings-section">
+    <h3>Neues Gerät hinzufügen</h3>
+    <button type="button" class="qr-scan-btn" onclick="startDeviceQrScan()">QR-Code scannen</button>
+    <div id="deviceQrScanner" class="qr-scanner-container"></div>
+  </div>
 </div>
-<small class="settings-help">Die Betreuungsperson kann diesen Code scannen.</small>
 </div>
 
-<div class="settings-section">
-<h3>Standort</h3>
-<div class="location-toggle">
-<div>
-<div class="location-toggle-label">Standort mitteilen</div>
-<div class="location-toggle-help">Bei jedem OK senden wir deinen Standort mit</div>
-</div>
-<div class="toggle-switch" id="locationToggle" onclick="toggleLocation()"></div>
-</div>
-</div>
-
-<div class="settings-section">
-<h3>Betreuung</h3>
-<div class="watcher-info" id="watcherInfo"></div>
-</div>
-
-<div class="settings-section">
-<h3>Geräte</h3>
-<div class="device-list" id="deviceList"><div class="device-empty">Geräte werden geladen...</div></div>
-<small class="settings-help">Verknüpfte Geräte für diese Person. Das letzte Gerät bleibt immer bestehen.</small>
-</div>
-
-<div class="settings-section">
-<h3>Neues Gerät hinzufügen</h3>
-<p class="settings-help">QR-Code eines anderen Geräts scannen, um dieses Gerät hinzuzufügen.</p>
-<button type="button" class="qr-scan-btn" onclick="startDeviceQrScan()">QR-Code scannen</button>
-<div id="deviceQrScanner" class="qr-scanner-container"></div>
-</div>
-
-<button class="close-settings" onclick="closeSettings()">Schließen</button>
-</div>
-
-<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,0.85);align-items:center;justify-content:center;padding:24px">
-<div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:360px;width:100%;text-align:center">
+<div id="authOverlay">
+<div class="auth-modal">
 <div style="font-size:48px;margin-bottom:12px">🔐</div>
-<h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a">Einmalige Einrichtung</h2>
-<p style="margin:0 0 24px;color:#475569;font-size:15px">Bitte kurz bestätigen, dass du kein Bot bist.</p>
+<h2>Einmalige Einrichtung</h2>
+<p>Bitte kurz bestätigen, dass du kein Bot bist.</p>
 <div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__" data-callback="onTurnstileSuccess"></div>
-<p id="authStatus" style="margin-top:16px;color:#ef4444;font-size:14px;min-height:20px"></p>
+<p id="authStatus" style="margin-top:16px;color:var(--system-red);font-size:14px;min-height:20px"></p>
 </div>
 </div>
 
 <div class="container">
 <h1>IchBinDa</h1>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()" aria-label="Okay senden">OK<span class="btn-sub">Alles gut</span></button>
-<div id="status" class="status idle" aria-live="polite">Einmal tippen: Alles okay</div>
+<div id="status" class="status" aria-live="polite">Einmal tippen: Alles okay</div>
 <div id="sendErrorCard" class="send-error-card" role="alert"></div>
 <div class="cooldown-container" id="cooldownContainer">
 <div class="cooldown-text">Bitte kurz warten...</div>
@@ -444,7 +522,7 @@ h1{font-size:34px}
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
 <div class="last-checkin" id="lastCheckin"></div>
-<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Betreuungsperson verbunden – bitte jemanden informieren</div>
+<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Betreuungsperson verbunden</div>
 </div>
 
 <script>
@@ -478,7 +556,7 @@ function setQrCopyStatus(message,isError){const statusEl=document.getElementById
 async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
 function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
-function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode();loadDevices();if(currentPersonId)loadWatchers(currentPersonId)}
+function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
@@ -517,7 +595,7 @@ async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=doc
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el){el.textContent='Noch keine Betreuungsperson verbunden';el.className='watcher-info none'}if(warn)warn.classList.add('visible')}else{const count=data.watcher_count;const label=count===1?'✓ 1 Betreuungsperson verbunden':'✓ '+count+' Betreuungspersonen verbunden';const ids=(data.watchers||[]).map(id=>'<div class="watcher-id">'+escapeHtml(id)+'</div>').join('');if(el){el.innerHTML='<div class="watcher-label">'+escapeHtml(label)+'</div><div class="watcher-ids">'+ids+'</div>';el.querySelector('.watcher-label').onclick=function(){el.querySelector('.watcher-ids').classList.toggle('visible')};el.className='watcher-info active'}if(warn)warn.classList.remove('visible')}}catch(e){}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const count=data.watcher_count;const label=count===1?'1 Betreuer':' '+count+' Betreuer';const ids=(data.watchers||[]).map(id=>'<div class="device-meta" style="font-family:monospace;font-size:11px;padding:4px 0">'+escapeHtml(id)+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+ids+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
