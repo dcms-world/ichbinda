@@ -1,17 +1,18 @@
-name = "sicherda"
+name = "ibinda"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+account_id = "bcde28cac6ec64c3ed3a810c62971db5"
 
 # D1 Datenbank
 [[d1_databases]]
 binding = "DB"
-database_name = "sicherda-db"
-database_id = "c54a724e-f0b7-43fd-b000-61bac9d1a242"
+database_name = "dev-ibinda-db"
+database_id = "c6136eb7-5dce-4c0c-b937-a47207b3f6ef"
 migrations_dir = "migrations"
 
 # Cron-Job für Überfälligkeits-Check
-[[triggers]]
-cron = "*/5 * * * *" # Alle 5 Minuten
+[triggers]
+crons = ["* * * * *"] # Jede Minute
 
 # Environment Variables (Secrets via wrangler secret)
 [vars]
