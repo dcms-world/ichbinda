@@ -7,6 +7,7 @@ compatibility_date = "2024-01-01"
 binding = "DB"
 database_name = "sicherda-db"
 database_id = "c54a724e-f0b7-43fd-b000-61bac9d1a242"
+migrations_dir = "migrations"
 
 # Cron-Job für Überfälligkeits-Check
 [[triggers]]
