@@ -7,7 +7,7 @@ const PERSON_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>IchBinDa - Ich bin okay</title>
+<title>I bin da - Ich bin okay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -512,7 +512,7 @@ h1 {
 </div>
 
 <div class="container">
-<h1>IchBinDa</h1>
+<h1>I bin da</h1>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()" aria-label="Okay senden">OK<span class="btn-sub">Alles gut</span></button>
 <div id="status" class="status" aria-live="polite">Einmal tippen: Alles okay</div>
 <div id="sendErrorCard" class="send-error-card" role="alert"></div>
@@ -759,7 +759,7 @@ const WATCHER_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IchBinDa - Betreuer Dashboard</title>
+<title>I bin da - Betreuer Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
@@ -844,7 +844,7 @@ button:hover{background:#5a6fd6}
 </div>
 </div>
 <div class="container">
-<h1>👀 IchBinDa Betreuer</h1>
+<h1>👀 I bin da – Betreuer</h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
 <div class="card">
 <div class="add-header">
@@ -1831,7 +1831,7 @@ app.get('/', (c) =>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IchBinDa</title>
+<title>I bin da</title>
 <style>
 :root{
   --ios-bg:#f2f2f7;
@@ -1952,7 +1952,7 @@ h1{
   <main class="wrap">
     <header class="header">
       <div class="logo" aria-hidden="true">📍</div>
-      <h1>IchBinDa</h1>
+      <h1>I bin da</h1>
       <p class="subtitle">Wähle deine Ansicht, um direkt loszulegen.</p>
     </header>
     <section class="tiles" aria-label="Startoptionen">
@@ -2384,7 +2384,7 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${expoToken}` },
         body: JSON.stringify({
           to: item.push_token,
-          title: 'IchBinDa Alarm',
+          title: 'I bin da – Alarm',
           body: `Keine Meldung seit ${hours} Stunden`,
           data: { person_id: item.person_id },
         }),
