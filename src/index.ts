@@ -161,6 +161,19 @@ border-radius:12px;
 .watcher-info.active{background:#dcfce7;color:#14532d;border:1.5px solid #86efac}
 .watcher-info.none{background:#fff7ed;color:#9a3412;border:1.5px solid #fdba74}
 .watcher-info:empty{display:none}
+.no-watcher-warning{
+display:none;
+margin-top:18px;
+padding:14px 16px;
+background:#fff7ed;
+border:2px solid #fdba74;
+border-radius:14px;
+color:#9a3412;
+font-size:18px;
+font-weight:700;
+line-height:1.4;
+}
+.no-watcher-warning.visible{display:block}
 .watcher-label{cursor:pointer}
 .watcher-ids{display:none}
 .watcher-ids.visible{display:block}
@@ -431,6 +444,7 @@ h1{font-size:34px}
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
 <div class="last-checkin" id="lastCheckin"></div>
+<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Betreuungsperson verbunden – bitte jemanden informieren</div>
 </div>
 
 <script>
@@ -486,7 +500,7 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -499,11 +513,11 @@ function clearButtonError(){const btn=document.getElementById('btnOkay');const c
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;setTimeout(resetStatus,2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');if(!el)return;if(!data.watcher_count){el.textContent='Noch keine Betreuungsperson verbunden';el.className='watcher-info none'}else{const count=data.watcher_count;const label=count===1?'✓ 1 Betreuungsperson verbunden':'✓ '+count+' Betreuungspersonen verbunden';const ids=(data.watchers||[]).map(id=>'<div class="watcher-id">'+escapeHtml(id)+'</div>').join('');el.innerHTML='<div class="watcher-label">'+escapeHtml(label)+'</div><div class="watcher-ids">'+ids+'</div>';el.querySelector('.watcher-label').onclick=function(){el.querySelector('.watcher-ids').classList.toggle('visible')};el.className='watcher-info active'}}catch(e){}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el){el.textContent='Noch keine Betreuungsperson verbunden';el.className='watcher-info none'}if(warn)warn.classList.add('visible')}else{const count=data.watcher_count;const label=count===1?'✓ 1 Betreuungsperson verbunden':'✓ '+count+' Betreuungspersonen verbunden';const ids=(data.watchers||[]).map(id=>'<div class="watcher-id">'+escapeHtml(id)+'</div>').join('');if(el){el.innerHTML='<div class="watcher-label">'+escapeHtml(label)+'</div><div class="watcher-ids">'+ids+'</div>';el.querySelector('.watcher-label').onclick=function(){el.querySelector('.watcher-ids').classList.toggle('visible')};el.className='watcher-info active'}if(warn)warn.classList.remove('visible')}}catch(e){}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
@@ -1399,10 +1413,10 @@ async function saveEditedPerson() {
   }
 }
 
-function removePersonFromModal() {
+async function removePersonFromModal() {
   if (!activeEditPersonId) return;
   const personId = activeEditPersonId;
-  const removed = removePersonFromLocalView(personId);
+  const removed = await removePersonFromLocalView(personId);
   if (removed) closeEditModal();
 }
 
@@ -1458,12 +1472,25 @@ function buildPersonRow(p) {
   '</li>';
 }
 
-function removePersonFromLocalView(personId) {
-  if (!personId) return;
+async function removePersonFromLocalView(personId) {
+  if (!personId) return false;
+  const watcherId = getWatcherId();
+  if (!watcherId) return false;
   const personName = getPersonName(personId) || getRememberedPersonName(personId);
   const label = personName ? personName + ' (' + personId + ')' : personId;
-  const confirmed = confirm('Person "' + label + '" nur lokal ausblenden? Die Datenbank bleibt unverändert.');
+  const confirmed = confirm('Person "' + label + '" aus der Betreuung entfernen?');
   if (!confirmed) return false;
+  try {
+    const res = await fetch(API_URL + '/watch', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ person_id: personId, watcher_id: watcherId })
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+  } catch (e) {
+    alert('Entfernen fehlgeschlagen. Bitte erneut versuchen.');
+    return false;
+  }
   removePersonName(personId);
   hidePersonFromLocalView(personId);
   const visiblePersonIds = Object.keys(visiblePersonsById);
@@ -2089,7 +2116,7 @@ app.get('/api/person/:id/has-watcher', async (c) => {
   if (!personId) return c.json({ error: 'person_id required' }, 400);
 
   const result = await c.env.DB.prepare(
-    'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1'
+    'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL'
   ).bind(personId).first<{ count: number | string }>();
 
   const watcherCount = Number(result?.count ?? 0);
@@ -2105,7 +2132,7 @@ app.get('/api/person/:id/watchers', async (c) => {
   if (!personId) return c.json({ error: 'person_id required' }, 400);
 
   const result = await c.env.DB.prepare(
-    'SELECT watcher_id FROM watch_relations WHERE person_id = ?1'
+    'SELECT watcher_id FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL'
   ).bind(personId).all<{ watcher_id: string }>();
 
   const watchers = (result.results ?? []).map(r => r.watcher_id);
@@ -2201,12 +2228,14 @@ app.post('/api/watch', async (c) => {
   try {
     const { person_id, watcher_id, check_interval_minutes = 1440 } = await c.req.json();
     if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
-    await c.env.DB.prepare(
-      `INSERT INTO watch_relations (person_id, watcher_id, check_interval_minutes)
-       VALUES (?, ?, ?)
-       ON CONFLICT(person_id, watcher_id) DO UPDATE SET
-       check_interval_minutes = excluded.check_interval_minutes`
-    ).bind(person_id, watcher_id, check_interval_minutes).run();
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM watch_relations WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL'
+    ).bind(person_id, watcher_id).first();
+    if (!existing) {
+      await c.env.DB.prepare(
+        `INSERT INTO watch_relations (person_id, watcher_id, check_interval_minutes) VALUES (?, ?, ?)`
+      ).bind(person_id, watcher_id, check_interval_minutes).run();
+    }
     return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
   } catch (e) {
     console.error('Error in watch:', e);
@@ -2219,9 +2248,19 @@ app.put('/api/watch', async (c) => {
   const { person_id, watcher_id, check_interval_minutes } = await c.req.json();
   if (!person_id || !watcher_id || !check_interval_minutes) return c.json({ error: 'person_id, watcher_id and check_interval_minutes required' }, 400);
   await c.env.DB.prepare(
-    `UPDATE watch_relations SET check_interval_minutes = ? WHERE person_id = ? AND watcher_id = ?`
+    `UPDATE watch_relations SET check_interval_minutes = ? WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
   ).bind(check_interval_minutes, person_id, watcher_id).run();
   return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
+});
+
+// API: Person aus Betreuung entfernen (Soft-Delete)
+app.delete('/api/watch', async (c) => {
+  const { person_id, watcher_id } = await c.req.json();
+  if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE watch_relations SET removed_at = datetime('now') WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
+  ).bind(person_id, watcher_id).run();
+  return c.json({ success: true });
 });
 
 // API: Alle überwachten Personen eines Betreuers (Intervall in Minuten)
@@ -2242,7 +2281,7 @@ app.get('/api/watcher/:id/persons', async (c) => {
       END as status
      FROM persons p
      JOIN watch_relations wr ON p.id = wr.person_id
-     WHERE wr.watcher_id = ?`
+     WHERE wr.watcher_id = ? AND wr.removed_at IS NULL`
   ).bind(watcherId).all();
   return c.json(persons.results);
 });
@@ -2254,7 +2293,8 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
      FROM persons p
      JOIN watch_relations wr ON p.id = wr.person_id
      JOIN watchers w ON wr.watcher_id = w.id
-     WHERE (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
+     WHERE wr.removed_at IS NULL
+     AND (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
      AND (wr.last_notified_at IS NULL OR wr.last_notified_at < datetime('now', '-1 hour'))`
   ).all();
 
@@ -2272,7 +2312,7 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
         }),
       });
     }
-    await db.prepare('UPDATE watch_relations SET last_notified_at = datetime("now") WHERE person_id = ? AND watcher_id = ?')
+    await db.prepare('UPDATE watch_relations SET last_notified_at = datetime("now") WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL')
       .bind(item.person_id, item.watcher_id).run();
   }
   return { checked: overdue.results?.length || 0 };

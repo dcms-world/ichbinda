@@ -13,12 +13,15 @@ CREATE TABLE IF NOT EXISTS watchers (
 );
 
 -- Verknüpfung + individuelle Einstellungen (in Minuten gespeichert)
+-- Kein Hard-Delete: removed_at wird gesetzt statt Zeile zu löschen (Audit-Trail)
 CREATE TABLE IF NOT EXISTS watch_relations (
-  person_id TEXT,
-  watcher_id TEXT,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id TEXT NOT NULL,
+  watcher_id TEXT NOT NULL,
   check_interval_minutes INTEGER DEFAULT 1440,  -- 24h = 1440 Minuten
+  added_at TEXT NOT NULL DEFAULT (datetime('now')),
+  removed_at TEXT,
   last_notified_at DATETIME,
-  PRIMARY KEY (person_id, watcher_id),
   FOREIGN KEY (person_id) REFERENCES persons(id),
   FOREIGN KEY (watcher_id) REFERENCES watchers(id)
 );
