@@ -7,7 +7,10 @@ const PERSON_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>I bin da - Ich bin okay</title>
+<title>iBinda - Ich bin okay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -40,7 +43,8 @@ const PERSON_HTML = `<!DOCTYPE html>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", ui-rounded, "SF Pro Text", system-ui, sans-serif;
+  font-family: "Nunito", -apple-system, BlinkMacSystemFont, "SF Pro Rounded", ui-rounded, "SF Pro Text", system-ui, sans-serif;
+  font-weight: 300;
   background-color: var(--system-background);
   color: var(--system-label);
   line-height: 1.4;
@@ -512,7 +516,7 @@ h1 {
 </div>
 
 <div class="container">
-<h1>I bin da</h1>
+<h1>iBinda</h1>
 <button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()" aria-label="Okay senden">OK<span class="btn-sub">Alles gut</span></button>
 <div id="status" class="status" aria-live="polite">Einmal tippen: Alles okay</div>
 <div id="sendErrorCard" class="send-error-card" role="alert"></div>
