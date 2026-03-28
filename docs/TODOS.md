@@ -23,14 +23,17 @@ Referenzen:
 - [ ] Migration `migrations/002_pairing.sql` erstellen und testen
 
 ### Phase 2: Auth-Middleware fixen
-- [ ] `lookupApiKey()` umbauen → gibt `{ device_id, role }` zurück — **Security #2**
-- [ ] Auth-Middleware setzt `deviceId` + `role` in Hono-Context
-- [ ] `/api/heartbeat` durch Auth-Middleware schicken — **Security #2**
-- [ ] Heartbeat: Ownership-Check `device_id → person_devices → person_id`
+- [x] `lookupApiKey()` umbauen → gibt `{ device_id, role }` zurück — **Security #2**
+- [x] Auth-Middleware setzt `deviceId` + `role` in Hono-Context
+- [x] `/api/heartbeat` durch Auth-Middleware schicken — **Security #2**
+- [x] Heartbeat: Ownership-Check `device_id → person_devices → person_id`
 
 ### Phase 3: Ownership-Checks
-- [ ] Hilfsfunktionen `deviceOwnsPerson()` und `deviceOwnsWatcher()` — **Security #3**
-- [ ] Ownership auf allen Endpoints laut Matrix im Masterplan — **Security #3, #7, #8**
+- [x] `deviceOwnsPerson()` implementiert — **Security #3, #8**
+- [x] Ownership auf allen Person-Endpoints — **Security #3, #8**
+- [x] `POST /api/person` legt automatisch Ownership-Bindung an
+- [ ] `deviceOwnsWatcher()` — braucht `device_keys.watcher_id` (Phase 1 DB-Migration) — **Security #3, #7**
+- [ ] Ownership auf Watcher-Endpoints — **Security #7**
 - [ ] `POST /api/watcher` → `watcher_id` in `device_keys` setzen
 
 ### Phase 4: Pairing-Endpoints
@@ -46,7 +49,7 @@ Referenzen:
 - [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Basis-Auth vorhanden. Code-Check am 2026-03-28 bestaetigt: `device_keys.watcher_id`, `pairing_requests` und die Pairing-Endpoints existieren noch nicht; die geplante Migration bleibt fuer den neuen Pairing-/Ownership-Flow noetig. Offene Kernpunkte: Security #2, #3, #4, #5, #7, #8, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 (Person-Ownership) am 2026-03-28 implementiert und deployed. `lookupApiKey()` gibt Device-Info zurück, Auth-Middleware setzt Context, `deviceOwnsPerson()` auf allen Person-Endpoints. Watcher-Ownership wartet auf DB-Migration (Phase 1). Offene Kernpunkte: Security #3 (Watcher-Teil), #4, #5, #7, #10, #11, #12, #13.
 - **Erledigt am:** -
 
 ---

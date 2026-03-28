@@ -537,14 +537,14 @@ let currentPersonId=null;
 let currentPersonName='';
 let currentDeviceId='';
 
-function isRegistered(){return localStorage.getItem('ibinda_registered')==='1'}
-function setRegistered(){localStorage.setItem('ibinda_registered','1')}
+function isRegistered(){return localStorage.getItem('ibinda_registered_person')==='1'}
+function setRegistered(){localStorage.setItem('ibinda_registered_person','1')}
 
 let resolveRegistered=null;
 async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token,role:'person'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
-function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('ibinda_person_id')}
+function getPersonId(){return localStorage.getItem('ibinda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
 function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
 function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();return 'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
@@ -582,7 +582,7 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{await fetch(API_URL+'/person',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:personId})}).catch(()=>{})}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -926,8 +926,8 @@ button:hover{background:#5a6fd6}
 <script>
 const API_URL = '/api';
 
-function isRegistered(){return localStorage.getItem('ibinda_registered')==='1'}
-function setRegistered(){localStorage.setItem('ibinda_registered','1')}
+function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
+function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
 let resolveRegistered=null;
 async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('ibinda_watcher_device')||(()=>{const id=crypto.randomUUID();localStorage.setItem('ibinda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
@@ -1648,7 +1648,7 @@ interface PersonDeviceRow {
   last_seen: string;
 }
 
-const RATE_LIMIT_WINDOW_MS = 20 * 1000; // 20 seconds (for testing)
+const RATE_LIMIT_WINDOW_MS = 2 * 1000; // 2 seconds (for testing)
 
 // Security: Constant-time string comparison to prevent timing attacks
 function constantTimeEquals(left: string, right: string): boolean {
@@ -2019,21 +2019,28 @@ app.use('/api/*', async (c, next) => {
     c.set('role', device.role);
   };
 
-  // Cookie (Web/PWA)
+  // Cookie (Web/PWA) — prüfe role-spezifische und Legacy-Cookies
   const cookieStr = c.req.header('Cookie') ?? '';
+  const cookies: Record<string, string> = {};
   for (const part of cookieStr.split(';')) {
     const eqIdx = part.indexOf('=');
     if (eqIdx === -1) continue;
-    if (part.slice(0, eqIdx).trim() === 'api_key') {
-      const value = part.slice(eqIdx + 1).trim();
-      if (value) {
-        const device = await lookupApiKey(c.env.DB, value);
-        if (device) {
-          setDeviceContext(device);
-          return await next();
-        }
+    cookies[part.slice(0, eqIdx).trim()] = part.slice(eqIdx + 1).trim();
+  }
+
+  // Bestimme passenden Cookie anhand des Request-Pfads
+  const isWatcherRoute = c.req.path.startsWith('/api/watcher') || c.req.path.startsWith('/api/watch');
+  const preferredCookie = isWatcherRoute ? 'api_key_watcher' : 'api_key_person';
+  const cookiesToTry = [preferredCookie, 'api_key'];
+
+  for (const name of cookiesToTry) {
+    const value = cookies[name];
+    if (value) {
+      const device = await lookupApiKey(c.env.DB, value);
+      if (device) {
+        setDeviceContext(device);
+        return await next();
       }
-      break;
     }
   }
 
@@ -2075,7 +2082,8 @@ app.post('/api/auth/register-device', async (c) => {
     ).bind(device_id, keyHash, new Date().toISOString(), role).run();
 
     const cookieMaxAge = 60 * 60 * 24 * 365; // 1 Jahr
-    c.header('Set-Cookie', `api_key=${apiKey}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${cookieMaxAge}`);
+    const cookieName = role === 'watcher' ? 'api_key_watcher' : 'api_key_person';
+    c.header('Set-Cookie', `${cookieName}=${apiKey}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${cookieMaxAge}`);
     return c.json({ registered: true }, 201);
   } catch (e) {
     console.error('Error registering device:', e);
@@ -2089,14 +2097,35 @@ app.post('/api/person', async (c) => {
     const body = await c.req.json<{ id?: string }>().catch((): { id?: string } => ({}));
     const providedId = typeof body.id === 'string' ? body.id.trim() : '';
     const personId = (providedId && isValidUUID(providedId)) ? providedId : crypto.randomUUID();
+    const deviceId = c.get('deviceId');
+
+    await ensurePersonDevicesTable(c.env.DB);
+
+    // Prüfen ob Person bereits existiert und einem anderen Gerät gehört
+    const existingPerson = await c.env.DB.prepare(
+      'SELECT 1 FROM persons WHERE id = ?1'
+    ).bind(personId).first();
+
+    if (existingPerson) {
+      // Person existiert — prüfen ob sie bereits einem Gerät gehört
+      const ownerCount = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM person_devices WHERE person_id = ?1'
+      ).bind(personId).first<{ count: number | string }>();
+      const hasOwner = Number(ownerCount?.count ?? 0) > 0;
+
+      if (hasOwner && !await deviceOwnsPerson(c.env.DB, deviceId, personId)) {
+        // Person gehört einem anderen Gerät → blockieren
+        return c.json({ error: 'Forbidden' }, 403);
+      }
+      // Person ohne Owner (Legacy) oder eigenes Gerät → Ownership anlegen/bestätigen
+    }
+
     await c.env.DB.prepare(
       'INSERT OR IGNORE INTO persons (id) VALUES (?)'
     ).bind(personId).run();
 
     // Ownership-Bindung: Gerät wird automatisch der Person zugeordnet
-    const deviceId = c.get('deviceId');
     const nowIso = new Date().toISOString();
-    await ensurePersonDevicesTable(c.env.DB);
     await upsertPersonDevice(c.env.DB, personId, deviceId, detectDeviceModel(c.req.header('user-agent') ?? ''), nowIso);
 
     return c.json({ id: personId }, 201);

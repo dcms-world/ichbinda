@@ -15,20 +15,15 @@ Status: offen
   Auth-Middleware mit Turnstile + API-Key (Cookie/Bearer) wurde implementiert.
   Alle `/api/*`-Routen sind jetzt authentifiziert, nur `/api/auth/register-device` ist ausgenommen.
   `/api/heartbeat` geht ebenfalls durch die Auth-Middleware.
-  **Aber:** Ownership-Check fehlt weiterhin — siehe #3.
+  `lookupApiKey()` gibt jetzt `{ device_id, role }` zurück, Middleware setzt `deviceId` + `role` im Hono-Context.
 
-- [ ] **3. Keine Autorisierung / IDOR auf allen Endpoints**
-  Die Auth-Middleware prüft nur, ob *irgendein* gültiger API-Key existiert – nicht *wem* er gehört. Jeder authentifizierte User kann:
-  - `GET /api/person/:id` – Daten **jeder** Person lesen inkl. Standort
-  - `GET /api/person/:id/watchers` – Watcher-IDs jeder Person lesen
-  - `GET /api/person/:id/devices` – Geräte jeder Person einsehen
-  - `DELETE /api/person/:id/devices` – Geräte fremder Personen löschen
+- [~] **3. Keine Autorisierung / IDOR auf allen Endpoints**
+  **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
+  **Watcher-Endpoints: noch offen.** Braucht `device_keys.watcher_id`-Spalte (Phase 1 DB-Migration). Betrifft:
   - `POST /api/watch` – sich als Watcher für beliebige Personen eintragen
   - `PUT /api/watch` – Intervalle fremder Relations ändern
   - `DELETE /api/watch` – Watch-Relations anderer löschen
   - `GET /api/watcher/:id/persons` – Daten + Standort aller Personen eines fremden Watchers sehen
-  Das `role`-Feld in `device_keys` wird gespeichert aber **nie geprüft**.
-  Middleware muss den authentifizierten User identifizieren und gegen die angefragte Ressource prüfen.
 
 - [ ] **4. CORS `origin: '*'`**
   Jede Website kann die API aufrufen.
@@ -50,19 +45,17 @@ Status: offen
   `POST /api/watch` erlaubt beliebige person_id + watcher_id Kombinationen ohne Autorisierung.
   Verknüpfung nur nach Bestätigung durch die Person oder Ownership-Prüfung erlauben.
 
-- [ ] **8. Fehlende Ownership-Prüfung bei DELETE**
-  `DELETE /api/person/:id/devices` prüft nicht ob der Requester die Person besitzt.
-  Autorisierung vor dem Löschen erzwingen.
+- [x] **8. Fehlende Ownership-Prüfung bei DELETE**
+  `DELETE /api/person/:id/devices` prüft jetzt via `deviceOwnsPerson()` ob der Requester die Person besitzt.
 
 - [ ] **9. Rate-Limiting nur per Device/Person, nicht per IP**
   Rate-Limiting wurde auf Device-ID-basiert umgestellt, aber ein Angreifer kann beliebig viele device_ids generieren.
   Zusätzlich IP-basiertes Rate-Limiting implementieren (z.B. Cloudflare Rate Limiting Rules).
 
-- [ ] **10. Error-Details in Produktion exponiert**
-  Stack-Traces und interne Fehlermeldungen werden an den Client gesendet:
-  - `POST /api/person` → `details: String(e)`
-  - `POST /api/watch` → `details: String(e)`
-  `details` nur im Dev-Modus zurückgeben.
+- [~] **10. Error-Details in Produktion exponiert**
+  Stack-Traces und interne Fehlermeldungen werden an den Client gesendet.
+  `POST /api/person` → `details: String(e)` wurde entfernt.
+  `POST /api/watch` → `details: String(e)` noch offen.
 
 - [ ] **11. Input-Validierung fehlt auf mehreren Endpoints**
   - `POST /api/watcher`: `push_token` ohne Längen-/Format-Validierung
@@ -158,6 +151,9 @@ Status: offen
 | API-Key als SHA-256-Hash gespeichert | implementiert |
 | Cookie: HttpOnly + Secure + SameSite=Strict | implementiert |
 | Constant-Time-Vergleich für Dev-Token | implementiert |
+| Ownership-Checks auf Person-Endpoints (IDOR) | implementiert |
+| `POST /api/person` legt Ownership-Bindung an | implementiert |
+| `details: String(e)` aus `POST /api/person` entfernt | implementiert |
 
 ---
 
@@ -165,8 +161,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 4      | 2           |
-| Hoch        | 7      | 6           |
-| Mittel      | 7      | 7           |
-| Niedrig     | 7      | 7           |
-| **Gesamt**  | **25** | **22**      |
+| Kritisch    | 4      | 1 (+1 teilw.) |
+| Hoch        | 7      | 5             |
+| Mittel      | 7      | 7             |
+| Niedrig     | 7      | 7             |
+| **Gesamt**  | **25** | **20 (+1 teilw.)** |
