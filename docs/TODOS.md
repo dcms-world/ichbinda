@@ -17,7 +17,6 @@ Referenzen:
 - **Beschreibung:** Phasen 1 bis 5 aus `docs/MASTERPLAN.md` umsetzen, damit die Free-Web-UI sicher benutzbar ist.
 
 ### Phase 1: DB-Migration
-- [ ] `device_keys`: Spalte `watcher_id TEXT` hinzufügen
 - [ ] `pairing_requests`-Tabelle erstellen
 - [ ] `schema.sql` aktualisieren
 - [ ] Migration `migrations/002_pairing.sql` erstellen und testen
@@ -34,8 +33,8 @@ Referenzen:
 - [x] `deviceOwnsPerson()` implementiert — **Security #3, #8**
 - [x] Ownership auf allen Person-Endpoints — **Security #3, #8**
 - [x] `POST /api/person` legt automatisch Ownership-Bindung an
-- [x] Ownership auf Watcher-Endpoints — **Security #3, #7** — direkter `watcher_devices`-Check (kein separates `deviceOwnsWatcher()` nötig)
-- [ ] `POST /api/watcher` → `watcher_id` in `device_keys` setzen (für zukünftigen Role-Check)
+- [x] Ownership auf Watcher-Endpoints — **Security #3** — direkter `watcher_devices`-Check (kein separates `deviceOwnsWatcher()` nötig)
+- [x] `POST /api/watcher` bindet das anfragende Gerät direkt in `watcher_devices`
 
 ### Phase 4: Pairing-Endpoints
 - [ ] `POST /api/pair/create` — Person erstellt Pairing-Token
@@ -53,7 +52,7 @@ Referenzen:
 - [x] Namensfelder (`watcher_name`, lokale Person-/Watcher-Namen) auf 2–35 Zeichen begrenzen; die ersten 2 Zeichen müssen Buchstaben sein
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Verbleibende Validierungslücken aus lokalen API-Tests: `POST /api/watch` akzeptiert aktuell `check_interval_minutes=0` und sehr große Werte; Namensfelder haben noch keine feste Maximal-Länge. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Verbleibende Validierungslücken aus lokalen API-Tests: `POST /api/watch` akzeptiert aktuell `check_interval_minutes=0` und sehr große Werte. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #4, #5, #7, #10, #11, #12, #13.
 - **Erledigt am:** -
 
 ---
@@ -81,7 +80,7 @@ Referenzen:
 
 - [ ] Device-Transfer-QR-Flow für Person designen (per Transfer-Token)
 - [ ] Device-Transfer-QR-Flow für Watcher designen
-- [ ] Multi-Device-Konzept für Watcher entscheiden (`watcher_devices` oder `device_keys` erweitern)
+- [ ] Multi-Device-Regeln für Watcher auf Basis von `watcher_devices` entscheiden
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
 - [ ] Person: Möglichkeit alte/unbekannte Watcher zu entfernen
 

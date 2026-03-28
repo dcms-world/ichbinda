@@ -154,7 +154,9 @@ Status: offen
 | Cookie: HttpOnly + Secure + SameSite=Strict | implementiert |
 | Constant-Time-Vergleich für Dev-Token | implementiert |
 | Ownership-Checks auf Person-Endpoints (IDOR) | implementiert |
+| Ownership-Checks auf Watcher-Endpoints (IDOR) | implementiert |
 | `POST /api/person` legt Ownership-Bindung an | implementiert |
+| `register-device` blockiert fremde `device_id` | implementiert |
 | `details: String(e)` aus `POST /api/person` entfernt | implementiert |
 
 ---

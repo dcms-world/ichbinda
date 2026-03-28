@@ -65,18 +65,13 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 
 - `src/index.ts` – Monolithische App (Backend + Frontend)
 - `schema.sql` – Kanonisches Schema (aktualisieren)
-- `migrations/002_pairing.sql` – **Geplant**: `watcher_id`-Spalte + `pairing_requests`-Tabelle
+- `migrations/002_pairing.sql` – **Geplant**: `pairing_requests`-Tabelle
 
 ---
 
 ## Phase 1: DB-Migration
 
 ### `migrations/002_pairing.sql`
-
-`device_keys` erweitern:
-```sql
-ALTER TABLE device_keys ADD COLUMN watcher_id TEXT;
-```
 
 Neue Tabelle:
 ```sql
@@ -94,7 +89,6 @@ CREATE INDEX IF NOT EXISTS idx_pairing_created ON pairing_requests(created_at);
 ```
 
 ### `schema.sql` aktualisieren
-- `device_keys`: `watcher_id TEXT` Spalte hinzufügen
 - `pairing_requests` Tabelle hinzufügen
 
 ---
@@ -144,7 +138,7 @@ async function deviceOwnsPerson(db: D1Database, deviceId: string, personId: stri
 
 async function deviceOwnsWatcher(db: D1Database, deviceId: string, watcherId: string): Promise<boolean> {
   const row = await db.prepare(
-    'SELECT 1 FROM device_keys WHERE device_id = ?1 AND watcher_id = ?2'
+    'SELECT 1 FROM watcher_devices WHERE device_id = ?1 AND watcher_id = ?2'
   ).bind(deviceId, watcherId).first();
   return !!row;
 }
@@ -155,18 +149,19 @@ async function deviceOwnsWatcher(db: D1Database, deviceId: string, watcherId: st
 | Endpoint | Check |
 |---|---|
 | `POST /api/heartbeat` | Device besitzt `person_id` via `person_devices` |
-| `GET /api/person/:id` | Device besitzt Person ODER Watcher mit aktiver `watch_relation` |
+| `GET /api/person/:id` | Device besitzt Person |
 | `GET /api/person/:id/watchers` | Device besitzt Person |
 | `GET /api/person/:id/devices` | Device besitzt Person |
 | `POST /api/person/:id/devices` | Device besitzt Person |
 | `DELETE /api/person/:id/devices` | Device besitzt Person |
 | `POST /api/watch` | Device besitzt `watcher_id` |
 | `PUT /api/watch` | Device besitzt `watcher_id` |
-| `DELETE /api/watch` | Device besitzt `watcher_id` ODER `person_id` |
+| `DELETE /api/watch` | Device besitzt `watcher_id` |
 | `GET /api/watcher/:id/persons` | Device besitzt `watcher_id` |
 
-### `POST /api/watcher` anpassen:
-- Nach Erstellen des Watchers → `UPDATE device_keys SET watcher_id = ? WHERE device_id = ?`
+### `POST /api/watcher`
+- Legt die Watcher-Geraet-Bindung direkt in `watcher_devices` an
+- Keine zusaetzliche `device_keys.watcher_id`-Spalte noetig
 
 ---
 
@@ -258,13 +253,13 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 - **Problem:** Neues Gerät muss beweisen, dass es zur gleichen Person gehört
   - Lösung: Device-Transfer-QR vom alten Gerät → enthält kurzlebiges Transfer-Token + person_id
   - Neues Gerät sendet dieses Transfer-Token bei Registrierung mit
-- Watcher: Analog, aber `watcher_devices`-Konzept fehlt noch im Plan
-  - **TODO:** Multi-Device für Watcher designen (analog zu person_devices)
+- Watcher: Analog ueber bestehendes `watcher_devices`-Konzept
+  - **TODO:** Transfer- und Recovery-Flow fuer mehrere Watcher-Geraete designen
 
 ### Offene Punkte für den Plan:
 - [ ] Device-Transfer-QR-Flow für Person (altes Gerät → neues Gerät, per Transfer-Token)
 - [ ] Device-Transfer-QR-Flow für Watcher (per Transfer-Token)
-- [ ] Multi-Device-Tabelle für Watcher (`watcher_devices` oder `device_keys` erweitern?)
+- [ ] Multi-Device-Regeln für Watcher auf Basis von `watcher_devices` konkretisieren
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
 - [ ] Person: Möglichkeit alte/unbekannte Watcher zu entfernen
 
@@ -272,12 +267,12 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 
 ## Free: Implementierungsreihenfolge
 
-1. DB-Migration: `watcher_id` in `device_keys` + `pairing_requests`-Tabelle
+1. DB-Migration: `pairing_requests`-Tabelle
 2. Backend: `lookupApiKey()` umbauen → gibt `{ device_id, role }` zurück
 3. Backend: Auth-Middleware setzt `deviceId` + `role` in Context
 4. Backend: Heartbeat durch Auth-Middleware schicken
 5. Backend: Ownership-Hilfsfunktionen + Checks auf allen Endpoints
-6. Backend: `POST /api/watcher` → `watcher_id` in `device_keys` setzen
+6. Backend: `POST /api/watcher` bleibt auf `watcher_devices`
 7. Backend: Pairing-Endpoints + Cron-Cleanup
 8. Backend: CORS + Error-Details + Input-Validierung
 9. Frontend: QR-Pairing auf neues Format umstellen (Person + Watcher)
