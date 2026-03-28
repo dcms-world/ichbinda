@@ -24,7 +24,7 @@ Neue Einträge oben anfügen (neueste zuerst).
 - **Entschieden von:** User + Claude (gemeinsam)
 - **Begründung:** App hat keine User-Accounts, nur anonyme Geräte-Registrierung. ECDSA wurde im Masterplan eingeplant, aber nach Analyse als Overkill bewertet. Die echten Sicherheitslücken (IDOR, fehlende Autorisierung) sind Autorisierungsprobleme, keine Authentifizierungsprobleme — und müssen bei ECDSA genauso gebaut werden. API-Key (SHA-256-gehasht, HttpOnly-Cookie + Bearer) mit Ownership-Prüfung reicht vollständig. ECDSA würde ~500+ Zeilen neuen Code erfordern (Frontend Crypto, IndexedDB, signedFetch) ohne echten Sicherheitsgewinn für den Use-Case "Heartbeat alle paar Stunden".
 - **Alternativen verworfen:** ECDSA P-256 Keypairs pro Gerät — eleganter, aber unnötige Komplexität für das Bedrohungsmodell. Replay-Schutz, Zero-Knowledge-Server etc. sind für "Oma drückt grünen Knopf" nicht relevant.
-- **Konsequenz:** Masterplan Phasen 1-13 wurden vereinfacht. Kein neues DB-Schema nötig, kein Frontend-Crypto, kein signedFetch. Stattdessen: bestehende Auth-Middleware fixen (Ownership-Prüfung), Heartbeat authentifizieren, CORS einschränken.
+- **Konsequenz:** Masterplan Phasen 1-13 wurden vereinfacht. Kein neues DB-Schema fuer ECDSA/signed Requests, kein Frontend-Crypto, kein signedFetch. Fachliche Schema-Aenderungen fuer Pairing und Ownership bleiben weiterhin moeglich und sind separat zu bewerten. Stattdessen: bestehende Auth-Middleware fixen (Ownership-Pruefung), Heartbeat authentifizieren, CORS einschraenken.
 
 ### Capacitor für Native-App-Deployment
 - **Datum:** 2026-03-28

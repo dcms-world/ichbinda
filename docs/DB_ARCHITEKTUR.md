@@ -1,5 +1,17 @@
 # iBinda – Datenbankarchitektur-Analyse
 
+Erstellt: 2026-03-26
+Aktualisiert: 2026-03-28
+Status: archivierte Entscheidungsanalyse
+
+Dieses Dokument enthält die **Variantenanalyse**, die zur DB-Entscheidung geführt hat.
+Die bindende Entscheidung steht in `docs/DECISIONS.md`.
+Die aktuelle technische Zielarchitektur steht in `docs/MASTERPLAN.md`.
+
+Neue operative Architekturdetails werden **nicht** hier gepflegt.
+
+---
+
 ## Das Kernproblem mit 2 DBs
 
 Der Sync zwischen D1 und Postgres ist **der teuerste Teil** der ganzen Pro-Architektur. Was im Konzept als "Event-driven Sync" steht, bedeutet konkret:
@@ -45,64 +57,14 @@ Für ein kleines Team ist das ein enormer Overhead — und eine dauerhafte Fehle
 
 **Fazit:** Ein System, kein Sync, volle Power. Die Heartbeat-Latenz ist minimal höher (~20-50ms statt ~5ms), aber für einen Heartbeat alle paar Minuten völlig irrelevant.
 
-### Option C: Beide (wie im Konzept)
+### Option C: Hybrid ohne Vollsync (wie im Konzept)
 
-Nur sinnvoll wenn ihr **tausende Geräte** habt und die Edge-Latenz für Heartbeats wirklich braucht. Für die Planungsphase jetzt: Nein.
-
----
-
-## Klare Empfehlung: Option B — ein Postgres
-
-Warum:
-
-1. **Heartbeats brauchen keine Edge-Performance.** Ein Gerät sendet alle 5-30 Minuten einen Ping. Ob der 5ms oder 40ms dauert, ist egal.
-
-2. **Kein Sync = keine Sync-Bugs.** Das allein spart Wochen an Entwicklungszeit und dauerhaften Wartungsaufwand.
-
-3. **Pro-Features werden trivial.** RLS, Rollen, Audit-Logs, komplexe Queries — alles nativ.
-
-4. **Migration von D1 ist einfach.** Euer Schema ist klein und sauber, das ist ein Nachmittag Arbeit.
-
-5. **Cloudflare Worker bleibt.** Nur die DB-Anbindung ändert sich — Neon hat einen Serverless HTTP-Driver, der perfekt mit Workers funktioniert.
+Als sofort voll ausgebautes Zwei-DB-System waere das fuer die Free-Phase zu schwergewichtig. Als gestufte Zielarchitektur ist es jedoch sinnvoll: D1 bleibt der anonyme operative Core, Postgres kommt erst mit Pro dazu, ohne Vollsync.
 
 ---
 
-## Architektur-Diagramm
+## Ergebnis
 
-```
-+-------------------------+
-|   Cloudflare Worker     |   <- bleibt wie bisher (Hono, Cron, Push)
-|   (Hono API + HTML)     |
-+-----------+-------------+
-            |
-            | HTTP (neon serverless driver)
-            v
-+-------------------------+
-|   Neon Postgres         |   <- Frankfurt Region
-|   (alles in einer DB)   |
-|                         |
-|   - heartbeats          |
-|   - devices             |
-|   - persons/watchers    |
-|   - organizations       |   <- Pro
-|   - users/roles         |   <- Pro
-|   - audit_logs          |   <- Pro
-|   - alert_rules         |   <- Pro
-+-------------------------+
-```
+Entschieden wurde **Option C (Hybrid ohne Sync)** - aber explizit als gestufte Architektur. D1 bleibt zunaechst alleiniger operativer Core; Postgres kommt erst mit Pro dazu, ohne Sync dazwischen.
 
-**D1 könnt ihr später immer noch als Edge-Cache davorschalten**, falls ihr wirklich an Performance-Grenzen stosst. Aber das ist Optimierung, nicht Architektur.
-
----
-
-## Empfohlene Umsetzungsreihenfolge
-
-1. Security-Fixes im Core (Pflicht vor allem anderen)
-2. Code aufteilen (Routen/Templates) — Wartbarkeit schaffen
-3. Auth-System implementieren (AUTH_PLAN.md umsetzen)
-4. DB-Entscheidung treffen: Supabase vs. Neon vs. self-hosted
-5. Dann erst Pro-Dashboard MVP Phase 1
-
----
-
-*Erstellt am 26.03.2026 — iBinda Architektur-Review*
+Begründung und technische Zielarchitektur: `docs/MASTERPLAN.md` Abschnitt "Datenbank-Architektur".

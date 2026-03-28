@@ -531,20 +531,20 @@ h1 {
 
 <script>
 const API_URL='/api';
-const PERSON_NAME_KEY='sicherda_person_name';
-const DEVICE_ID_KEY='sicherda_device_id';
+const PERSON_NAME_KEY='ibinda_person_name';
+const DEVICE_ID_KEY='ibinda_device_id';
 let currentPersonId=null;
 let currentPersonName='';
 let currentDeviceId='';
 
-function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'}
-function setRegistered(){localStorage.setItem('sicherda_registered','1')}
+function isRegistered(){return localStorage.getItem('ibinda_registered')==='1'}
+function setRegistered(){localStorage.setItem('ibinda_registered','1')}
 
 let resolveRegistered=null;
 async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token,role:'person'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
-function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('sicherda_person_id')}
+function getPersonId(){const params=new URLSearchParams(window.location.search);return params.get('id')||localStorage.getItem('ibinda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
 function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
 function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();return 'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
@@ -552,7 +552,7 @@ function getOrCreateDeviceId(){const existing=(localStorage.getItem(DEVICE_ID_KE
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,(char)=>{if(char==='&')return'&amp;';if(char==='<')return'&lt;';if(char==='>')return'&gt;';if(char==='"')return'&quot;';return'&#39;'})}
 function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time))return 'Unbekannt';return new Date(time).toLocaleString('de-DE')}
 
-async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('sicherda_person_id',data.id);return data.id}
+async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
 
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
 let qrCopyStatusTimeout=null;
@@ -568,8 +568,8 @@ function askForPersonName(){return new Promise((resolve)=>{const overlay=documen
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
-const LOCATION_ENABLED_KEY='sicherda_location_enabled';
-const LOCATION_CLEAR_PENDING_KEY='sicherda_location_clear_pending';
+const LOCATION_ENABLED_KEY='ibinda_location_enabled';
+const LOCATION_CLEAR_PENDING_KEY='ibinda_location_clear_pending';
 
 function isLocationEnabled(){return localStorage.getItem(LOCATION_ENABLED_KEY)==='true'}
 function isLocationClearPending(){return localStorage.getItem(LOCATION_CLEAR_PENDING_KEY)==='true'}
@@ -713,7 +713,7 @@ async function handleNewDeviceScanned(personId) {
       if (personData.id) {
         // Prüfe ob dieses Gerät bereits einer anderen Person zugeordnet ist
         // (durch Abgleich mit localStorage - jedes Gerät kennt nur seine eigene person_id)
-        const existingPersonId = localStorage.getItem('sicherda_person_id');
+        const existingPersonId = localStorage.getItem('ibinda_person_id');
         if (existingPersonId && existingPersonId !== personId) {
           alert('Dieses Gerät ist bereits mit einer anderen Person verknüpft und kann nicht übertragen werden.');
           return;
@@ -734,7 +734,7 @@ async function handleNewDeviceScanned(personId) {
   }
   
   // Speichere person_id
-  localStorage.setItem('sicherda_person_id', personId);
+  localStorage.setItem('ibinda_person_id', personId);
   currentPersonId = personId;
   
   // Update URL
@@ -926,17 +926,17 @@ button:hover{background:#5a6fd6}
 <script>
 const API_URL = '/api';
 
-function isRegistered(){return localStorage.getItem('sicherda_registered')==='1'}
-function setRegistered(){localStorage.setItem('sicherda_registered','1')}
+function isRegistered(){return localStorage.getItem('ibinda_registered')==='1'}
+function setRegistered(){localStorage.setItem('ibinda_registered','1')}
 let resolveRegistered=null;
-async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('sicherda_watcher_device')||(()=>{const id=crypto.randomUUID();localStorage.setItem('sicherda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('ibinda_watcher_device')||(()=>{const id=crypto.randomUUID();localStorage.setItem('ibinda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
-const PERSON_NAMES_KEY = 'sicherda_person_names';
-const PERSON_NAME_HISTORY_KEY = 'sicherda_person_name_history';
-const PERSON_PHOTOS_KEY = 'sicherda_person_photos';
-const WATCHED_PERSON_IDS_KEY = 'sicherda_watched_person_ids';
-const HIDDEN_PERSON_IDS_KEY = 'sicherda_hidden_person_ids';
+const PERSON_NAMES_KEY = 'ibinda_person_names';
+const PERSON_NAME_HISTORY_KEY = 'ibinda_person_name_history';
+const PERSON_PHOTOS_KEY = 'ibinda_person_photos';
+const WATCHED_PERSON_IDS_KEY = 'ibinda_watched_person_ids';
+const HIDDEN_PERSON_IDS_KEY = 'ibinda_hidden_person_ids';
 const MAX_WATCHED_PERSONS = 2;
 const PERSON_LIMIT_ALERT_TEXT = 'Maximal 2 Personen können überwacht werden.';
 const INTERVALS = [
@@ -956,7 +956,7 @@ let activeEditPersonId = '';
 let currentPersonCount = 0;
 
 function getWatcherId() {
-  return localStorage.getItem('sicherda_watcher_id');
+  return localStorage.getItem('ibinda_watcher_id');
 }
 
 function getStoredList(key) {
@@ -1383,7 +1383,7 @@ async function init() {
       body: JSON.stringify({ push_token: 'web-' + crypto.randomUUID() })
     });
     const data = await res.json();
-    localStorage.setItem('sicherda_watcher_id', data.id);
+    localStorage.setItem('ibinda_watcher_id', data.id);
   }
   loadPersons();
 }
@@ -2067,7 +2067,7 @@ app.post('/api/person', async (c) => {
   }
 });
 
-// API: Heartbeat senden (ohne API-Key, mit Rate Limiting)
+// API: Heartbeat senden (mit Auth-Middleware + Rate Limiting)
 app.post('/api/heartbeat', async (c) => {
   // 1. Parse and validate request body
   const body = await c.req

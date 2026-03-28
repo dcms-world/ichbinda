@@ -1,134 +1,73 @@
-# iBinda – Editions- und Preismodell (Free + Pro)
+# iBinda – Editions- und Preismodell
 
-Erstellt: 2026-03-26  
-Status: Entwurf (für Produkt- und Architekturabgleich)
+Erstellt: 2026-03-26
+Aktualisiert: 2026-03-28
+Status: Entwurf
 
----
-
-## 1) Zielbild
-
-iBinda wird als **zweistufiges Produktmodell** definiert:
-
-1. **iBinda Free (Privat)**  
-   Kostenlos für den privaten Einsatz mit **1 Person + 1 Watcher** und **Basic-Funktionen**.
-
-2. **iBinda Pro (Institution)**  
-   Kostenpflichtige B2B-Version für Institutionen mit **mehreren betreuten Personen**, **erweiterten Watcher-/Team-Funktionen** sowie **eigenem Dashboard mit Login und separater Datenhaltung**.
-
-Dieses Modell ermöglicht:
-- niedrige Einstiegshürde im Privatbereich
-- klare Upgrade-Logik für professionelle Nutzung
-- saubere Trennung von Basic-Use-Case und institutionellen Anforderungen
+Dieses Dokument beschreibt nur die **Produktgrenzen zwischen Free und Pro**.
 
 ---
 
-## 2) Editionen im Überblick
+## Zielbild
 
-## iBinda Free (Privat)
+iBinda wird als zweistufiges Produkt geführt:
+- **iBinda Free:** privat, kostenlos, einfacher Use-Case
+- **iBinda Pro:** institutionell, kostenpflichtig, Team- und Dashboard-Funktionen
 
-**Zielgruppe:** Einzelhaushalte / private Nutzung  
-**Preis:** Kostenlos
+---
 
-**Rahmenbedingungen (hart):**
-- maximal **1 beobachtete Person**
-- **unbegrenzt Watcher** (Familie/Angehörige können sich frei verbinden)
-- nur **Basic-Funktionen**
+## iBinda Free
 
-**Basic-Funktionen (MVP-orientiert):**
-- Heartbeat-Status für eine Person
-- einfacher Online/Offline-Status
-- grundlegende Alarm-Logik
+**Zielgruppe:** private Nutzung  
+**Preis:** kostenlos
+
+**Rahmen:**
+- pro Watcher standardmäßig eine beobachtete Person
+- eine Person kann von mehreren Watchern beobachtet werden
+- nur Basisfunktionen
+
+**Basisfunktionen:**
+- Heartbeat-Status
+- einfache Alarm-Logik
 - minimale Konfiguration
-
-**Nicht enthalten:**
-- Multi-User-Teams
-- Rollen-/Rechteverwaltung
-- Institutions-Dashboard
-- erweiterte Eskalationsketten
-- umfangreiche Reporting-/Audit-Funktionen
+- einfaches Pairing
 
 ---
 
-## iBinda Pro (Institution)
+## iBinda Pro
 
-**Zielgruppe:** Pflege-/Betreuungseinrichtungen, Organisationen  
-**Preis:** Kostenpflichtig (B2B, abrechnende Einheit = Institution)
+**Zielgruppe:** Institutionen  
+**Preis:** kostenpflichtig
 
-**Kernmerkmale:**
-- Betreuung von **mehreren Personen**
-- **mehrere Watcher / Teamstrukturen**
-- **eigenes Dashboard** mit Login
-- **Rollen und Berechtigungen**
-- Speicherung von **personenbezogenen Stammdaten** (im institutionellen Kontext)
-
-**Pro-Funktionen (laut Zielarchitektur):**
-- Mandantenfähigkeit (Organization/Tenant)
-- Nutzerverwaltung (z. B. Org-Owner, Care-Manager, Watcher, Read-Only)
-- erweiterte Eskalations- und Benachrichtigungsregeln
-- Monitoring-Zentrale über mehrere Personen/Geräte
-- Audit-Logs / Reporting
-- perspektivisch Schichtlogik, Exporte, API-Integrationen
+**Merkmale:**
+- mehrere betreute Personen
+- mehrere Watcher und Teamstrukturen
+- eigenes Dashboard mit Login
+- Rollen und Berechtigungen
+- personenbezogene Stammdaten im institutionellen Kontext
 
 ---
 
-## 3) Daten- und Systemtrennung (wichtig)
+## Upgrade-Logik Free → Pro
 
-Zur Vermeidung von Vermischung wird eine **klare Systemgrenze** definiert:
-
-- **Runtime/Core (Cloudflare Workers + D1):**
-  - Heartbeat-Ereignisse
-  - Device-Liveness
-  - operative Alarm-Events
-
-- **Pro-Dashboard-DB (Postgres/Supabase o. ä.):**
-  - Institutionen (Mandanten)
-  - User/Rollen/Rechte
-  - personenbezogene Stammdaten
-  - Zuordnungen, Regeln, Audit-Informationen
-
-Prinzip:
-- **Single Source of Truth pro Domäne**
-- keine unnötige Doppelhaltung identischer Daten
-- Event-basierte Synchronisation statt unklarer Querabhängigkeiten
+1. Privatnutzer startet in Free.
+2. Bei Team-, Organisations- oder erweiterten Prozessanforderungen erfolgt Upgrade auf Pro.
+3. Pro aktiviert Dashboard, Rollen, Organisationsstruktur und erweiterte Daten-/Prozessfunktionen.
 
 ---
 
-## 4) Auth- und Security-Einordnung
+## Offene Produktentscheidungen
 
-Die bereits geplante API-Auth (Dev-Token / Bearer API-Key) bleibt für den API-Zugriff relevant.  
-Für Pro-Funktionen kommen zusätzlich Login-/Rollen-Mechanismen im Dashboard-Kontext hinzu.
-
-Wichtig:
-- API-Zugriffsschutz und Institutions-Login sind **ergänzende Schichten**, kein Widerspruch.
-- Sensitive Daten nur dort speichern, wo sie fachlich notwendig sind.
-
----
-
-## 5) Upgrade-Logik Free → Pro
-
-Empfohlener Produktfluss:
-
-1. Privatnutzer startet in Free (1 beobachtete Person, unbegrenzt Watcher, Basic).
-2. Bei Bedarf an Team-/Institutionsfunktionen erfolgt Upgrade auf Pro.
-3. Pro-Setup erstellt Institution, Nutzerkonten, Rollen und Dashboard-Zugänge.
-4. Erweiterte Daten- und Prozessfunktionen werden erst in Pro aktiviert.
-
----
-
-## 6) Offene Produktentscheidungen
-
-- Konkrete Preisstruktur Pro (pro Einrichtung / pro Person / hybrid)
-- exakte Feature-Grenze Free vs Pro (was bleibt dauerhaft free?)
+- konkrete Preisstruktur Pro
+- exakte Feature-Grenze Free vs. Pro
 - Onboarding-Flow für Institutionen
-- Vertrags-/Abrechnungsmodell (monatlich/jährlich)
-- rechtliche Texte (AVV, Datenschutz, Nutzungsbedingungen)
+- Vertrags-/Abrechnungsmodell
+- rechtliche Texte
 
 ---
 
-## 7) Kurzfazit
+## Dokumentgrenzen
 
-iBinda sollte offiziell als **Free + Pro** positioniert werden:
-- **Free:** kostenlos, privat, 1 beobachtete Person + unbegrenzt Watcher, Basic only
-- **Pro:** kostenpflichtig, institutionell, Dashboard + Login + erweiterte Team-/Datenfunktionen
-
-Damit ist die Produktlinie verständlich, technisch umsetzbar und wirtschaftlich skalierbar.
+Technische Zielarchitektur: `docs/MASTERPLAN.md`
+Detaillierte Pro-Anforderungen: `docs/PRO_VERSION.md`
+Bindende Entscheidungen: `docs/DECISIONS.md`

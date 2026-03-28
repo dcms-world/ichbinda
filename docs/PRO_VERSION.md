@@ -1,97 +1,62 @@
-# iBinda Pro Version – Architektur- & DSGVO-Konzept
+# iBinda Pro Version – Anforderungen
+
+Erstellt: 2026-03-26
+Aktualisiert: 2026-03-28
+Status: konzeptionell
+
+Dieses Dokument beschreibt die **detaillierten Anforderungen der Pro-Version**.
+Die übergreifende Architekturentscheidung selbst lebt in `docs/MASTERPLAN.md`.
+
+---
 
 ## Ziel
-Ein professionelles Institutions-Dashboard für iBinda, in dem Einrichtungen zentral alle relevanten Daten der überwachten Personen, Geräte, Alarmregeln und Eskalationsketten verwalten können – mit klarer DSGVO-Konformität.
+
+Ein Institutions-Dashboard für iBinda, mit dem Einrichtungen Personen, Geräte, Alarmregeln und Eskalationen zentral verwalten können.
 
 ---
 
-## 1) Architekturvorschlag (Hybrid)
+## Funktionsmodule
 
-### A. Runtime/Core (Cloudflare Workers + D1)
-**Zweck:** performantes, kosteneffizientes Heartbeat-/Monitoring-Backend.
+### Login und Mandantenbereich
+- Institutions-Login
+- Rollen wie Org-Owner, Care-Manager, Watcher, Read-Only
 
-**In D1 speichern (nur operativ notwendig):**
-- Heartbeat-Ereignisse
-- Device-Liveness/Online-Status
-- technische IDs (pseudonymisiert, sofern möglich)
-- minimale Alarm-Triggerdaten
+### Personenverwaltung
+- Stammdaten je Person
+- Kontakte (Angehörige, Notfallkontakt, Arzt)
+- sensible Zusatzinfos mit restriktiver Sichtbarkeit
 
-**Nicht in D1 speichern:**
-- umfangreiche Stammdaten (vollständige Adresse, Kontaktlisten, Freitext-Notizen), sofern nicht zwingend erforderlich.
+### Device-Management
+- Gerätezuordnung je Person
+- letzter Kontakt und Status
+- Gerätewechsel und Historie
 
-### B. Professional Dashboard (Supabase/Postgres oder vergleichbar)
-**Zweck:** Mandantenverwaltung, Nutzerverwaltung, Pflege-/Institutionsprozesse, Reporting.
+### Monitoring-Zentrale
+- Gesamtübersicht mit Status (OK/Warnung/Alarm)
+- Verlauf letzter Aktivität
+- Filter nach Team, Bereich oder Institution
 
-**In Postgres speichern:**
-- Mandanten (Institutionen)
-- Nutzer + Rollen + Berechtigungen
-- Personenstammdaten (Name, Adresse, Geburtsdatum, Telefon, E-Mail, Kontakte)
-- Device-Zuordnungen
-- Alarmregeln / Eskalationspläne / Schichtlogik
-- Audit-Logs
+### Eskalations- und Benachrichtigungsregeln
+- Regeln pro Person oder per Template
+- zeitbasierte Eskalationen
+- mehrere Benachrichtigungskanäle (Push, E-Mail, SMS, ggf. Anruf)
+- Quittierung von Alarmen ("Alarm übernommen")
 
-### C. Datenfluss zwischen D1 und Postgres
-Empfohlen: **Event-driven Sync** statt Live-Querabfragen.
-
-Beispiele für Events aus D1:
-- `heartbeat_received`
-- `device_offline`
-- `alarm_triggered`
-- `alarm_resolved`
-
-Diese Events werden in Postgres verarbeitet (idempotent), damit das Dashboard einen stabilen, verständlichen Status hat.
+### Audit und Reporting
+- Nachvollziehbarkeit von Einsicht, Änderung und Export
+- Reports für Organisation und Qualitätssicherung
 
 ---
 
-## 2) Professional Dashboard – Funktionsmodule
+## Datenmodell Pro
 
-1. **Login & Mandantenbereich**
-   - Institution-Login
-   - Rollen: Org-Owner, Care-Manager, Watcher, Read-Only/Audit
-
-2. **Personenverwaltung**
-   - Stammdaten je Person
-   - Kontakte (Angehörige, Notfallkontakt, Arzt)
-   - optionale sensible Zusatzinfos mit restriktiver Sichtbarkeit
-
-3. **Device-Management**
-   - Gerätezuordnung je Person
-   - letzter Kontakt, online/offline, technische Metadaten
-   - Gerätewechsel und Historie
-
-4. **Monitoring-Zentrale**
-   - Gesamtübersicht mit Status (OK/Warnung/Alarm)
-   - letzte Aktivität / Ausfallverlauf
-   - Filter nach Team/Bereich/Institution
-
-5. **Eskalations- und Benachrichtigungsregeln**
-   - pro Person oder per Template
-   - zeitbasierte Eskalationen
-   - Kanalwahl (Push, E-Mail, SMS, ggf. Anruf)
-   - Quittierung („Alarm übernommen“)
-
-6. **Audit & Reporting**
-   - Einsicht/Änderung/Export vollständig protokollieren
-   - reports für Qualitätsmanagement / Nachweise
-
----
-
-## 3) Vorschlag Datenmodell (vereinfacht)
-
-### D1 (Core)
-- `heartbeats`
-- `device_runtime_status`
-- `alarm_runtime_events`
-
-### Postgres (Pro Dashboard)
 - `organizations`
 - `users`
-- `roles`
 - `user_org_roles`
-- `patients`
-- `patient_contacts`
+- `person_profiles`
+- `person_contacts`
 - `devices`
-- `patient_device_links`
+- `person_device_links`
 - `alert_rules`
 - `notification_policies`
 - `alert_events`
@@ -99,120 +64,87 @@ Diese Events werden in Postgres verarbeitet (idempotent), damit das Dashboard ei
 
 ---
 
-## 4) DSGVO-Umsetzung (Pflichtanforderungen)
+## DSGVO-Anforderungen
 
-## 4.1 Datenschutz by Design & by Default
+### Datenschutz by Design & by Default
 - Datenminimierung strikt umsetzen
 - klare Zweckbindung pro Datenfeld
 - standardmäßig restriktive Sichtbarkeit
 
-## 4.2 Mandantentrennung
+### Mandantentrennung
 - technische Trennung per Tenant-ID + Row-Level Security
 - keine tenant-übergreifenden Queries
 
-## 4.3 Zugriffsschutz
+### Zugriffsschutz
 - rollenbasiertes Berechtigungssystem (Need-to-know)
 - MFA für Institutions-Accounts
 - Session-Timeouts, IP-/Rate-Limits
 
-## 4.4 Verschlüsselung
+### Verschlüsselung
 - Transportverschlüsselung (TLS)
 - Verschlüsselung at-rest
-- zusätzliche Feldverschlüsselung für besonders sensible Daten
+- zusätzliche Feldverschlüsselung für besonders sensible Daten (Geburtsdatum, Adresse)
 
-## 4.5 Protokollierung & Nachvollziehbarkeit
+### Protokollierung & Nachvollziehbarkeit
 - Audit-Logs für Lesen/Ändern/Exportieren personenbezogener Daten
 - manipulationsarme Speicherung + definierte Aufbewahrung
 
-## 4.6 Betroffenenrechte
+### Betroffenenrechte
 - Auskunft (Export)
 - Berichtigung
 - Löschung
 - Einschränkung der Verarbeitung
 - klare interne Bearbeitungsprozesse
 
-## 4.7 Lösch- & Aufbewahrungskonzept
+### Lösch- & Aufbewahrungskonzept
 - Heartbeat-Rohdaten mit klarer Retention
 - Stammdaten nur solange erforderlich
 - Backup-/Restore-Prozess mit DSGVO-konformer Löschstrategie
+- Crypto-Shredding für Fotos (Key vernichten → Daten unwiederbringlich weg)
 
-## 4.8 Auftragsverarbeitung & Region
-- AVV/DPA mit allen Auftragsverarbeitern
+### Auftragsverarbeitung & Region
+- AVV/DPA mit allen Auftragsverarbeitern (Cloudflare, Neon)
 - bevorzugte Verarbeitung in EU/EWR
-- Drittlandtransfers nur mit geeigneten Garantien (z. B. SCC)
+- Drittlandtransfers nur mit geeigneten Garantien (z.B. SCC)
 
-## 4.9 Risikoanalyse / DSFA
-- bei Gesundheits-/Pflegekontext frühzeitig Datenschutz-Folgenabschätzung (DSFA/DPIA) einplanen
+### Risikoanalyse / DSFA
+- bei Gesundheits-/Pflegekontext frühzeitig DSFA einplanen
 - TOMs dokumentieren
+- **Empfehlung:** Frühzeitig Datenschutzberater einbinden bevor Pro live geht
 
 ---
 
-## 5) MVP-Umfang (empfohlen)
+## Pro-MVP
 
-Phase 1 (schnell lieferbar):
-1. Institutions-Login + Rollenmodell
-2. Personenstammdaten + Device-Zuordnung
-3. Monitoring-Übersicht (Live-Status)
-4. 2-stufige Eskalation
-5. Audit-Log Basis
+### Phase 1
+- Institutions-Login und Rollenmodell
+- Personenstammdaten und Device-Zuordnung
+- Monitoring-Übersicht
+- erste Eskalationslogik
+- Audit-Log Basis
 
-Phase 2:
+### Phase 2
 - Schichtplanung
-- komplexe Eskalationsketten
-- Exporte/Reporting
-- API-Integrationen
+- komplexere Eskalationsketten
+- Exporte und Reporting
+- Integrationen
 
 ---
 
-## 6) Technische Leitplanken
+## Offene Entscheidungen
 
-- **Single Source of Truth je Domäne**
-  - D1 = operative Runtime/Heartbeat-Daten
-  - Postgres = institutionelle Stamm-/Dashboard-Daten
-
-- **Idempotente Eventverarbeitung**
-  - gleiche Events dürfen keine doppelten Zustände erzeugen
-
-- **Sync-Monitoring**
-  - Metriken für Event-Lag, Fehlerraten, Retry/Dead-letter
+- Dashboard-Framework (Next.js? Remix? SvelteKit?)
+- finale Benachrichtigungskanäle (Push + E-Mail + SMS + Telefonie?)
+- Retention-Fristen pro Datentyp
+- Umfang medizinischer Zusatzdaten im MVP
+- genauer DSFA-Startzeitpunkt
+- Onboarding-Flow für Institutionen
+- Upgrade-Flow Free → Pro (Person in Org überführen)
 
 ---
 
-## 7) Offene Entscheidungen
+## Dokumentgrenzen
 
-1. Finaler Anbieter für Dashboard-DB (Supabase vs. selbst gehostet Postgres)
-2. Benachrichtigungskanäle (E-Mail/SMS/Push/Telefonie)
-3. Retention-Fristen pro Datentyp
-4. Umfang medizinischer Zusatzdaten in MVP
-5. DSFA-Startzeitpunkt und Verantwortlichkeiten
-
----
-
-## 8) Pairing-Konzept
-
-### Entscheidung
-ECDSA/Public-Key-Pairing wurde als Overkill verworfen (siehe `DECISIONS.md`). Stattdessen einfaches Token-basiertes Pairing über TLS.
-
-### Ablauf (Free)
-1. Person erstellt Pairing-Request → Server gibt `pairing_token` (UUID, 5 Min. gültig)
-2. Person zeigt QR-Code: `{ person_id, pairing_token }`
-3. Watcher scannt QR, gibt seinen Namen ein
-4. Watcher sendet `POST /api/pair/respond` mit `{ pairing_token, watcher_name }`
-5. Server validiert Token (gültig, pending, < 5 Min), erstellt Watch-Relation
-6. Person pollt `GET /api/pair/:token` → sieht Watcher-Name bei Completion
-
-### Sicherheit
-- Token einmalig verwendbar, danach `completed`
-- TTL 5 Minuten, danach `expired` (Cron-Cleanup)
-- Rate-Limits auf Pairing-Endpoints
-- Gesamte Kommunikation über TLS
-
-### Pro-Erweiterung (später)
-Für Pro-Institutionen: Pairing kann über Dashboard ausgelöst werden (kein QR nötig, Zuweisung server-seitig durch Care-Manager).
-
-## Kurzfazit
-Ja, ein Setup mit mehreren Datenbanken ist sinnvoll und professionell:
-- **Cloudflare D1** für schnellen, günstigen Runtime-Core
-- **Postgres/Supabase** für Mandanten-Dashboard, Rollen, Stammdaten, Audit & Compliance
-
-Mit der oben beschriebenen Trennung bleibt die Lösung skalierbar, wartbar und DSGVO-fähig.
+Editionen und Preislogik: `docs/PRICING_AND_EDITIONS.md`
+Technische Zielarchitektur: `docs/MASTERPLAN.md`
+Bindende Entscheidungen: `docs/DECISIONS.md`

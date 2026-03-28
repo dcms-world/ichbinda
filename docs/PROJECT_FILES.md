@@ -9,16 +9,27 @@ Lies die Dateien, die für deine aktuelle Aufgabe relevant sind — nicht alle a
 
 | Datei | Wann lesen | Inhalt |
 |---|---|---|
-| `docs/MASTERPLAN.md` | Immer zuerst | Architektur-Entscheidungen, DB-Strategie, Produkt-Roadmap |
-| `docs/SPECS.md` | Bei API- oder Feature-Arbeit | Technische Spezifikationen, API-Endpunkte, Datenstrukturen |
-| `docs/AUTH_PLAN.md` | Bei Auth, Sicherheit, Device Keys | Auth-Flow, Device Key Konzept, offene Auth-Tasks |
-| `docs/SECURITY_AUDIT.md` | Bei Sicherheitsrelevanz | Bekannte Schwachstellen, Status der Fixes |
-| `docs/PRICING_AND_EDITIONS.md` | Bei Feature-Entscheidungen (Free vs. Pro) | Welche Features in welchem Tier, Preismodell |
-| `docs/PRO_VERSION.md` | Bei Pro-Feature-Entwicklung | Pro-Version Konzept, Organisations-Features, Dashboard |
-| `docs/DB_ARCHITEKTUR.md` | Bei DB-Fragen | Entscheidungsgrundlage für D1 + Postgres Hybrid |
-| `docs/TODOS.md` | Vor jeder Aufgabe | Aktuelle TODOs, offene Tasks, Fortschritt |
+| `docs/MASTERPLAN.md` | Immer zuerst | Zielarchitektur, technische Phasen, Verifikation |
+| `docs/SPECS.md` | Bei Produkt-/UX-Fragen | Produktbild, Nutzerbild, MVP-Scope |
+| `docs/AUTH_PLAN.md` | Bei Auth-Fragen | Dokument-Zuständigkeit und Auth-Leitplanken |
+| `docs/SECURITY_AUDIT.md` | Bei Sicherheitsrelevanz | Bekannte Schwachstellen und deren Status |
+| `docs/PRICING_AND_EDITIONS.md` | Bei Feature-Entscheidungen (Free vs. Pro) | Editionen, Feature-Grenzen, Upgrade-Logik |
+| `docs/PRO_VERSION.md` | Bei Pro-Feature-Entwicklung | Detaillierte Pro-Anforderungen: Dashboard, Datenmodell, DSGVO |
+| `docs/DB_ARCHITEKTUR.md` | Bei DB-Fragen | Archivierte Entscheidungsanalyse zur Hybrid-Architektur |
+| `docs/TODOS.md` | Vor jeder Aufgabe | Aktuelle Arbeitspakete und Fortschritt |
 | `docs/DECISIONS.md` | Bei Architektur-/Design-Fragen | Getroffene Entscheidungen mit Begründung |
 | `docs/CONVENTIONS.md` | Bei Code-Arbeit | Code-Stil, Namenskonventionen, Commit-Format |
+
+---
+
+## Root-Dateien
+
+| Datei | Wann lesen | Inhalt |
+|---|---|---|
+| `README.md` | Bei Setup, lokalem Start oder API-Quickcheck | Einstieg, Quickstart, aktuelle Basis-Routen |
+| `AGENTS.md` | Für Codex-Kontext | Rollenverständnis und Pflichtlektüre |
+| `CLAUDE.md` | Für Claude-Kontext | Rollenverständnis und Pflichtlektüre |
+| `GEMINI.md` | Für Gemini-Kontext | Rollenverständnis und Pflichtlektüre |
 
 ---
 
@@ -28,14 +39,14 @@ Lies die Dateien, die für deine aktuelle Aufgabe relevant sind — nicht alle a
 |---|---|---|
 | `src/index.ts` | Bei jeder Code-Aufgabe | Hauptdatei: alle Routen, Middleware, Business-Logik |
 | `schema.sql` | Bei DB-Änderungen | Aktuelles D1-Datenbankschema |
-| `wrangler.toml` | Bei Deployment/Config | Cloudflare Workers Konfiguration, Bindings (D1, KV) |
+| `wrangler.toml` | Bei Deployment/Config | Cloudflare Workers Konfiguration und D1-Binding |
 
 ---
 
 ## Wichtige Fakten
 
 - App ist **nicht produktiv** — Breaking Changes sind OK, kein Legacy-Support
-- Stack: **Cloudflare Workers + TypeScript + Hono + D1 + KV**
+- Stack: **Cloudflare Workers + TypeScript + Hono + D1**
 - Kein Node.js-only Code — alles muss im Workers-Runtime laufen
 - DB-Strategie: D1 für anonymen Core jetzt, Postgres (Neon) erst wenn Pro-Tier kommt
 
@@ -56,10 +67,11 @@ Jeder Agent soll wie ein **guter Mitarbeiter** agieren:
 ### Einstieg für jeden Agenten
 
 1. Diese Datei lesen (`docs/PROJECT_FILES.md`)
-2. `docs/TODOS.md` lesen — was ist offen, was ist in Arbeit?
-3. `docs/DECISIONS.md` lesen — was wurde bereits entschieden?
-4. `docs/CONVENTIONS.md` lesen — wie wird Code geschrieben?
-5. Dann die für die Aufgabe relevanten Dateien aus der Tabelle oben
+2. `docs/MASTERPLAN.md` lesen — was ist die aktuelle Zielarchitektur und Reihenfolge?
+3. `docs/TODOS.md` lesen — was ist offen, was ist in Arbeit?
+4. `docs/DECISIONS.md` lesen — was wurde bereits entschieden?
+5. `docs/CONVENTIONS.md` lesen — wie wird Code geschrieben?
+6. Dann die für die Aufgabe relevanten Dateien aus der Tabelle oben
 
 ### Informationen persistent halten
 
@@ -67,6 +79,7 @@ Jeder Agent soll wie ein **guter Mitarbeiter** agieren:
 - Neue Erkenntnisse, Entscheidungen, Analysen → in die thematisch passende Datei unter `docs/` schreiben.
 - Gibt es keine passende Datei → neue Datei unter `docs/` anlegen und hier in `PROJECT_FILES.md` eintragen.
 - **Entscheidungen** immer in `docs/DECISIONS.md` dokumentieren — nicht nur im Chat treffen und vergessen.
+- Dokumentationsregeln inkl. **Single Source of Truth** stehen in `docs/CONVENTIONS.md` und gelten immer.
 
 ### TODOs & Aufgaben
 

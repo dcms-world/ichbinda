@@ -2,11 +2,11 @@
 
 ## Context
 
-Die iBinda-App hat Sicherheitslücken (siehe `SECURITY_AUDIT.md`). Die App ist **nicht produktiv** – keine Migration nötig, kein Legacy-Support. Die bestehende API-Key-Auth wird beibehalten und um Ownership-Prüfungen ergänzt (ECDSA wurde als Overkill verworfen, siehe `DECISIONS.md`).
+Die iBinda-App hat Sicherheitsluecken (siehe `SECURITY_AUDIT.md`). Die App ist **nicht produktiv** - keine Ruecksicht auf Legacy-Kompatibilitaet noetig. Gezielte Schema-Migrationen fuer neue Free-Features sind weiterhin OK. Die bestehende API-Key-Auth wird beibehalten und um Ownership-Pruefungen ergaenzt (ECDSA wurde als Overkill verworfen, siehe `DECISIONS.md`).
 
-Langfristig gibt es zwei Produkt-Stufen:
-- **iBinda Free** – privat, anonym, 1 Person + unbegrenzt Watcher
-- **iBinda Pro** – Institution, Dashboard, personenbezogene Daten, DSGVO-kritisch
+Langfristig gibt es zwei Produkt-Stufen (Details in `docs/PRICING_AND_EDITIONS.md`):
+- **iBinda Free** – privat, anonym
+- **iBinda Pro** – institutionell, kostenpflichtig
 
 ---
 
@@ -29,9 +29,9 @@ D1 (operativ, anonym):              Postgres (Pro, personenbezogen):
 ├── persons (UUID + Heartbeat)      ├── organizations (Mandanten)
 ├── watchers (UUID + Push-Token)    ├── users + roles + permissions
 ├── watch_relations                 ├── person_profiles (Name, Geb., Adresse)
-├── device_keys (ECDSA Public Keys) ├── person_photos (verschlüsselt)
+├── device_keys (API-Key Hashes)    ├── person_photos (verschlüsselt)
 ├── person_devices                  ├── alert_rules / Eskalation
-├── rate_limits                     ├── audit_logs
+├── device_rate_limits              ├── audit_logs
 └── pairing_requests                └── notification_policies
 
          │                                    │
@@ -65,7 +65,7 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 
 - `src/index.ts` – Monolithische App (Backend + Frontend)
 - `schema.sql` – Kanonisches Schema (aktualisieren)
-- `migrations/002_pairing.sql` – **Neu**: `watcher_id`-Spalte + `pairing_requests`-Tabelle
+- `migrations/002_pairing.sql` – **Geplant**: `watcher_id`-Spalte + `pairing_requests`-Tabelle
 
 ---
 
@@ -236,14 +236,14 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 ## Phase 11: Gerätewechsel
 
 ### Szenario: Person bekommt neues Gerät
-- Altes Gerät verloren/kaputt → Private Key weg → person_id nicht mehr zugreifbar
-- **Lösung:** Person registriert sich auf neuem Gerät neu (neue person_id, neues Keypair)
+- Altes Gerät verloren/kaputt → API-Key/Cookie und lokale Gerätebindung weg → person_id nicht mehr zugreifbar
+- **Lösung:** Person registriert sich auf neuem Gerät neu (neue person_id, neuer API-Key)
 - Watcher muss einmalig neu scannen (neuer QR-Code mit neuer person_id)
 - Akzeptabler Aufwand – Person zeigt neuen QR, Watcher scannt
 
 ### Szenario: Watcher bekommt neues Gerät
-- Altes Gerät verloren/kaputt → Private Key weg → watcher_id nicht mehr zugreifbar
-- **Lösung:** Watcher registriert sich auf neuem Gerät neu (neue watcher_id, neues Keypair)
+- Altes Gerät verloren/kaputt → API-Key/Cookie und lokale Watcher-Zuordnung weg → watcher_id nicht mehr zugreifbar
+- **Lösung:** Watcher registriert sich auf neuem Gerät neu (neue watcher_id, neuer API-Key)
 - Person muss **nicht** neu scannen – Watcher scannt einfach erneut den QR der Person
 - Neues Pairing erstellt neue Watch-Relation mit neuer watcher_id
 - **Aber:** Alte Watch-Relations (mit alter watcher_id) bleiben als Leichen in der DB
@@ -253,16 +253,16 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 
 ### Szenario: Gerät noch funktionsfähig (Upgrade)
 - Multi-Device ist bereits über `person_devices` unterstützt
-- Person: Neues Gerät hinzufügen → neues Keypair registrieren → gleiche person_id verknüpfen via `POST /api/person/:id/devices`
+- Person: Neues Gerät hinzufügen → neues Gerät registrieren, eigenen API-Key erhalten → gleiche person_id verknüpfen via `POST /api/person/:id/devices`
 - **Problem:** Neues Gerät muss beweisen, dass es zur gleichen Person gehört
-  - Lösung: Device-Transfer-QR vom alten Gerät → enthält signierte Erlaubnis + person_id
-  - Neues Gerät sendet diese Erlaubnis bei Registrierung mit
+  - Lösung: Device-Transfer-QR vom alten Gerät → enthält kurzlebiges Transfer-Token + person_id
+  - Neues Gerät sendet dieses Transfer-Token bei Registrierung mit
 - Watcher: Analog, aber `watcher_devices`-Konzept fehlt noch im Plan
   - **TODO:** Multi-Device für Watcher designen (analog zu person_devices)
 
 ### Offene Punkte für den Plan:
-- [ ] Device-Transfer-QR-Flow für Person (altes Gerät → neues Gerät)
-- [ ] Device-Transfer-QR-Flow für Watcher
+- [ ] Device-Transfer-QR-Flow für Person (altes Gerät → neues Gerät, per Transfer-Token)
+- [ ] Device-Transfer-QR-Flow für Watcher (per Transfer-Token)
 - [ ] Multi-Device-Tabelle für Watcher (`watcher_devices` oder `device_keys` erweitern?)
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
 - [ ] Person: Möglichkeit alte/unbekannte Watcher zu entfernen
@@ -298,161 +298,25 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 ---
 ---
 
-# Pro: Überblick (wird gebaut wenn Free stabil ist)
+# Pro: Überblick
 
-## Pro: Auth-System
+Pro wird erst angegangen, wenn Free stabil läuft und echte Nutzung vorliegt.
 
-- **Dashboard-Login:** Email/Passwort + MFA
-- **Mitarbeiter-Smartphone:** API-Key Device-Auth (wie Free) PLUS Org-Zugehörigkeit über Dashboard-Zuweisung
-- **Rollen:** Org-Owner, Care-Manager, Watcher, Read-Only/Audit
-- Dashboard-Auth und Device-Auth sind ergänzende Schichten
+Für Pro gilt weiterhin:
+- operative Free-Daten bleiben im Core
+- personenbezogene Institutionsdaten kommen erst mit Pro in Postgres
+- Dashboard und Institutionslogik werden getrennt vom Free-Core gedacht
 
-## Pro: Datenbank (Postgres / Neon Frankfurt)
-
-### Schema (vereinfacht)
-```
-organizations         -- Mandanten/Institutionen
-users                 -- Dashboard-Nutzer mit Login
-user_org_roles        -- Rollen pro User pro Organisation
-person_profiles       -- Stammdaten (Name, Geburtsdatum, Adresse, Kontakte)
-person_photo_refs     -- Referenzen auf R2-verschlüsselte Fotos
-alert_rules           -- Eskalationsregeln pro Person oder Template
-notification_policies -- Kanäle (Push, E-Mail, SMS)
-audit_logs            -- Wer hat wann was gelesen/geändert/exportiert
-```
-
-### Sicherheit
-- **Row-Level Security (RLS):** Mandantentrennung, kein tenant-übergreifender Zugriff
-- **Encryption at Rest:** Neon-native Verschlüsselung
-- **Feld-Verschlüsselung (Phase 2):** Besonders sensible Felder (Geburtsdatum, Adresse) zusätzlich verschlüsselt
-- **Audit-Logs:** Jeder Lese-/Schreib-/Exportzugriff auf Personaldaten protokolliert
-
-## Pro: Gerätewechsel
-
-- **Pro-Watcher (Mitarbeiter):** Bekommt Personen via Dashboard zugewiesen. Neues Gerät = neu einloggen. Zuweisung ist server-seitig, kein QR nötig.
-- **Pro-Person:** Institution kann Re-Pairing über Dashboard auslösen. Kein Datenverlust.
-- Deutlich einfacher als bei Free, weil die Institution die Kontrolle hat.
-
-## Pro: DSGVO
-
-- Art. 9 DSGVO relevant (Gesundheitsdaten im weiteren Sinne) → **DSFA Pflicht**
-- AVV/DPA mit Cloudflare UND Neon
-- Löschkonzept: Crypto-Shredding für Fotos, CASCADE DELETE für Stammdaten
-- Betroffenenrechte: Auskunft, Berichtigung, Löschung, Einschränkung
-- Retention-Fristen pro Datentyp definieren
-- **Empfehlung:** Frühzeitig Datenschutzberater einbinden bevor Pro live geht
-
-## Pro: Dashboard
-
-- **Separates Projekt/Repo** (nicht im Worker-Monolith)
-- Frontend: React/Next.js (oder ähnlich)
-- Kommuniziert mit:
-  - Postgres direkt (Stammdaten, Rollen, Audit)
-  - Worker-API (Live-Status, Heartbeats aus D1)
-- Hosted: Cloudflare Pages oder Vercel
-
-## Pro: Offene Entscheidungen
-
-- [ ] Preisstruktur (pro Institution / pro Person / hybrid)
-- [ ] Dashboard-Framework (Next.js? Remix? SvelteKit?)
-- [ ] Benachrichtigungskanäle (Push + E-Mail + SMS + Telefonie?)
-- [ ] Retention-Fristen pro Datentyp
-- [ ] Umfang medizinischer Zusatzdaten im MVP
-- [ ] DSFA-Startzeitpunkt
-- [ ] Onboarding-Flow für Institutionen
-- [ ] Upgrade-Flow Free → Pro (Person in Org überführen)
+Die Details sind absichtlich ausgelagert:
+- Editionen und Produktgrenzen: `docs/PRICING_AND_EDITIONS.md`
+- Detaillierte Pro-Anforderungen: `docs/PRO_VERSION.md`
+- Bindende Entscheidungen: `docs/DECISIONS.md`
 
 ---
 ---
 
-# Gesamtübersicht: Schritt-für-Schritt-Roadmap
+# Ausführung und Tracking
 
-## Schritt 1: Free Web-UI fertigstellen
-**Ziel:** Stabile, sichere Web-App unter ibinda.app
+Die technische Zielarchitektur und die Phasen für Free/Pro stehen in diesem Dokument.
 
-- [ ] Auth-Middleware fixen: Device-Identifikation + Ownership (Phasen 2-3)
-- [ ] Heartbeat authentifizieren (Phase 2)
-- [ ] QR-Pairing mit Pairing-Tokens (Phasen 4, 6)
-- [ ] CORS + Security + Input-Validierung (Phase 5)
-- [ ] Gerätewechsel-Flow (Phase 7)
-- [ ] Cleanup verwaister Watch-Relations
-- [ ] Code aufteilen (2400-Zeilen-Monolith → saubere Module)
-- [ ] E2E-Tests im Browser (Person + Watcher Flow komplett durchspielen)
-
-## Schritt 2: Native App bauen (Capacitor)
-**Ziel:** iOS + Android App die die Web-UI wrapped
-
-- [ ] Capacitor-Projekt aufsetzen (`npm init @capacitor/app`)
-- [ ] Web-UI als Capacitor-App einbinden
-- [ ] Push Notifications: Capacitor Push Plugin statt Expo-Placeholder
-  - iOS: APNs Zertifikat einrichten
-  - Android: Firebase Cloud Messaging (FCM) einrichten
-  - Backend: Push-Endpunkt anpassen (APNs/FCM statt Expo)
-- [ ] IndexedDB/Crypto prüfen (WebView-Kompatibilität)
-- [ ] Splash Screen + App Icon
-- [ ] Deep Links (QR-Code öffnet direkt die App)
-- [ ] Lokales Testen auf echten Geräten (iOS Simulator + Android Emulator)
-
-## Schritt 3: App Store Vorbereitung
-**Ziel:** Alles was Apple/Google verlangen
-
-- [ ] Apple Developer Account (99 USD/Jahr)
-- [ ] Google Play Developer Account (25 USD einmalig)
-- [ ] Datenschutzerklärung schreiben (URL auf ibinda.app/privacy)
-- [ ] Impressum (gesetzlich vorgeschrieben in AT/DE)
-- [ ] App Store Listing: Screenshots, Beschreibung, Keywords
-- [ ] Privacy Nutrition Labels (Apple) ausfüllen
-- [ ] Data Safety Section (Google) ausfüllen
-- [ ] TestFlight (iOS Beta) + Internal Testing Track (Android Beta)
-
-## Schritt 4: Beta mit echten Usern
-**Ziel:** Feedback von Familie/Bekannten vor dem öffentlichen Release
-
-- [ ] 5-10 Beta-Tester (Familie, Bekannte) einladen
-- [ ] TestFlight (iOS) + Google Play Internal Testing
-- [ ] Feedback sammeln: UX, Zuverlässigkeit der Notifications, Pairing-Flow
-- [ ] Bugs fixen, UX verbessern
-- [ ] Overdue-Alarm in der Praxis testen (funktioniert die Notification wirklich?)
-- [ ] Gerätewechsel mit echtem User testen
-
-## Schritt 5: App Store Release (Free)
-**Ziel:** Kostenlos im App Store verfügbar
-
-- [ ] App Store Review einreichen (Apple: 1-3 Tage, Google: Stunden bis Tage)
-- [ ] Landing Page ibinda.app mit App Store Links
-- [ ] Grundlegendes Marketing (Social Media, Familie/Freunde teilen)
-- [ ] Monitoring aufsetzen (Crash-Reports, API-Fehlerquoten)
-- [ ] Support-Kanal (E-Mail oder einfaches Feedback-Formular)
-
-## Schritt 6: Free stabilisieren + wachsen lassen
-**Ziel:** Echte Nutzerbasis aufbauen, Stabilität beweisen
-
-- [ ] User-Feedback einarbeiten
-- [ ] Performance-Monitoring (D1-Auslastung, Worker-Invocations)
-- [ ] Notification-Zuverlässigkeit überwachen
-- [ ] Huawei AppGallery evaluieren (wenn Nachfrage)
-- [ ] Warten bis die App stabil läuft und echte Nutzer hat
-
-## Schritt 7: Pro Version angehen
-**Ziel:** B2B-Produkt für Institutionen
-
-- [ ] Postgres aufsetzen (Neon Frankfurt)
-- [ ] Org/User/Rollen-Schema + Row-Level Security
-- [ ] Dashboard-MVP (separates Repo): Login, Personenliste, Live-Status
-- [ ] Mitarbeiter-Device-Zuweisung über Dashboard
-- [ ] Stammdaten (Name, Adresse, Geburtsdatum, Kontakte)
-- [ ] Foto-Upload (R2 + Org-spezifische Verschlüsselung)
-- [ ] Eskalationsketten + Benachrichtigungsregeln
-- [ ] Audit-Logs + Reporting
-- [ ] DSGVO: DSFA, AVV mit allen Anbietern, Löschkonzept
-- [ ] Datenschutzberater einbinden
-
-## Schritt 8: Pro testen + verkaufen
-**Ziel:** Erste zahlende Institution
-
-- [ ] Pilot-Institution finden (Pflegeeinrichtung, betreutes Wohnen)
-- [ ] Pilot-Phase mit engem Feedback-Zyklus
-- [ ] Preismodell finalisieren
-- [ ] Vertragstexte (AVV, AGB, SLA)
-- [ ] Onboarding-Flow für neue Institutionen
-- [ ] Sales-Material (Demo, Pitch-Deck)
+Der aktuelle Arbeitsstand und die Reihenfolge der Umsetzung werden in `docs/TODOS.md` gepflegt, damit es nur eine operative Backlog-Quelle gibt.

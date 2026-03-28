@@ -1,72 +1,116 @@
-# IchBinDa 🛡️
+# iBinda
 
-Welfare-Check App für Senioren, Kinder oder Menschen, die Unterstützung brauchen.
+Welfare-Check-App fuer Senioren, Kinder oder Menschen, die Unterstuetzung brauchen.
+
+## Status
+
+- Nicht produktiv, Breaking Changes sind aktuell erlaubt
+- Free-Version laeuft als Cloudflare-Worker mit Web-UI
+- Native App ist spaeter als Capacitor-Verpackung der Web-UI geplant
 
 ## Konzept
 
-- **Pflegende Person** meldet sich regelmäßig per Button
-- **Betreuer** bekommen Push-Benachrichtigungen, wenn keine Meldung erfolgt
-- Anonymisiert: Nur UUIDs in der Cloud, keine Namen
+- Die betreute Person meldet sich regelmaessig per Button
+- Watcher bekommen Push-Benachrichtigungen, wenn keine Meldung erfolgt
+- In der Cloud liegen nur anonyme IDs, Heartbeats und technische Betriebsdaten
 
-## Tech Stack
+## Aktueller Stack
 
-- **Backend**: Cloudflare Workers + D1 (SQLite)
-- **Frontend**: Plain HTML/JS (später React Native App)
-- **Push**: Expo Push Notifications
-- **Cron**: Alle 5 Minuten Überfälligkeits-Check
+- Backend: Cloudflare Workers + Hono + TypeScript + D1
+- Frontend: Plain HTML/JS aus `src/index.ts`
+- Push: Expo Push Notifications
+- Native spaeter: Capacitor
 
-## Schnelleinstieg
+## Schnellstart
 
-### 1. Abhängigkeiten installieren
+### 1. Abhaengigkeiten installieren
+
 ```bash
 npm install
 ```
 
-### 2. D1 Datenbank erstellen
+### 2. D1-Datenbank erstellen
+
 ```bash
 npm run db:create
-# Datenbank-ID in wrangler.toml eintragen!
 ```
+
+Danach die ausgegebene `database_id` in `wrangler.toml` eintragen.
 
 ### 3. Schema anwenden
+
 ```bash
-npm run db:migrate
+npm run db:schema
 ```
 
-### 4. Expo Token (für Push)
+Lokales Schema fuer `wrangler dev`:
+
+```bash
+npm run db:schema:local
+```
+
+### 4. Secrets setzen
+
+Pflicht:
+
+```bash
+wrangler secret put TURNSTILE_SECRET_KEY
+```
+
+Optional fuer Push-Versand:
+
 ```bash
 wrangler secret put EXPO_ACCESS_TOKEN
-# Dein Expo Access Token hier eingeben
 ```
 
-### 5. Deploy
+### 5. Lokal starten
+
+```bash
+npm run dev
+```
+
+### 6. Deploy
+
 ```bash
 npm run deploy
 ```
 
-## API Endpoints
+## Verfuegbare Seiten
 
-| Endpoint | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/person` | POST | Neue Person erstellen |
-| `/heartbeat` | POST | Heartbeat senden |
-| `/person/:id` | GET | Status abfragen |
-| `/watcher` | POST | Betreuer registrieren |
-| `/watch` | POST | Person überwachen |
-| `/watcher/:id/persons` | GET | Alle Personen eines Betreuers |
+- Start: `/`
+- Person: `/person.html`
+- Watcher: `/watcher.html`
 
-## Web UI
+## Aktuelle API-Basis
 
-Nach dem Deploy:
-- **Pflegende**: `https://deine-domain.de/person.html`
-- **Betreuer**: `https://deine-domain.de/watcher.html`
+Alle API-Routen liegen unter `/api`.
 
-## Datenschutz
+Wichtige aktuell vorhandene Endpoints:
 
-- Keine personenbezogenen Daten in der Cloud
-- Nur UUIDs und Timestamps
-- Push-Tokens werden benötigt für Benachrichtigungen
+- `POST /api/auth/register-device`
+- `POST /api/person`
+- `POST /api/heartbeat`
+- `GET /api/person/:id`
+- `GET /api/person/:id/has-watcher`
+- `GET /api/person/:id/watchers`
+- `GET /api/person/:id/devices`
+- `POST /api/person/:id/devices`
+- `DELETE /api/person/:id/devices`
+- `POST /api/watcher`
+- `POST /api/watch`
+- `PUT /api/watch`
+- `DELETE /api/watch`
+- `GET /api/watcher/:id/persons`
 
-## Lizenz
+## Doku-Einstieg
 
-MIT
+- Projektuebersicht: `docs/PROJECT_FILES.md`
+- Aktueller Umsetzungsplan: `docs/MASTERPLAN.md`
+- Offene Arbeit: `docs/TODOS.md`
+- Entscheidungen: `docs/DECISIONS.md`
+- Konventionen: `docs/CONVENTIONS.md`
+
+## Hinweise
+
+- `db:migrate` fuehrt aktuell nur die vorhandene Incremental-Migration `001_watch_relations_soft_delete.sql` aus
+- Die geplante Pairing-Migration ist noch nicht umgesetzt

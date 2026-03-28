@@ -1,16 +1,16 @@
 {
-  "name": "sicherda",
+  "name": "ibinda",
   "version": "1.0.0",
   "scripts": {
     "dev": "npx wrangler dev",
     "deploy": "npx wrangler deploy",
 
-    "db:create": "npx wrangler d1 create sicherda-db",
-    "db:schema": "npx wrangler d1 execute sicherda-db --file=./schema.sql",
-    "db:schema:local": "npx wrangler d1 execute sicherda-db --file=./schema.sql --local",
+    "db:create": "npx wrangler d1 create dev-ibinda-db",
+    "db:schema": "npx wrangler d1 execute dev-ibinda-db --file=./schema.sql",
+    "db:schema:local": "npx wrangler d1 execute dev-ibinda-db --file=./schema.sql --local",
 
-    "db:migrate": "npx wrangler d1 execute sicherda-db --file=./migrations/001_watch_relations_soft_delete.sql",
-    "db:migrate:local": "npx wrangler d1 execute sicherda-db --file=./migrations/001_watch_relations_soft_delete.sql --local",
+    "db:migrate": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql",
+    "db:migrate:local": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql --local",
 
     "db:setup": "npm run db:create && npm run db:schema",
     "db:setup:local": "npm run db:schema:local"
