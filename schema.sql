@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS persons (
 -- Hinweis: push_token ist ein DB-Überbleibsel (NOT NULL, leer gesetzt), wird nicht mehr verwendet
 CREATE TABLE IF NOT EXISTS watchers (
   id TEXT PRIMARY KEY,
-  push_token TEXT NOT NULL DEFAULT ''
+  push_token TEXT NOT NULL DEFAULT '',
+  max_persons INTEGER NOT NULL DEFAULT 2
 );
 
 -- Geräte pro Watcher (Multi-Device Support)

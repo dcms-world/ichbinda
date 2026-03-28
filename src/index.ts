@@ -874,7 +874,7 @@ button:hover{background:#5a6fd6}
 <div class="card">
 <div class="add-header">
 <h3>➕ Person hinzufügen</h3>
-<span id="personCounter" class="person-counter">0/2 Personen</span>
+<span id="personCounter" class="person-counter">0/- Personen</span>
 </div>
 <div id="addPersonControls" class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
@@ -958,7 +958,7 @@ const PERSON_NAME_HISTORY_KEY = 'ibinda_person_name_history';
 const PERSON_PHOTOS_KEY = 'ibinda_person_photos';
 const WATCHED_PERSON_IDS_KEY = 'ibinda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'ibinda_hidden_person_ids';
-const MAX_WATCHED_PERSONS = 2;
+let MAX_WATCHED_PERSONS = 2;
 const PERSON_LIMIT_ALERT_TEXT = 'Maximal 2 Personen können überwacht werden.';
 const INTERVALS = [
   { min: 1, label: '1 Min' },
@@ -1416,6 +1416,9 @@ async function init() {
     localStorage.setItem('ibinda_watcher_id', data.id);
   }
   await announceWatcherName();
+  const watcherMeta = await fetch(API_URL + '/watcher/' + getWatcherId()).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (watcherMeta?.max_persons) MAX_WATCHED_PERSONS = watcherMeta.max_persons;
+  updatePersonLimitUi();
   loadPersons();
 }
 
@@ -2497,6 +2500,21 @@ app.delete('/api/watch', async (c) => {
     `UPDATE watch_relations SET removed_at = datetime('now') WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
   ).bind(person_id, watcher_id).run();
   return c.json({ success: true });
+});
+
+// API: Watcher-Metadaten (inkl. Personen-Limit)
+app.get('/api/watcher/:id', async (c) => {
+  const watcherId = c.req.param('id');
+  const deviceId = c.get('deviceId');
+  const owns = await c.env.DB.prepare(
+    'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+  ).bind(watcherId, deviceId).first();
+  if (!owns) return c.json({ error: 'Forbidden' }, 403);
+  const watcher = await c.env.DB.prepare(
+    'SELECT id, max_persons FROM watchers WHERE id = ?'
+  ).bind(watcherId).first<{ id: string; max_persons: number }>();
+  if (!watcher) return c.json({ error: 'Not found' }, 404);
+  return c.json(watcher);
 });
 
 // API: Alle überwachten Personen eines Betreuers (Intervall in Minuten)
