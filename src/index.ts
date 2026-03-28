@@ -552,7 +552,7 @@ function getOrCreateDeviceId(){const existing=(localStorage.getItem(DEVICE_ID_KE
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,(char)=>{if(char==='&')return'&amp;';if(char==='<')return'&lt;';if(char==='>')return'&gt;';if(char==='"')return'&quot;';return'&#39;'})}
 function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time))return 'Unbekannt';return new Date(time).toLocaleString('de-DE')}
 
-async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
+async function createPerson(existingPersonId){const options={method:'POST'};if(existingPersonId){options.headers={'Content-Type':'application/json'};options.body=JSON.stringify({id:existingPersonId})}const res=await fetch(API_URL+'/person',options);if(!res.ok)throw new Error('Person init failed: '+res.status);const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
 
 function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName||getPersonName()})}
 let qrCopyStatusTimeout=null;
@@ -582,7 +582,7 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{await fetch(API_URL+'/person',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:personId})}).catch(()=>{})}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID unusable, creating new person',error);personId=await createPerson()}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId)}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -2189,7 +2189,10 @@ app.post('/api/person', async (c) => {
   try {
     const body = await c.req.json<{ id?: string }>().catch((): { id?: string } => ({}));
     const providedId = typeof body.id === 'string' ? body.id.trim() : '';
-    const personId = (providedId && isValidUUID(providedId)) ? providedId : crypto.randomUUID();
+    if (providedId && !isValidUUID(providedId)) {
+      return c.json({ error: 'Ungültige person_id' }, 400);
+    }
+    const personId = providedId || crypto.randomUUID();
     const deviceId = c.get('deviceId');
 
     await ensurePersonDevicesTable(c.env.DB);

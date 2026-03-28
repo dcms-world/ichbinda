@@ -17,6 +17,7 @@ WATCHER_DEVICE_ID="${WATCHER_DEVICE_ID:-test-watcher-device}"
 PERSON_KEY_HASH="186582d521edf14917d097fb50b4898ae384ac5d6c5732ab1c1579a179344ea0"
 WATCHER_KEY_HASH="931132119d780e554aa848330588b9faa7e1759d0c454a2fe2c91c86b4ac18d5"
 PERSON_ID="${PERSON_ID:-$(node -e "console.log(crypto.randomUUID())")}"
+REGISTER_DEVICE_ID="smoke-register-$(node -e "console.log(crypto.randomUUID())")"
 
 TMP_DIR="$(mktemp -d)"
 export XDG_CONFIG_HOME="$TMP_DIR/xdg-config"
@@ -166,7 +167,11 @@ expect_status "GET /watcher.html" "200" "$status" "$BODY_FILE"
 status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json')"
 expect_status "POST /api/person ohne Auth" "401" "$status" "$BODY_FILE"
 
-status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"smoke-register-person\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json')"
+status="$(request POST "$WORKER_URL/api/person" '{"id":"not-a-uuid"}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person mit ungueltiger id" "400" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person mit ungueltiger id" "$BODY_FILE" '"error":"Ungültige person_id"'
+
+status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${REGISTER_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json')"
 expect_status "POST /api/auth/register-device lokal mit Test-Token" "201" "$status" "$BODY_FILE"
 
 status="$(request POST "$WORKER_URL/api/person" "{\"id\":\"${PERSON_ID}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
