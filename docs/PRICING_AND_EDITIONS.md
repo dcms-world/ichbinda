@@ -22,7 +22,7 @@ iBinda wird als zweistufiges Produkt geführt:
 **Preis:** kostenlos
 
 **Rahmen:**
-- pro Watcher standardmäßig eine beobachtete Person
+- pro Watcher maximal 2 beobachtete Personen (`watchers.max_persons = 2`)
 - eine Person kann von mehreren Watchern beobachtet werden
 - nur Basisfunktionen
 
@@ -40,7 +40,7 @@ iBinda wird als zweistufiges Produkt geführt:
 **Preis:** kostenpflichtig
 
 **Merkmale:**
-- mehrere betreute Personen
+- höheres Personen-Limit pro Watcher (`max_persons > 2`, per DB-Feld konfigurierbar)
 - mehrere Watcher und Teamstrukturen
 - eigenes Dashboard mit Login
 - Rollen und Berechtigungen

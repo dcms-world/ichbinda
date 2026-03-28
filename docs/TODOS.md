@@ -27,14 +27,14 @@ Referenzen:
 - [x] Auth-Middleware setzt `deviceId` + `role` in Hono-Context
 - [x] `/api/heartbeat` durch Auth-Middleware schicken — **Security #2**
 - [x] Heartbeat: Ownership-Check `device_id → person_devices → person_id`
+- [ ] Device-Registrierung gegen fremde `device_id`-Übernahme härten — **Security #26**
 
 ### Phase 3: Ownership-Checks
 - [x] `deviceOwnsPerson()` implementiert — **Security #3, #8**
 - [x] Ownership auf allen Person-Endpoints — **Security #3, #8**
 - [x] `POST /api/person` legt automatisch Ownership-Bindung an
-- [ ] `deviceOwnsWatcher()` — braucht `device_keys.watcher_id` (Phase 1 DB-Migration) — **Security #3, #7**
-- [ ] Ownership auf Watcher-Endpoints — **Security #7**
-- [ ] `POST /api/watcher` → `watcher_id` in `device_keys` setzen
+- [x] Ownership auf Watcher-Endpoints — **Security #3, #7** — direkter `watcher_devices`-Check (kein separates `deviceOwnsWatcher()` nötig)
+- [ ] `POST /api/watcher` → `watcher_id` in `device_keys` setzen (für zukünftigen Role-Check)
 
 ### Phase 4: Pairing-Endpoints
 - [ ] `POST /api/pair/create` — Person erstellt Pairing-Token
@@ -49,7 +49,7 @@ Referenzen:
 - [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 (Person-Ownership) am 2026-03-28 implementiert und deployed. `lookupApiKey()` gibt Device-Info zurück, Auth-Middleware setzt Context, `deviceOwnsPerson()` auf allen Person-Endpoints. Watcher-Ownership wartet auf DB-Migration (Phase 1). Offene Kernpunkte: Security #3 (Watcher-Teil), #4, #5, #7, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). Neues Audit-Finding #26: `register-device` erlaubt Übernahme fremder `device_id`s — vor produktiver Nutzung härten. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13, #26.
 - **Erledigt am:** -
 
 ---

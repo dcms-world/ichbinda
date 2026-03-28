@@ -19,6 +19,20 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### `max_persons` pro Watcher in DB statt hardcoded
+- **Datum:** 2026-03-28
+- **Entschieden von:** User + Agent
+- **Begründung:** Das Personen-Limit pro Watcher (`watchers.max_persons`, Default 2) wird in der DB gespeichert statt im Frontend hardcoded. Damit kann es pro Watcher individuell gesetzt werden — z.B. für eine spätere Pro-Version, wo mehr überwachte Personen als kostenpflichtiges Feature verkauft werden. Free bleibt bei 2, Pro kann höhere Limits bekommen ohne Code-Änderung.
+- **Alternativen verworfen:** Hardcoded-Konstante im Frontend — nicht upgrade-fähig; serverseitiger Config-Wert — nicht pro-Watcher granular genug.
+- **Konsequenz:** `POST /api/watcher/:id/persons`-Limit-Check liest `max_persons` aus DB. Frontend rendert den Limit-Text dynamisch aus dem API-Response. Migration: `004_watcher_max_persons.sql`.
+
+### Watcher-Ownership direkt via `watcher_devices` statt `device_keys.watcher_id`
+- **Datum:** 2026-03-28
+- **Entschieden von:** Agent (Codex)
+- **Begründung:** Ownership-Check auf Watcher-Endpoints läuft über `SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?` — keine zusätzliche Spalte in `device_keys` nötig. `watcher_devices` ist bereits vorhanden und enthält die Gerät-Watcher-Zuordnung.
+- **Alternativen verworfen:** `device_keys.watcher_id`-Spalte (ursprünglich geplant in Phase 1) — unnötige DB-Migration, da `watcher_devices` denselben Check ermöglicht.
+- **Konsequenz:** Phase 1 DB-Migration (nur `watcher_id`-Spalte in `device_keys`) entfällt. `POST /api/watcher` setzt noch kein `watcher_id` in `device_keys` — vorerst kein Blocker, da Ownership über `watcher_devices` läuft.
+
 ### API-Key statt ECDSA Public/Private Key für Device-Auth
 - **Datum:** 2026-03-28 (bestätigt nach erneuter Prüfung)
 - **Entschieden von:** User + Claude (gemeinsam)

@@ -17,13 +17,16 @@ Status: offen
   `/api/heartbeat` geht ebenfalls durch die Auth-Middleware.
   `lookupApiKey()` gibt jetzt `{ device_id, role }` zurück, Middleware setzt `deviceId` + `role` im Hono-Context.
 
-- [~] **3. Keine Autorisierung / IDOR auf allen Endpoints**
+- [ ] **26. Device-ID-Übernahme über `register-device`**
+  `POST /api/auth/register-device` akzeptiert eine frei gewählte `device_id` vom Client und schreibt sie per `INSERT OR REPLACE` direkt in `device_keys`.
+  Alle Ownership-Prüfungen basieren danach nur noch auf dieser `device_id` (`person_devices` / `watcher_devices`).
+  Wenn ein Angreifer eine fremde `device_id` kennt oder errät, kann er sie neu registrieren, erhält einen gültigen API-Key für genau dieses Gerät und übernimmt damit dessen Berechtigungen.
+  Auswirkungen: Personen-/Watcher-Daten lesen, Geräte verwalten, Watch-Relations indirekt beeinflussen und den legitimen Schlüssel faktisch verdrängen.
+  Fix: `device_id` serverseitig ausstellen oder bestehende Gerätebindungen nur nach zusätzlichem Besitznachweis/Transfer-Flow neu binden; kein blindes `INSERT OR REPLACE` auf produktive Geräte-Identitäten.
+
+- [x] **3. Keine Autorisierung / IDOR auf allen Endpoints**
   **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
-  **Watcher-Endpoints: noch offen.** Braucht `device_keys.watcher_id`-Spalte (Phase 1 DB-Migration). Betrifft:
-  - `POST /api/watch` – sich als Watcher für beliebige Personen eintragen
-  - `PUT /api/watch` – Intervalle fremder Relations ändern
-  - `DELETE /api/watch` – Watch-Relations anderer löschen
-  - `GET /api/watcher/:id/persons` – Daten + Standort aller Personen eines fremden Watchers sehen
+  **Watcher-Endpoints: behoben (2026-03-28).** Direkter `watcher_devices`-Check auf allen betroffenen Endpoints (kein `device_keys.watcher_id` nötig). `POST/PUT/DELETE /api/watch` und `GET /api/watcher/:id/persons` prüfen via `SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?` und geben 403 bei fehlendem Ownership.
 
 - [ ] **4. CORS `origin: '*'`**
   Jede Website kann die API aufrufen.
@@ -161,8 +164,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 4      | 1 (+1 teilw.) |
+| Kritisch    | 5      | 2             |
 | Hoch        | 7      | 5             |
 | Mittel      | 7      | 7             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **25** | **20 (+1 teilw.)** |
+| **Gesamt**  | **26** | **21**        |
