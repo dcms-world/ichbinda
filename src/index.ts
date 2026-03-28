@@ -835,6 +835,15 @@ button:hover{background:#5a6fd6}
   .edit-actions{flex-direction:column-reverse}
   .edit-actions button{width:100%}
 }
+.name-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;backdrop-filter:blur(4px)}
+.name-modal-overlay.open{display:flex}
+.name-modal{background:#fff;border-radius:14px;padding:24px;width:100%;max-width:320px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+.name-modal h2{font-size:20px;font-weight:700;margin-bottom:8px}
+.name-modal p{font-size:15px;color:#666;margin-bottom:20px}
+.name-modal input{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:10px;font-size:17px;margin-bottom:16px;box-sizing:border-box}
+.name-modal button{width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer}
+.watcher-name{color:#475467;font-size:14px;margin-top:2px;cursor:pointer;display:inline-block}
+.watcher-name:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -847,9 +856,18 @@ button:hover{background:#5a6fd6}
 <p id="authStatus" style="margin-top:16px;color:#ef4444;font-size:14px;min-height:20px"></p>
 </div>
 </div>
+<div class="name-modal-overlay" id="nameModalOverlay">
+<form class="name-modal" id="nameModalForm" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
+<h2 id="nameModalTitle">Wie heißt du?</h2>
+<p>Bitte gib deinen Namen ein.</p>
+<input id="watcherNameInput" type="text" maxlength="80" placeholder="z.B. Max Mustermann" required>
+<button type="submit">Speichern</button>
+</form>
+</div>
 <div class="container">
 <h1>👀 I bin da – Betreuer</h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
+<p><span id="watcherNameDisplay" class="watcher-name" onclick="askForWatcherName()" title="Namen ändern">-</span></p>
 <div class="card">
 <div class="add-header">
 <h3>➕ Person hinzufügen</h3>
@@ -958,6 +976,13 @@ let currentPersonCount = 0;
 function getWatcherId() {
   return localStorage.getItem('ibinda_watcher_id');
 }
+
+const WATCHER_NAME_KEY = 'ibinda_watcher_name';
+function getWatcherName(){return(localStorage.getItem(WATCHER_NAME_KEY)||'').trim()}
+function setWatcherName(name){localStorage.setItem(WATCHER_NAME_KEY,name)}
+function renderWatcherName(){const el=document.getElementById('watcherNameDisplay');if(el)el.textContent=getWatcherName()||'Name eingeben'}
+function askForWatcherName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('watcherNameInput');input.value=getWatcherName()||'';overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setWatcherName(name);overlay.classList.remove('open');renderWatcherName();resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
+async function ensureWatcherName(){const savedName=getWatcherName();if(savedName)return savedName;return askForWatcherName()}
 
 function getStoredList(key) {
   try {
@@ -1375,6 +1400,8 @@ document.addEventListener('keydown', (event) => {
 
 async function init() {
   await ensureRegistered();
+  await ensureWatcherName();
+  renderWatcherName();
   updatePersonLimitUi();
   if (!getWatcherId()) {
     const res = await fetch(API_URL + '/watcher', {
