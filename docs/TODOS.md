@@ -27,7 +27,8 @@ Referenzen:
 - [x] Auth-Middleware setzt `deviceId` + `role` in Hono-Context
 - [x] `/api/heartbeat` durch Auth-Middleware schicken — **Security #2**
 - [x] Heartbeat: Ownership-Check `device_id → person_devices → person_id`
-- [ ] Device-Registrierung gegen fremde `device_id`-Übernahme härten — **Security #26**
+- [x] Device-Registrierung gegen fremde `device_id`-Übernahme härten — **Security #26**
+- [ ] Live verifizieren: `register-device` blockiert fremde bestehende `device_id` mit `409` bei gültigem Turnstile-Token
 
 ### Phase 3: Ownership-Checks
 - [x] `deviceOwnsPerson()` implementiert — **Security #3, #8**
@@ -49,7 +50,7 @@ Referenzen:
 - [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). Neues Audit-Finding #26: `register-device` erlaubt Übernahme fremder `device_id`s — vor produktiver Nutzung härten. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13, #26.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13.
 - **Erledigt am:** -
 
 ---

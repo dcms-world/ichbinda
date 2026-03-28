@@ -1726,6 +1726,38 @@ async function lookupApiKey(db: D1Database, apiKey: string): Promise<{ device_id
   return row ?? null;
 }
 
+// Reuse the same API key lookup logic for middleware and controlled key rotation.
+async function lookupRequestDevice(
+  db: D1Database,
+  cookieHeader: string | undefined,
+  authHeader: string | undefined,
+  preferredRole: 'person' | 'watcher'
+): Promise<{ device_id: string; role: string } | null> {
+  const cookies: Record<string, string> = {};
+  for (const part of (cookieHeader ?? '').split(';')) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx === -1) continue;
+    cookies[part.slice(0, eqIdx).trim()] = part.slice(eqIdx + 1).trim();
+  }
+
+  const primaryCookie = preferredRole === 'watcher' ? 'api_key_watcher' : 'api_key_person';
+  const secondaryCookie = preferredRole === 'watcher' ? 'api_key_person' : 'api_key_watcher';
+  const cookiesToTry = [primaryCookie, secondaryCookie, 'api_key'];
+
+  for (const name of cookiesToTry) {
+    const value = cookies[name];
+    if (!value) continue;
+    const device = await lookupApiKey(db, value);
+    if (device) return device;
+  }
+
+  if (authHeader?.startsWith('Bearer ')) {
+    return await lookupApiKey(db, authHeader.slice(7));
+  }
+
+  return null;
+}
+
 // Security: Check rate limit per device (max 1 per 5 minutes)
 async function checkRateLimit(
   db: D1Database,
@@ -2048,40 +2080,16 @@ app.use('/api/*', async (c, next) => {
     c.set('role', device.role);
   };
 
-  // Cookie (Web/PWA) — prüfe role-spezifische und Legacy-Cookies
-  const cookieStr = c.req.header('Cookie') ?? '';
-  const cookies: Record<string, string> = {};
-  for (const part of cookieStr.split(';')) {
-    const eqIdx = part.indexOf('=');
-    if (eqIdx === -1) continue;
-    cookies[part.slice(0, eqIdx).trim()] = part.slice(eqIdx + 1).trim();
-  }
-
-  // Bestimme passenden Cookie anhand des Request-Pfads
   const isWatcherRoute = c.req.path.startsWith('/api/watcher') || c.req.path.startsWith('/api/watch');
-  const preferredCookie = isWatcherRoute ? 'api_key_watcher' : 'api_key_person';
-  const cookiesToTry = [preferredCookie, 'api_key'];
-
-  for (const name of cookiesToTry) {
-    const value = cookies[name];
-    if (value) {
-      const device = await lookupApiKey(c.env.DB, value);
-      if (device) {
-        setDeviceContext(device);
-        return await next();
-      }
-    }
-  }
-
-  // Bearer Token (Native App)
-  const authHeader = c.req.header('Authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const apiKey = authHeader.slice(7);
-    const device = await lookupApiKey(c.env.DB, apiKey);
-    if (device) {
-      setDeviceContext(device);
-      return await next();
-    }
+  const device = await lookupRequestDevice(
+    c.env.DB,
+    c.req.header('Cookie'),
+    c.req.header('Authorization'),
+    isWatcherRoute ? 'watcher' : 'person'
+  );
+  if (device) {
+    setDeviceContext(device);
+    return await next();
   }
 
   return c.json({ error: 'Unauthorized' }, 401);
@@ -2097,17 +2105,46 @@ app.post('/api/auth/register-device', async (c) => {
     if (!device_id || !turnstile_token) {
       return c.json({ error: 'device_id und turnstile_token erforderlich' }, 400);
     }
+    if (device_id.length > 255) {
+      return c.json({ error: 'device_id zu lang' }, 400);
+    }
 
     const valid = await verifyTurnstileToken(turnstile_token, c.env.TURNSTILE_SECRET_KEY);
     if (!valid) {
       return c.json({ error: 'Bot-Check fehlgeschlagen' }, 400);
     }
 
+    const existingDevice = await c.env.DB.prepare(
+      'SELECT role FROM device_keys WHERE device_id = ?1'
+    ).bind(device_id).first<{ role: string }>();
+
+    if (existingDevice) {
+      const authenticatedDevice = await lookupRequestDevice(
+        c.env.DB,
+        c.req.header('Cookie'),
+        c.req.header('Authorization'),
+        role
+      );
+
+      if (authenticatedDevice?.device_id !== device_id) {
+        return c.json({ error: 'device_id bereits registriert' }, 409);
+      }
+
+      if (existingDevice.role !== role) {
+        return c.json({ error: 'device_id ist bereits einer anderen Rolle zugeordnet' }, 409);
+      }
+    }
+
     const apiKey = crypto.randomUUID() + '-' + crypto.randomUUID();
     const keyHash = await hashApiKey(apiKey);
 
     await c.env.DB.prepare(
-      'INSERT OR REPLACE INTO device_keys (device_id, key_hash, created_at, role) VALUES (?1, ?2, ?3, ?4)'
+      `INSERT INTO device_keys (device_id, key_hash, created_at, role)
+       VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT(device_id) DO UPDATE SET
+         key_hash = excluded.key_hash,
+         created_at = excluded.created_at,
+         role = excluded.role`
     ).bind(device_id, keyHash, new Date().toISOString(), role).run();
 
     const cookieMaxAge = 60 * 60 * 24 * 365; // 1 Jahr

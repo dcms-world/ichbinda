@@ -17,12 +17,11 @@ Status: offen
   `/api/heartbeat` geht ebenfalls durch die Auth-Middleware.
   `lookupApiKey()` gibt jetzt `{ device_id, role }` zurück, Middleware setzt `deviceId` + `role` im Hono-Context.
 
-- [ ] **26. Device-ID-Übernahme über `register-device`**
-  `POST /api/auth/register-device` akzeptiert eine frei gewählte `device_id` vom Client und schreibt sie per `INSERT OR REPLACE` direkt in `device_keys`.
-  Alle Ownership-Prüfungen basieren danach nur noch auf dieser `device_id` (`person_devices` / `watcher_devices`).
-  Wenn ein Angreifer eine fremde `device_id` kennt oder errät, kann er sie neu registrieren, erhält einen gültigen API-Key für genau dieses Gerät und übernimmt damit dessen Berechtigungen.
-  Auswirkungen: Personen-/Watcher-Daten lesen, Geräte verwalten, Watch-Relations indirekt beeinflussen und den legitimen Schlüssel faktisch verdrängen.
-  Fix: `device_id` serverseitig ausstellen oder bestehende Gerätebindungen nur nach zusätzlichem Besitznachweis/Transfer-Flow neu binden; kein blindes `INSERT OR REPLACE` auf produktive Geräte-Identitäten.
+- [x] **26. Device-ID-Übernahme über `register-device`**
+  `POST /api/auth/register-device` überschreibt bestehende `device_id`s nicht mehr blind.
+  Re-Registration/Key-Rotation ist nur noch erlaubt, wenn im Request bereits ein gültiger API-Key genau dieses Geräts mitgeschickt wird.
+  Fremde `device_id`s liefern jetzt `409` statt ein bestehendes Gerät zu übernehmen.
+  Rest-Risiko: Verliert ein Gerät seinen API-Key komplett, gibt es aktuell keinen Recovery-/Transfer-Flow; das ist funktional unschön, aber keine Übernahme-Lücke mehr.
 
 - [x] **3. Keine Autorisierung / IDOR auf allen Endpoints**
   **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
@@ -164,8 +163,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 5      | 2             |
+| Kritisch    | 5      | 1             |
 | Hoch        | 7      | 5             |
 | Mittel      | 7      | 7             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **21**        |
+| **Gesamt**  | **26** | **20**        |
