@@ -19,6 +19,13 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### CORS strikt auf Same-Host, lokales Dev und Capacitor-Origins begrenzen
+- **Datum:** 2026-03-28
+- **Entschieden von:** User + Agent
+- **Begründung:** Die Web-UI und API laufen im Browser typischerweise auf derselben Origin. Fuer spaetere Native-Apps mit Capacitor muessen zusaetzlich die WebView-Origins `capacitor://localhost` und `https://localhost` erlaubt werden. Eine pauschale Freigabe ganzer Wildcard-Domains wie `*.workers.dev` oder `*.ibinda.app` waere unnoetig weit und oeffnet die API fuer fremde Frontends auf denselben Domainfamilien.
+- **Alternativen verworfen:** `origin: '*'` — unsicher mit Bearer-Token-Auth; globale Wildcards fuer `*.johann.zehner.workers.dev` oder `*.ibinda.app` — zu breit; rein auf feste Produktionsdomains begrenzen — blockiert lokale Entwicklung und Capacitor.
+- **Konsequenz:** Die API erlaubt nur Requests vom aktuellen Host, lokalen Dev-Origins und den definierten Capacitor-Origins. Fremde Requests mit `Origin`-Header werden mit `403` abgelehnt. Native Clients ohne `Origin`-Header bleiben moeglich und sollen perspektivisch Bearer-Auth nutzen.
+
 ### `max_persons` pro Watcher in DB statt hardcoded
 - **Datum:** 2026-03-28
 - **Entschieden von:** User + Agent

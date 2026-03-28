@@ -27,10 +27,12 @@ Status: offen
   **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
   **Watcher-Endpoints: behoben (2026-03-28).** Direkter `watcher_devices`-Check auf allen betroffenen Endpoints (kein `device_keys.watcher_id` nötig). `POST/PUT/DELETE /api/watch` und `GET /api/watcher/:id/persons` prüfen via `SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?` und geben 403 bei fehlendem Ownership.
 
-- [ ] **4. CORS `origin: '*'`**
-  Jede Website kann die API aufrufen.
-  In Kombination mit Bearer-Token-Auth können fremde Websites API-Requests auslösen.
-  Origin auf die eigene Domain beschränken (z.B. `origin: 'https://ibinda.app'`).
+- [x] **4. CORS `origin: '*'`**
+  API akzeptiert jetzt nur noch erlaubte Origins:
+  - gleicher Host wie der aktuelle Request
+  - lokale Dev-Origins (`http://localhost`, `http://127.0.0.1`, `https://localhost`)
+  - spätere Capacitor-Origins (`capacitor://localhost`, `https://localhost`)
+  Requests mit fremdem `Origin`-Header werden mit `403` blockiert.
 
 ---
 
@@ -165,8 +167,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 5      | 1             |
+| Kritisch    | 5      | 0             |
 | Hoch        | 7      | 5             |
 | Mittel      | 7      | 7             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **20**        |
+| **Gesamt**  | **26** | **19**        |

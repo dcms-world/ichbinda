@@ -66,6 +66,7 @@ wrangler secret put EXPO_ACCESS_TOKEN
 Hinweis fuer lokale Entwicklung:
 - `localhost` nutzt automatisch die offiziellen Cloudflare-Turnstile-Testwerte.
 - `POST /api/auth/register-device` laesst sich lokal mit `XXXX.DUMMY.TOKEN.XXXX` testen.
+- API-CORS erlaubt nur denselben Host, lokales Dev und spaetere Capacitor-Origins (`capacitor://localhost`, `https://localhost`).
 
 ### 5. Lokal starten
 

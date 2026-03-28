@@ -63,6 +63,21 @@ request() {
   fi
 }
 
+request_with_headers() {
+  local method="$1"
+  local url="$2"
+  local body="$3"
+  local body_file="$4"
+  local headers_file="$5"
+  shift 5
+
+  if [[ -n "$body" ]]; then
+    curl -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' -X "$method" "$url" "$@" --data "$body"
+  else
+    curl -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' -X "$method" "$url" "$@"
+  fi
+}
+
 expect_status() {
   local label="$1"
   local expected="$2"
@@ -92,6 +107,21 @@ expect_body_contains() {
   fi
 
   printf 'PASS: %s contains %s\n' "$label" "$expected"
+}
+
+expect_headers_contains() {
+  local label="$1"
+  local headers_file="$2"
+  local expected="$3"
+
+  if ! grep -Fiq "$expected" "$headers_file"; then
+    printf 'FAIL: %s headers do not contain %s\n' "$label" "$expected" >&2
+    printf 'Headers:\n' >&2
+    cat "$headers_file" >&2
+    exit 1
+  fi
+
+  printf 'PASS: %s headers contain %s\n' "$label" "$expected"
 }
 
 json_field() {
@@ -154,6 +184,7 @@ run_local_d1 --command "
 start_worker
 
 BODY_FILE="$TMP_DIR/response.json"
+HEADERS_FILE="$TMP_DIR/headers.txt"
 
 status="$(request GET "$WORKER_URL/" "" "$BODY_FILE")"
 expect_status "GET /" "200" "$status" "$BODY_FILE"
@@ -173,6 +204,18 @@ expect_body_contains "POST /api/person mit ungueltiger id" "$BODY_FILE" '"error"
 
 status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${REGISTER_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json')"
 expect_status "POST /api/auth/register-device lokal mit Test-Token" "201" "$status" "$BODY_FILE"
+
+status="$(request_with_headers OPTIONS "$WORKER_URL/api/auth/register-device" "" "$BODY_FILE" "$HEADERS_FILE" -H 'Origin: http://127.0.0.1:8787' -H 'Access-Control-Request-Method: POST')"
+expect_status "OPTIONS /api/auth/register-device mit lokalem Origin" "204" "$status" "$BODY_FILE"
+expect_headers_contains "OPTIONS /api/auth/register-device mit lokalem Origin" "$HEADERS_FILE" 'Access-Control-Allow-Origin: http://127.0.0.1:8787'
+
+status="$(request_with_headers OPTIONS "$WORKER_URL/api/auth/register-device" "" "$BODY_FILE" "$HEADERS_FILE" -H 'Origin: capacitor://localhost' -H 'Access-Control-Request-Method: POST')"
+expect_status "OPTIONS /api/auth/register-device mit Capacitor-Origin" "204" "$status" "$BODY_FILE"
+expect_headers_contains "OPTIONS /api/auth/register-device mit Capacitor-Origin" "$HEADERS_FILE" 'Access-Control-Allow-Origin: capacitor://localhost'
+
+status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"smoke-blocked-origin\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H 'Origin: https://evil.example')"
+expect_status "POST /api/auth/register-device mit fremdem Origin" "403" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/auth/register-device mit fremdem Origin" "$BODY_FILE" '"error":"Origin not allowed"'
 
 status="$(request POST "$WORKER_URL/api/person" "{\"id\":\"${PERSON_ID}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "POST /api/person mit Person-Key" "201" "$status" "$BODY_FILE"

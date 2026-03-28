@@ -193,7 +193,11 @@ DELETE FROM pairing_requests WHERE created_at < datetime('now', '-10 minutes');
 
 ### CORS einschränken:
 ```typescript
-origin: ['https://ibinda.app', 'https://www.ibinda.app']
+erlaubte Origins:
+- gleicher Host wie der aktuelle Request
+- lokales Dev: `http://localhost`, `http://127.0.0.1`, `https://localhost`
+- Capacitor: `capacitor://localhost`, `https://localhost`
+- fremde Origins mit `Origin`-Header aktiv mit `403` blockieren
 ```
 
 ### `createDeviceId()` Fallback fixen (Zeile 550):

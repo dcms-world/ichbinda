@@ -1,5 +1,4 @@
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
+import { Hono, type Context } from 'hono';
 
 // HTML Templates (embedded for Cloudflare Worker)
 const PERSON_HTML = `<!DOCTYPE html>
@@ -1725,6 +1724,13 @@ const MAX_DISPLAY_NAME_LENGTH = 35;
 const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
 const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+const API_CORS_ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
+const API_CORS_ALLOW_HEADERS = 'Content-Type, Authorization';
+const CAPACITOR_ALLOWED_ORIGINS = new Set([
+  'capacitor://localhost',
+  'https://localhost',
+  'http://localhost',
+]);
 
 // Security: Constant-time string comparison to prevent timing attacks
 function constantTimeEquals(left: string, right: string): boolean {
@@ -1777,6 +1783,41 @@ function isLocalRequest(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isLocalCorsOrigin(url: URL): boolean {
+  const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  return isLocalHost && (url.protocol === 'http:' || url.protocol === 'https:');
+}
+
+function resolveAllowedCorsOrigin(origin: string | undefined, requestUrl: string): string | null {
+  if (!origin) return null;
+  if (CAPACITOR_ALLOWED_ORIGINS.has(origin)) return origin;
+
+  try {
+    const originUrl = new URL(origin);
+    const requestOrigin = new URL(requestUrl).origin;
+
+    if (isLocalCorsOrigin(originUrl)) {
+      return origin;
+    }
+
+    if (originUrl.origin === requestOrigin) {
+      return origin;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function applyCorsHeaders(c: Context, origin: string): void {
+  c.header('Access-Control-Allow-Origin', origin);
+  c.header('Access-Control-Allow-Credentials', 'true');
+  c.header('Access-Control-Allow-Methods', API_CORS_ALLOW_METHODS);
+  c.header('Access-Control-Allow-Headers', API_CORS_ALLOW_HEADERS);
+  c.header('Vary', 'Origin');
 }
 
 function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string): string {
@@ -2149,8 +2190,28 @@ h1{
 app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
 app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
 
-// API routes with CORS
-app.use('/api/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
+// API routes with strict Origin allowlist for web, local dev and Capacitor.
+app.use('/api/*', async (c, next) => {
+  const requestOrigin = c.req.header('Origin');
+  const allowedOrigin = resolveAllowedCorsOrigin(requestOrigin, c.req.url);
+
+  if (requestOrigin && !allowedOrigin) {
+    return c.json({ error: 'Origin not allowed' }, 403);
+  }
+
+  if (c.req.method === 'OPTIONS') {
+    if (allowedOrigin) {
+      applyCorsHeaders(c, allowedOrigin);
+    }
+    return c.body(null, 204);
+  }
+
+  await next();
+
+  if (allowedOrigin) {
+    applyCorsHeaders(c, allowedOrigin);
+  }
+});
 
 // Auth-Middleware – alle /api/* Routen außer /api/auth/register-device
 app.use('/api/*', async (c, next) => {
