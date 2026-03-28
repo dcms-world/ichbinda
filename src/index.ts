@@ -885,7 +885,10 @@ button:hover{background:#5a6fd6}
 <small id="addPersonScanHint" class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
 </div>
 <div class="card">
-<h3 style="margin-bottom:15px">📋 Meine Personen</h3>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px">
+<h3 style="margin:0">📋 Meine Personen</h3>
+<button onclick="loadPersons()" style="background:none;border:1px solid #d0d5dd;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;color:#475467">↻ Aktualisieren</button>
+</div>
 <ul class="person-list" id="personList">
 <li class="empty-state">Noch keine Personen.</li>
 </ul>
