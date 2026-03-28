@@ -48,9 +48,12 @@ Referenzen:
 - [ ] `createDeviceId()` Fallback fixen — **Security #5**
 - [ ] `details: String(e)` aus Error-Responses entfernen — **Security #10**
 - [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
+- [ ] `POST /api/person`: bei ungültiger `id` mit `400` ablehnen statt stillschweigend neue UUID zu erzeugen
+- [ ] `check_interval_minutes` strikt auf 1–10080 begrenzen (aktuell akzeptiert API auch `0` und sehr große Werte)
+- [ ] Namensfelder (`watcher_name`, lokale Person-/Watcher-Namen) auf max. 80 Zeichen begrenzen
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints via direktem `watcher_devices`-Check (ohne DB-Migration Phase 1). `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. Lokale API-Tests haben zwei verbleibende Validierungslücken gezeigt: `POST /api/watch` akzeptiert aktuell `check_interval_minutes=0` und sehr große Werte; Namensfelder haben noch keine feste Maximal-Länge. Zusätzlich verhält sich `POST /api/person` bei ungültiger `id` aktuell tolerant und erzeugt stattdessen eine neue UUID. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #4, #5, #10, #11, #12, #13.
 - **Erledigt am:** -
 
 ---

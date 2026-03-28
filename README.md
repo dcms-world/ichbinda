@@ -63,11 +63,23 @@ Optional fuer Push-Versand:
 wrangler secret put EXPO_ACCESS_TOKEN
 ```
 
+Hinweis fuer lokale Entwicklung:
+- `localhost` nutzt automatisch die offiziellen Cloudflare-Turnstile-Testwerte.
+- `POST /api/auth/register-device` laesst sich lokal mit `XXXX.DUMMY.TOKEN.XXXX` testen.
+
 ### 5. Lokal starten
 
 ```bash
 npm run dev
 ```
+
+### Smoke-Test
+
+```bash
+npm run test:smoke
+```
+
+Testet den lokalen Worker-Flow fuer Startseiten, Auth, Person, Watcher, Watch-Relation und Heartbeat-Rate-Limit.
 
 ### 6. Deploy
 

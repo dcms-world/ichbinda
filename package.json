@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "npx wrangler dev",
     "deploy": "npx wrangler deploy",
+    "test:smoke": "bash ./scripts/smoke-test.sh",
 
     "db:create": "npx wrangler d1 create dev-ibinda-db",
     "db:schema": "npx wrangler d1 execute dev-ibinda-db --file=./schema.sql",

@@ -1678,6 +1678,9 @@ interface PersonDeviceRow {
 }
 
 const RATE_LIMIT_WINDOW_MS = 2 * 1000; // 2 seconds (for testing)
+const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
+const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 
 // Security: Constant-time string comparison to prevent timing attacks
 function constantTimeEquals(left: string, right: string): boolean {
@@ -1702,8 +1705,31 @@ async function hashApiKey(key: string): Promise<string> {
     .join('');
 }
 
+function isLocalRequest(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === '127.0.0.1' || hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string): string {
+  return isLocalRequest(url) ? TURNSTILE_TEST_SITE_KEY : (configuredSiteKey ?? '');
+}
+
+function resolveTurnstileSecret(url: string, configuredSecret?: string): string {
+  return isLocalRequest(url) ? TURNSTILE_TEST_SECRET_KEY : (configuredSecret ?? '');
+}
+
 // Security: Turnstile-Token serverseitig bei Cloudflare verifizieren
 async function verifyTurnstileToken(token: string, secret: string): Promise<boolean> {
+  if (secret === TURNSTILE_TEST_SECRET_KEY && token === TURNSTILE_TEST_TOKEN) {
+    return true;
+  }
+  if (!secret) {
+    return false;
+  }
   try {
     const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
@@ -2055,8 +2081,8 @@ h1{
 </body>
 </html>`)
 );
-app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', c.env.TURNSTILE_SITE_KEY ?? '')));
-app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', c.env.TURNSTILE_SITE_KEY ?? '')));
+app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
+app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
 
 // API routes with CORS
 app.use('/api/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
@@ -2109,7 +2135,8 @@ app.post('/api/auth/register-device', async (c) => {
       return c.json({ error: 'device_id zu lang' }, 400);
     }
 
-    const valid = await verifyTurnstileToken(turnstile_token, c.env.TURNSTILE_SECRET_KEY);
+    const turnstileSecret = resolveTurnstileSecret(c.req.url, c.env.TURNSTILE_SECRET_KEY);
+    const valid = await verifyTurnstileToken(turnstile_token, turnstileSecret);
     if (!valid) {
       return c.json({ error: 'Bot-Check fehlgeschlagen' }, 400);
     }
