@@ -2467,6 +2467,11 @@ app.post('/api/watch', async (c) => {
   try {
     const { person_id, watcher_id, check_interval_minutes = 1440 } = await c.req.json();
     if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
+    const deviceId = c.get('deviceId');
+    const owns = await c.env.DB.prepare(
+      'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+    ).bind(watcher_id, deviceId).first();
+    if (!owns) return c.json({ error: 'Forbidden' }, 403);
     const existing = await c.env.DB.prepare(
       'SELECT id FROM watch_relations WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL'
     ).bind(person_id, watcher_id).first();
@@ -2486,6 +2491,11 @@ app.post('/api/watch', async (c) => {
 app.put('/api/watch', async (c) => {
   const { person_id, watcher_id, check_interval_minutes } = await c.req.json();
   if (!person_id || !watcher_id || !check_interval_minutes) return c.json({ error: 'person_id, watcher_id and check_interval_minutes required' }, 400);
+  const deviceId = c.get('deviceId');
+  const owns = await c.env.DB.prepare(
+    'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+  ).bind(watcher_id, deviceId).first();
+  if (!owns) return c.json({ error: 'Forbidden' }, 403);
   await c.env.DB.prepare(
     `UPDATE watch_relations SET check_interval_minutes = ? WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
   ).bind(check_interval_minutes, person_id, watcher_id).run();
@@ -2496,6 +2506,11 @@ app.put('/api/watch', async (c) => {
 app.delete('/api/watch', async (c) => {
   const { person_id, watcher_id } = await c.req.json();
   if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
+  const deviceId = c.get('deviceId');
+  const owns = await c.env.DB.prepare(
+    'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+  ).bind(watcher_id, deviceId).first();
+  if (!owns) return c.json({ error: 'Forbidden' }, 403);
   await c.env.DB.prepare(
     `UPDATE watch_relations SET removed_at = datetime('now') WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
   ).bind(person_id, watcher_id).run();
@@ -2520,6 +2535,11 @@ app.get('/api/watcher/:id', async (c) => {
 // API: Alle überwachten Personen eines Betreuers (Intervall in Minuten)
 app.get('/api/watcher/:id/persons', async (c) => {
   const watcherId = c.req.param('id');
+  const deviceId = c.get('deviceId');
+  const owns = await c.env.DB.prepare(
+    'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+  ).bind(watcherId, deviceId).first();
+  if (!owns) return c.json({ error: 'Forbidden' }, 403);
   const persons = await c.env.DB.prepare(
     `SELECT 
       p.id,
