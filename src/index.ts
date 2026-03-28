@@ -554,7 +554,7 @@ function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time
 
 async function createPerson(){const res=await fetch(API_URL+'/person',{method:'POST'});const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
 
-function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName})}
+function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName||getPersonName()})}
 let qrCopyStatusTimeout=null;
 function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
 async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
@@ -599,7 +599,11 @@ async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=doc
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const count=data.watcher_count;const label=count===1?'1 Betreuer':' '+count+' Betreuer';const ids=(data.watchers||[]).map(id=>'<div class="device-meta" style="font-family:monospace;font-size:11px;padding:4px 0">'+escapeHtml(id)+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+ids+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
+const WATCHER_NAMES_KEY='ibinda_watcher_names';
+function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}
+function cacheWatcherNames(updates){const names=getCachedWatcherNames();Object.assign(names,updates);localStorage.setItem(WATCHER_NAMES_KEY,JSON.stringify(names))}
+function getWatcherDisplayName(id){const name=getCachedWatcherNames()[id];return name||id.slice(0,8)+'…'}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const nameUpdates={};(data.watchers||[]).forEach(w=>{if(w.name)nameUpdates[w.id]=w.name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);const count=data.watcher_count;const label=count===1?'1 Betreuer':count+' Betreuer';const items=(data.watchers||[]).map(w=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(w.id))+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
@@ -865,9 +869,8 @@ button:hover{background:#5a6fd6}
 </form>
 </div>
 <div class="container">
-<h1>👀 I bin da – Betreuer</h1>
+<h1>iBinda <span id="watcherNameDisplay" class="watcher-name" onclick="askForWatcherName()" title="Namen ändern">-</span></h1>
 <p class="subtitle">Überwachte Personen im Blick behalten</p>
-<p><span id="watcherNameDisplay" class="watcher-name" onclick="askForWatcherName()" title="Namen ändern">-</span></p>
 <div class="card">
 <div class="add-header">
 <h3>➕ Person hinzufügen</h3>
@@ -981,8 +984,9 @@ const WATCHER_NAME_KEY = 'ibinda_watcher_name';
 function getWatcherName(){return(localStorage.getItem(WATCHER_NAME_KEY)||'').trim()}
 function setWatcherName(name){localStorage.setItem(WATCHER_NAME_KEY,name)}
 function renderWatcherName(){const el=document.getElementById('watcherNameDisplay');if(el)el.textContent=getWatcherName()||'Name eingeben'}
-function askForWatcherName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('watcherNameInput');input.value=getWatcherName()||'';overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setWatcherName(name);overlay.classList.remove('open');renderWatcherName();resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
+function askForWatcherName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('watcherNameInput');input.value=getWatcherName()||'';overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setWatcherName(name);overlay.classList.remove('open');renderWatcherName();announceWatcherName();resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 async function ensureWatcherName(){const savedName=getWatcherName();if(savedName)return savedName;return askForWatcherName()}
+async function announceWatcherName(){const watcherId=getWatcherId();const name=getWatcherName();if(!watcherId||!name)return;try{await fetch(API_URL+'/watcher/'+watcherId+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})}catch(e){console.error('Name announce failed',e)}}
 
 function getStoredList(key) {
   try {
@@ -1334,11 +1338,10 @@ function scanQrFrame() {
         ensureCanAddPerson().then((canAdd) => {
           if (!canAdd) return;
           const parsedInput = parsePersonInput(qrText);
-          const personId = parsedInput && parsedInput.personId ? parsedInput.personId : qrText;
-          document.getElementById('personId').value = personId;
-          if (parsedInput && parsedInput.name) {
-            storePersonName(personId, parsedInput.name);
-          }
+          if (!parsedInput?.personId) return;
+          if (parsedInput.name) storePersonName(parsedInput.personId, parsedInput.name);
+          document.getElementById('personId').value = qrText;
+          addPerson();
         });
         return;
       }
@@ -1412,6 +1415,7 @@ async function init() {
     const data = await res.json();
     localStorage.setItem('ibinda_watcher_id', data.id);
   }
+  await announceWatcherName();
   loadPersons();
 }
 
@@ -1431,26 +1435,14 @@ async function addPerson() {
     if (rememberedName) storePersonName(personId, rememberedName);
   }
   
-  // Zuerst sicherstellen, dass die Person existiert (automatisch erstellt durch API)
   try {
-    // Person erstellen falls nicht existiert
-    const personRes = await fetch(API_URL + '/person', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: personId })
-    });
-    if (!personRes.ok && personRes.status !== 409) { // 409 = already exists ist OK
-      throw new Error('Failed to create person');
-    }
-    
-    // Dann Watch-Relation erstellen
-    await fetch(API_URL + '/watch', {
+    const watchRes = await fetch(API_URL + '/watch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: 1440 })
     });
+    if (!watchRes.ok) throw new Error('Person nicht gefunden oder Fehler beim Hinzufügen (Status ' + watchRes.status + ')');
     unhidePersonInLocalView(personId);
-    
     document.getElementById('personId').value = '';
     await loadPersons();
   } catch (err) {
@@ -2315,7 +2307,7 @@ app.get('/api/person/:id/has-watcher', async (c) => {
   });
 });
 
-// API: Watcher-Infos einer Person (Anzahl + Check-Intervalle)
+// API: Watcher-Infos einer Person — liefert Namen einmalig aus watcher_name_announcements und löscht sie danach
 app.get('/api/person/:id/watchers', async (c) => {
   const personId = c.req.param('id').trim();
   if (!personId) return c.json({ error: 'person_id required' }, 400);
@@ -2324,11 +2316,44 @@ app.get('/api/person/:id/watchers', async (c) => {
   }
 
   const result = await c.env.DB.prepare(
-    'SELECT watcher_id FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL'
-  ).bind(personId).all<{ watcher_id: string }>();
+    `SELECT wr.watcher_id, wna.name as watcher_name
+     FROM watch_relations wr
+     LEFT JOIN watcher_name_announcements wna ON wr.watcher_id = wna.watcher_id
+     WHERE wr.person_id = ?1 AND wr.removed_at IS NULL`
+  ).bind(personId).all<{ watcher_id: string; watcher_name: string | null }>();
 
-  const watchers = (result.results ?? []).map(r => r.watcher_id);
+  const rows = result.results ?? [];
+
+  // Namen-Ankündigungen nach dem Lesen löschen (read-once)
+  const withNames = rows.filter(r => r.watcher_name !== null);
+  if (withNames.length > 0) {
+    await c.env.DB.batch(
+      withNames.map(r => c.env.DB.prepare('DELETE FROM watcher_name_announcements WHERE watcher_id = ?').bind(r.watcher_id))
+    );
+  }
+
+  const watchers = rows.map(r => ({ id: r.watcher_id, name: r.watcher_name ?? null }));
   return c.json({ watcher_count: watchers.length, watchers });
+});
+
+// API: Watcher kündigt seinen Namen an (einmal-lesbar für Person)
+app.post('/api/watcher/:id/announce', async (c) => {
+  const watcherId = c.req.param('id');
+  const { name } = await c.req.json<{ name: string }>();
+  if (!name?.trim()) return c.json({ error: 'name required' }, 400);
+
+  // Prüfen ob das anfragende Gerät zu diesem Watcher gehört
+  const deviceId = c.get('deviceId');
+  const owns = await c.env.DB.prepare(
+    'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
+  ).bind(watcherId, deviceId).first();
+  if (!owns) return c.json({ error: 'Forbidden' }, 403);
+
+  await c.env.DB.prepare(
+    'INSERT OR REPLACE INTO watcher_name_announcements (watcher_id, name, created_at) VALUES (?, ?, datetime(\'now\'))'
+  ).bind(watcherId, name.trim()).run();
+
+  return c.json({ ok: true });
 });
 
 // API: Geräte einer Person

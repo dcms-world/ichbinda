@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
   last_heartbeat_at TEXT NOT NULL
 );
 
+-- Einmal-lesbare Watcher-Namen: Watcher kündigt seinen Namen an, Person liest ihn einmal und löscht ihn
+CREATE TABLE IF NOT EXISTS watcher_name_announcements (
+  watcher_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
 -- API Keys für Gerät-Authentifizierung (nur Hash gespeichert, nie Klartext)
 CREATE TABLE IF NOT EXISTS device_keys (
   device_id TEXT PRIMARY KEY,
