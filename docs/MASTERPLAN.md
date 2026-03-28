@@ -211,7 +211,7 @@ origin: ['https://ibinda.app', 'https://www.ibinda.app']
 - `push_token`: Längen-Check
 - `person_id`, `watcher_id`: UUID-Validierung überall
 - `check_interval_minutes`: Bounds 1–10080
-- `watcher_name`, lokale Person-/Watcher-Namen: auf max. 80 Zeichen begrenzen
+- `watcher_name`, lokale Person-/Watcher-Namen: auf 2–35 Zeichen begrenzen; die ersten 2 Zeichen müssen Buchstaben sein
 
 ---
 

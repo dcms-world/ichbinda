@@ -200,6 +200,19 @@ status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/has-watcher" "" "$BOD
 expect_status "GET /api/person/:id/has-watcher" "200" "$status" "$BODY_FILE"
 expect_body_contains "GET /api/person/:id/has-watcher" "$BODY_FILE" '"has_watcher":true'
 
+LONG_NAME="$(printf 'A%.0s' $(seq 1 36))"
+status="$(request POST "$WORKER_URL/api/watcher/${WATCHER_ID}/announce" "{\"name\":\"${LONG_NAME}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "POST /api/watcher/:id/announce mit zu langem Namen" "400" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/watcher/:id/announce mit zu langem Namen" "$BODY_FILE" '"error":"name too long"'
+
+status="$(request POST "$WORKER_URL/api/watcher/${WATCHER_ID}/announce" '{"name":"A"}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "POST /api/watcher/:id/announce mit zu kurzem Namen" "400" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/watcher/:id/announce mit zu kurzem Namen" "$BODY_FILE" '"error":"name too short"'
+
+status="$(request POST "$WORKER_URL/api/watcher/${WATCHER_ID}/announce" '{"name":"1A Test"}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "POST /api/watcher/:id/announce mit ungueltigem Start" "400" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/watcher/:id/announce mit ungueltigem Start" "$BODY_FILE" '"error":"name must start with 2 letters"'
+
 sleep 3
 status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "Heartbeat 1" "200" "$status" "$BODY_FILE"

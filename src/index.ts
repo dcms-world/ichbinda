@@ -434,7 +434,7 @@ h1 {
 <form class="name-modal" id="nameModalForm" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
 <h2 id="nameModalTitle">Wie heißt du?</h2>
 <p>Bitte gib deinen Namen einmal ein.</p>
-<input id="personNameInput" type="text" maxlength="80" placeholder="z.B. Oma Erna" required>
+<input id="personNameInput" type="text" maxlength="35" placeholder="z.B. Oma Erna" required>
 <button type="submit">Speichern</button>
 </form>
 </div>
@@ -539,6 +539,12 @@ let currentDeviceId='';
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_person')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_person','1')}
+const MAX_DISPLAY_NAME_LENGTH=35;
+function normalizeDisplayName(name){return String(name||'').trim().slice(0,MAX_DISPLAY_NAME_LENGTH)}
+function isLetterChar(char){return !!char&&char.toLocaleLowerCase()!==char.toLocaleUpperCase()}
+function hasTwoLetterStart(name){const chars=[...String(name||'').trim()];return chars.length>=2&&isLetterChar(chars[0])&&isLetterChar(chars[1])}
+function getDisplayNameValidationError(name){const trimmed=String(name||'').trim();if(trimmed.length<2)return'name-too-short';if(trimmed.length>MAX_DISPLAY_NAME_LENGTH)return'name-too-long';if(!hasTwoLetterStart(trimmed))return'name-invalid-start';return''}
+function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}} 
 
 let resolveRegistered=null;
 async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token,role:'person'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
@@ -546,11 +552,12 @@ async function ensureRegistered(){if(isRegistered())return;const overlay=documen
 
 function getPersonId(){return localStorage.getItem('ibinda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
-function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,name)}
+function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,normalizeDisplayName(name))}
 function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();return 'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
 function getOrCreateDeviceId(){const existing=(localStorage.getItem(DEVICE_ID_KEY)||'').trim();if(existing)return existing;const created=createDeviceId();localStorage.setItem(DEVICE_ID_KEY,created);return created}
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,(char)=>{if(char==='&')return'&amp;';if(char==='<')return'&lt;';if(char==='>')return'&gt;';if(char==='"')return'&quot;';return'&#39;'})}
 function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time))return 'Unbekannt';return new Date(time).toLocaleString('de-DE')}
+function isDisplayNameTooLong(name){return String(name||'').trim().length>MAX_DISPLAY_NAME_LENGTH}
 
 async function createPerson(existingPersonId){const options={method:'POST'};if(existingPersonId){options.headers={'Content-Type':'application/json'};options.body=JSON.stringify({id:existingPersonId})}const res=await fetch(API_URL+'/person',options);if(!res.ok)throw new Error('Person init failed: '+res.status);const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
 
@@ -564,7 +571,7 @@ function openSettings(){console.log('openSettings called');document.getElementBy
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
-function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
+function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const rawName=input.value;const errorCode=getDisplayNameValidationError(rawName);if(errorCode){showDisplayNameValidationError(errorCode);return}const name=normalizeDisplayName(rawName);setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
@@ -656,6 +663,14 @@ async function scanDeviceQrFrame() {
     if (result && result.data) {
       try {
         const data = JSON.parse(result.data);
+        if (typeof data?.name === 'string') {
+          const nameError = getDisplayNameValidationError(data.name);
+          if (nameError) {
+            stopDeviceQrScanner();
+            showDisplayNameValidationError(nameError);
+            return;
+          }
+        }
         if (data.id) {
           stopDeviceQrScanner();
           handleNewDeviceScanned(data.id);
@@ -864,7 +879,7 @@ button:hover{background:#5a6fd6}
 <form class="name-modal" id="nameModalForm" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
 <h2 id="nameModalTitle">Wie heißt du?</h2>
 <p>Bitte gib deinen Namen ein.</p>
-<input id="watcherNameInput" type="text" maxlength="80" placeholder="z.B. Max Mustermann" required>
+<input id="watcherNameInput" type="text" maxlength="35" placeholder="z.B. Max Mustermann" required>
 <button type="submit">Speichern</button>
 </form>
 </div>
@@ -949,6 +964,13 @@ button:hover{background:#5a6fd6}
 </div>
 <script>
 const API_URL = '/api';
+const MAX_DISPLAY_NAME_LENGTH = 35;
+function normalizeDisplayName(name){return String(name||'').trim().slice(0,MAX_DISPLAY_NAME_LENGTH)}
+function isLetterChar(char){return !!char&&char.toLocaleLowerCase()!==char.toLocaleUpperCase()}
+function hasTwoLetterStart(name){const chars=[...String(name||'').trim()];return chars.length>=2&&isLetterChar(chars[0])&&isLetterChar(chars[1])}
+function getDisplayNameValidationError(name){const trimmed=String(name||'').trim();if(trimmed.length<2)return'name-too-short';if(trimmed.length>MAX_DISPLAY_NAME_LENGTH)return'name-too-long';if(!hasTwoLetterStart(trimmed))return'name-invalid-start';return''}
+function isDisplayNameTooLong(name){return String(name||'').trim().length>MAX_DISPLAY_NAME_LENGTH}
+function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}else if(errorCode==='invalid-json'){alert('Die Eingabe enthält kein gültiges Personenformat.')}else if(errorCode==='invalid-person-id'){alert('Die Eingabe enthält keine gültige Personen-ID.')}} 
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
@@ -985,11 +1007,13 @@ function getWatcherId() {
 
 const WATCHER_NAME_KEY = 'ibinda_watcher_name';
 function getWatcherName(){return(localStorage.getItem(WATCHER_NAME_KEY)||'').trim()}
-function setWatcherName(name){localStorage.setItem(WATCHER_NAME_KEY,name)}
+function setWatcherName(name){localStorage.setItem(WATCHER_NAME_KEY,normalizeDisplayName(name))}
 function renderWatcherName(){const el=document.getElementById('watcherNameDisplay');if(el)el.textContent=getWatcherName()||'Name eingeben'}
-function askForWatcherName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('watcherNameInput');input.value=getWatcherName()||'';overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const name=input.value.trim();if(!name)return;setWatcherName(name);overlay.classList.remove('open');renderWatcherName();announceWatcherName();resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
+function askForWatcherName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('watcherNameInput');input.value=getWatcherName()||'';overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const rawName=input.value;const errorCode=getDisplayNameValidationError(rawName);if(errorCode){showDisplayNameValidationError(errorCode);return}const name=normalizeDisplayName(rawName);setWatcherName(name);overlay.classList.remove('open');renderWatcherName();announceWatcherName();resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 async function ensureWatcherName(){const savedName=getWatcherName();if(savedName)return savedName;return askForWatcherName()}
 async function announceWatcherName(){const watcherId=getWatcherId();const name=getWatcherName();if(!watcherId||!name)return;try{await fetch(API_URL+'/watcher/'+watcherId+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})}catch(e){console.error('Name announce failed',e)}}
+const PERSON_ID_REGEX=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidFrontendPersonId(value){return PERSON_ID_REGEX.test(String(value||'').trim())}
 
 function getStoredList(key) {
   try {
@@ -1111,7 +1135,7 @@ function fileToDataUrl(file) {
 }
 
 function storePersonName(personId, name) {
-  const safeName = (name || '').trim();
+  const safeName = normalizeDisplayName(name);
   if (!personId || !safeName) return;
   const personNames = getPersonNames();
   personNames[personId] = safeName;
@@ -1197,22 +1221,33 @@ function buildEditLocationHtml(person) {
 function parsePersonInput(rawValue) {
   const value = rawValue.trim();
   if (!value) return null;
+  const looksLikeJson = value.startsWith('{') || value.startsWith('[');
 
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === 'object') {
-      const personId = String(parsed.id || '').trim();
+      const personId = String(parsed.id || parsed.person_id || '').trim();
       const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+      if (name) {
+        const nameError = getDisplayNameValidationError(name);
+        if (nameError) return { personId, name: '', error: nameError };
+      }
+      if (!personId) return { personId: '', name: '', error: 'invalid-json' };
+      if (!isValidFrontendPersonId(personId)) return { personId, name: '', error: 'invalid-person-id' };
       if (personId) return { personId, name };
     }
-  } catch (err) {}
+  } catch (err) {
+    if (looksLikeJson) return { personId: '', name: '', error: 'invalid-json' };
+  }
 
   try {
     const parsedUrl = new URL(value);
-    const personIdFromUrl = (parsedUrl.searchParams.get('id') || '').trim();
+    const personIdFromUrl = (parsedUrl.searchParams.get('id') || parsedUrl.searchParams.get('person_id') || '').trim();
+    if (personIdFromUrl && !isValidFrontendPersonId(personIdFromUrl)) return { personId: '', name: '', error: 'invalid-person-id' };
     if (personIdFromUrl) return { personId: personIdFromUrl, name: '' };
   } catch (err) {}
 
+  if (!isValidFrontendPersonId(value)) return { personId: '', name: '', error: 'invalid-person-id' };
   return { personId: value, name: '' };
 }
 
@@ -1342,6 +1377,10 @@ function scanQrFrame() {
         ensureCanAddPerson().then((canAdd) => {
           if (!canAdd) return;
           const parsedInput = parsePersonInput(qrText);
+          if (parsedInput?.error) {
+            showDisplayNameValidationError(parsedInput.error);
+            return;
+          }
           if (!parsedInput?.personId) return;
           if (parsedInput.name) storePersonName(parsedInput.personId, parsedInput.name);
           document.getElementById('personId').value = qrText;
@@ -1432,6 +1471,10 @@ async function addPerson() {
   const inputValue = document.getElementById('personId').value.trim();
   if (!inputValue) return;
   const parsedInput = parsePersonInput(inputValue);
+  if (parsedInput?.error) {
+    showDisplayNameValidationError(parsedInput.error);
+    return;
+  }
   if (!parsedInput) return;
   const personId = parsedInput.personId;
   if (!personId) return;
@@ -1678,6 +1721,7 @@ interface PersonDeviceRow {
 }
 
 const RATE_LIMIT_WINDOW_MS = 2 * 1000; // 2 seconds (for testing)
+const MAX_DISPLAY_NAME_LENGTH = 35;
 const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
 const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
@@ -1703,6 +1747,27 @@ async function hashApiKey(key: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+function normalizeDisplayName(name: unknown): string {
+  return String(name ?? '').trim().slice(0, MAX_DISPLAY_NAME_LENGTH);
+}
+
+function isLetterChar(char: string): boolean {
+  return !!char && char.toLocaleLowerCase() !== char.toLocaleUpperCase();
+}
+
+function hasTwoLetterStart(name: unknown): boolean {
+  const chars = [...String(name ?? '').trim()];
+  return chars.length >= 2 && isLetterChar(chars[0] ?? '') && isLetterChar(chars[1] ?? '');
+}
+
+function getDisplayNameValidationError(name: unknown): string | null {
+  const trimmed = String(name ?? '').trim();
+  if (trimmed.length < 2) return 'name-too-short';
+  if (trimmed.length > MAX_DISPLAY_NAME_LENGTH) return 'name-too-long';
+  if (!hasTwoLetterStart(trimmed)) return 'name-invalid-start';
+  return null;
 }
 
 function isLocalRequest(url: string): boolean {
@@ -2417,7 +2482,17 @@ app.get('/api/person/:id/watchers', async (c) => {
 app.post('/api/watcher/:id/announce', async (c) => {
   const watcherId = c.req.param('id');
   const { name } = await c.req.json<{ name: string }>();
-  if (!name?.trim()) return c.json({ error: 'name required' }, 400);
+  const nameError = getDisplayNameValidationError(name);
+  if (nameError === 'name-too-short') {
+    return c.json({ error: 'name too short' }, 400);
+  }
+  if (nameError === 'name-too-long') {
+    return c.json({ error: 'name too long' }, 400);
+  }
+  if (nameError === 'name-invalid-start') {
+    return c.json({ error: 'name must start with 2 letters' }, 400);
+  }
+  const safeName = normalizeDisplayName(name);
 
   // Prüfen ob das anfragende Gerät zu diesem Watcher gehört
   const deviceId = c.get('deviceId');
@@ -2428,7 +2503,7 @@ app.post('/api/watcher/:id/announce', async (c) => {
 
   await c.env.DB.prepare(
     'INSERT OR REPLACE INTO watcher_name_announcements (watcher_id, name, created_at) VALUES (?, ?, datetime(\'now\'))'
-  ).bind(watcherId, name.trim()).run();
+  ).bind(watcherId, safeName).run();
 
   return c.json({ ok: true });
 });
