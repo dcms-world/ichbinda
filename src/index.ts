@@ -1608,7 +1608,10 @@ async function loadPersons() {
   const personsRaw = await res.json();
   const persons = Array.isArray(personsRaw) ? personsRaw : [];
   const hiddenPersonIds = new Set(getHiddenPersonIds());
-  const visiblePersons = persons.filter((person) => !hiddenPersonIds.has(person.id));
+  const STATUS_ORDER = { overdue: 0, never: 1, ok: 2 };
+  const visiblePersons = persons
+    .filter((person) => !hiddenPersonIds.has(person.id))
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
   applyPersonCount(visiblePersons.length);
   visiblePersonsById = {};
   for (const person of visiblePersons) visiblePersonsById[person.id] = person;
