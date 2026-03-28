@@ -2,7 +2,7 @@
 
 ## Context
 
-Die iBinda-App hat kritische Sicherheitslücken (siehe `SECURITY_AUDIT.md`). Die App ist **nicht produktiv** – keine Migration nötig, kein Legacy-Support. Alte API-Key-Auth wird komplett ersetzt.
+Die iBinda-App hat Sicherheitslücken (siehe `SECURITY_AUDIT.md`). Die App ist **nicht produktiv** – keine Migration nötig, kein Legacy-Support. Die bestehende API-Key-Auth wird beibehalten und um Ownership-Prüfungen ergänzt (ECDSA wurde als Overkill verworfen, siehe `DECISIONS.md`).
 
 Langfristig gibt es zwei Produkt-Stufen:
 - **iBinda Free** – privat, anonym, 1 Person + unbegrenzt Watcher
@@ -54,7 +54,7 @@ D1 (operativ, anonym):              Postgres (Pro, personenbezogen):
 
 ### Zeitleiste
 ```
-Jetzt:       Free fertig bauen (D1 + ECDSA + Pairing)
+Jetzt:       Free fertig bauen (D1 + API-Key-Auth mit Ownership + Pairing)
 Wenn Pro:    Postgres aufsetzen (Neon Frankfurt), Dashboard bauen
 Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 ```
@@ -64,19 +64,18 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 ## Free: Dateien
 
 - `src/index.ts` – Monolithische App (Backend + Frontend)
-- `schema.sql` – Kanonisches Schema (komplett neu schreiben)
-- `migrations/002_ecdsa_and_pairing.sql` – **Neu**: Schema-Änderungen
+- `schema.sql` – Kanonisches Schema (aktualisieren)
+- `migrations/002_pairing.sql` – **Neu**: `watcher_id`-Spalte + `pairing_requests`-Tabelle
 
 ---
 
-## Phase 1: DB-Schema
+## Phase 1: DB-Migration
 
-### `migrations/002_ecdsa_and_pairing.sql`
+### `migrations/002_pairing.sql`
 
 `device_keys` erweitern:
 ```sql
-ALTER TABLE device_keys ADD COLUMN public_key TEXT;     -- JWK JSON (ECDSA P-256)
-ALTER TABLE device_keys ADD COLUMN watcher_id TEXT;     -- Device → Watcher Verknüpfung
+ALTER TABLE device_keys ADD COLUMN watcher_id TEXT;
 ```
 
 Neue Tabelle:
@@ -84,8 +83,7 @@ Neue Tabelle:
 CREATE TABLE IF NOT EXISTS pairing_requests (
   pairing_token TEXT PRIMARY KEY,
   person_id TEXT NOT NULL,
-  encrypted_name TEXT,
-  iv TEXT,
+  watcher_name TEXT,
   watcher_device_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','expired')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -96,69 +94,65 @@ CREATE INDEX IF NOT EXISTS idx_pairing_created ON pairing_requests(created_at);
 ```
 
 ### `schema.sql` aktualisieren
-- `device_keys`: `key_hash` entfernen, `public_key TEXT NOT NULL` und `watcher_id TEXT` hinzufügen
+- `device_keys`: `watcher_id TEXT` Spalte hinzufügen
 - `pairing_requests` Tabelle hinzufügen
 
 ---
 
-## Phase 2: Backend – Hilfsfunktionen (src/index.ts)
+## Phase 2: Backend – Auth-Middleware fixen
 
-Neue Funktionen (nach `hashApiKey`, ~Zeile 1669):
+### `lookupApiKey()` umbauen (gibt Device-Info zurück statt boolean):
 
-1. **`verifyEcdsaSignature(publicKeyJwk, signatureBase64, payload)`**
-   - `crypto.subtle.importKey('jwk')` → `crypto.subtle.verify('ECDSA', hash: 'SHA-256')`
-
-2. **`base64ToArrayBuffer(b64)` / `arrayBufferToBase64(buf)`**
-
-3. **`hashApiKey` + `lookupApiKey` entfernen** – wird nicht mehr gebraucht
-
-4. **`lookupDeviceByPublicKey(db, deviceId)` → `{ device_id, role, public_key, watcher_id } | null`**
-   - Query: `SELECT * FROM device_keys WHERE device_id = ?1`
-
----
-
-## Phase 3: Backend – Auth-Middleware komplett ersetzen (Zeile 1988-2020)
-
-### Nur noch ECDSA + Dev-Token:
-
-1. **Skip** für `/api/auth/register-device` (einzige Ausnahme)
-2. **Dev-Token** (unverändert, Query-Parameter)
-3. **ECDSA-Signatur**:
-   - Client sendet Headers: `X-Device-Id`, `X-Timestamp`, `X-Signature`
-   - Server: `device_keys` lookup via `device_id` → `public_key` holen
-   - Payload verifizieren: `${timestamp}\n${method}\n${path}`
-   - Timestamp > 60 Sek. alt → reject (Replay-Schutz)
-   - `c.set('deviceId', deviceId)` + `c.set('role', role)` in Context
-
-### Cookie/Bearer-Auth komplett entfernen
-- `lookupApiKey` löschen
-- Cookie-Parsing löschen
-- `Set-Cookie` bei Registrierung entfernen
-
----
-
-## Phase 4: Backend – Registrierung vereinfachen (Zeile 2022-2052)
-
-### `POST /api/auth/register-device` – Nur noch ECDSA:
-
-```
-Body: { device_id, turnstile_token, role, public_key (JWK) }
+```typescript
+async function lookupApiKey(db: D1Database, apiKey: string): Promise<{ device_id: string; role: string } | null> {
+  const keyHash = await hashApiKey(apiKey);
+  const row = await db.prepare(
+    'SELECT device_id, role FROM device_keys WHERE key_hash = ?1'
+  ).bind(keyHash).first<{ device_id: string; role: string }>();
+  return row ?? null;
+}
 ```
 
-- Turnstile verifizieren
-- Public Key validieren via `crypto.subtle.importKey` (wirft bei ungültigem Key)
-- `INSERT OR REPLACE INTO device_keys (device_id, public_key, created_at, role)`
-- Kein API-Key, kein Cookie
-- Return: `{ registered: true }`
+### Middleware setzt Device-Context:
+
+```typescript
+const device = await lookupApiKey(c.env.DB, apiKey);
+if (device) {
+  c.set('deviceId', device.device_id);
+  c.set('role', device.role);
+  return await next();
+}
+```
+
+### Heartbeat authentifizieren:
+- `/api/heartbeat` nicht mehr von Auth-Middleware ausgenommen
+- Ownership-Check: `device_id → person_devices → person_id`
 
 ---
 
-## Phase 5: Backend – Autorisierung auf allen Endpoints
+## Phase 3: Backend – Ownership-Checks auf allen Endpoints
 
-### Person-Endpoints: `deviceId → person_devices → person_id`
-### Watcher-Endpoints: `deviceId → device_keys.watcher_id`
+### Hilfsfunktionen:
 
-| Endpoint | Auth-Check |
+```typescript
+async function deviceOwnsPerson(db: D1Database, deviceId: string, personId: string): Promise<boolean> {
+  const row = await db.prepare(
+    'SELECT 1 FROM person_devices WHERE device_id = ?1 AND person_id = ?2'
+  ).bind(deviceId, personId).first();
+  return !!row;
+}
+
+async function deviceOwnsWatcher(db: D1Database, deviceId: string, watcherId: string): Promise<boolean> {
+  const row = await db.prepare(
+    'SELECT 1 FROM device_keys WHERE device_id = ?1 AND watcher_id = ?2'
+  ).bind(deviceId, watcherId).first();
+  return !!row;
+}
+```
+
+### Ownership-Matrix:
+
+| Endpoint | Check |
 |---|---|
 | `POST /api/heartbeat` | Device besitzt `person_id` via `person_devices` |
 | `GET /api/person/:id` | Device besitzt Person ODER Watcher mit aktiver `watch_relation` |
@@ -176,92 +170,66 @@ Body: { device_id, turnstile_token, role, public_key (JWK) }
 
 ---
 
-## Phase 6: Backend – Pairing-Endpoints (neu)
+## Phase 4: Backend – Pairing-Endpoints (neu)
 
 ### `POST /api/pair/create` (Person)
-- Prüft Device besitzt `person_id`
+- Auth: Device besitzt `person_id`
 - Erstellt `pairing_requests` mit `pairing_token = crypto.randomUUID()`
 - Return: `{ pairing_token }`
 
 ### `POST /api/pair/respond` (Watcher)
-- Prüft `pairing_token` existiert, pending, < 5 Min.
-- Speichert `encrypted_name`, `iv`, `watcher_device_id`
+- Prüft `pairing_token` existiert, pending, < 5 Min alt
+- Speichert `watcher_name`, `watcher_device_id`
 - Erstellt automatisch Watch-Relation
 - Setzt `status = 'completed'`
 
-### `GET /api/pair/:token` (Person)
-- Prüft Device besitzt `person_id` des Pairings
-- Return: `{ status, encrypted_name?, iv? }`
+### `GET /api/pair/:token` (Person, Polling)
+- Auth: Device besitzt `person_id` des Pairings
+- Return: `{ status, watcher_name? }`
 
 ### Cron-Cleanup:
 ```sql
-DELETE FROM pairing_requests WHERE created_at < datetime('now', '-10 minutes')
+DELETE FROM pairing_requests WHERE created_at < datetime('now', '-10 minutes');
 ```
 
 ---
 
-## Phase 7: Backend – CORS + Kleinigkeiten
+## Phase 5: Backend – CORS + Security + Cleanup
 
-### CORS (Zeile 1986):
+### CORS einschränken:
 ```typescript
 origin: ['https://ibinda.app', 'https://www.ibinda.app']
-allowHeaders: ['Content-Type', 'X-Device-Id', 'X-Timestamp', 'X-Signature']
 ```
 
 ### `createDeviceId()` Fallback fixen (Zeile 550):
 `Date.now() + Math.random()` → `crypto.getRandomValues()`
 
 ### Error-Details entfernen:
-- Zeile 2066, 2324: `details: String(e)` raus
+- `details: String(e)` aus allen Error-Responses raus
+
+### Input-Validierung:
+- `push_token`: Längen-Check
+- `person_id`, `watcher_id`: UUID-Validierung überall
+- `check_interval_minutes`: Bounds 1–10080
 
 ---
 
-## Phase 8: Frontend – Shared Crypto-Code (in beide HTML-Templates)
+## Phase 6: Frontend – QR-Pairing anpassen
 
-### IndexedDB Key-Storage
-- `openKeyStore()` → IndexedDB `ibinda_keys`
-- `getOrCreateKeyPair()` → ECDSA P-256, **non-extractable**
-- `getPublicKeyJwk()` → Export Public Key als JWK
-
-### `signedFetch(path, options)` – Ersetzt alle `fetch(API_URL + ...)` Aufrufe
-- Keypair aus IndexedDB
-- Payload: `timestamp\nmethod\npath`
-- Signiert mit `crypto.subtle.sign('ECDSA', ...)`
-- Headers: `X-Device-Id`, `X-Timestamp`, `X-Signature`
-
-### Registrierung (`onTurnstileSuccess`):
-- Keypair generieren → Public Key exportieren → an Server senden
-- Kein Cookie mehr
-
----
-
-## Phase 9: Frontend – Person (QR + Pairing)
-
-### Neuer QR-Payload (ersetzt `buildQrPayload`):
+### Person-Seite: Neuer QR-Payload
 ```json
-{ "person_id": "...", "pairing_token": "...", "key": "<base64 AES-256>" }
+{ "person_id": "...", "pairing_token": "..." }
 ```
-- `signedFetch('/pair/create')` → `pairing_token`
-- AES-256-GCM Key client-seitig generiert (extractable, für QR)
-- AES-Key lokal im Speicher halten
-
-### Polling:
-- Alle 5 Sek. `GET /api/pair/:token`
-- Bei `completed` → `encrypted_name` mit AES-Key entschlüsseln → Watcher-Name anzeigen
+- `fetch('/api/pair/create')` → `pairing_token`
+- Polling: Alle 5 Sek. `GET /api/pair/:token`
+- Bei `completed` → Watcher-Name anzeigen
 - Timeout 5 Min., QR regenerieren
 
----
-
-## Phase 10: Frontend – Watcher (QR-Scan + Response)
-
-### `parsePersonInput()` anpassen:
-- Neues Format: `{ person_id, pairing_token, key }` erkennen
-- Legacy `{ id, name }` kann entfernt werden (keine produktiven User)
-
-### `addPerson()` anpassen:
+### Watcher-Seite: QR-Scan + Response
+- `parsePersonInput()`: Neues Format `{ person_id, pairing_token }` erkennen
 - Watcher-Name abfragen (Input-Feld)
-- AES-Key aus QR importieren → Name verschlüsseln (AES-256-GCM)
-- `signedFetch('/pair/respond')` mit `{ pairing_token, encrypted_name, iv }`
+- `fetch('/api/pair/respond')` mit `{ pairing_token, watcher_name }`
+- Legacy `{ id, name }` Format entfernen (keine produktiven User)
 
 ---
 
@@ -303,32 +271,29 @@ allowHeaders: ['Content-Type', 'X-Device-Id', 'X-Timestamp', 'X-Signature']
 
 ## Free: Implementierungsreihenfolge
 
-1. Migration-Datei (002)
-2. Backend: Hilfsfunktionen (ECDSA-Verify, Base64)
-3. Backend: Registrierung (nur ECDSA)
-4. Backend: Auth-Middleware (ECDSA, Cookie/Bearer entfernen)
-5. Backend: CORS-Fix
-6. Backend: Autorisierung auf allen Endpoints
-7. Backend: `POST /api/watcher` → `watcher_id` in `device_keys`
-8. Backend: Pairing-Endpoints
-9. Backend: Cron-Cleanup
-10. Frontend: Shared Crypto (IndexedDB, signedFetch) in beide Templates
-11. Frontend Person: QR + Polling
-12. Frontend Watcher: QR-Scan + Verschlüsselung
-13. Cleanup: `createDeviceId()` Fallback, Error-Details, `schema.sql`
+1. DB-Migration: `watcher_id` in `device_keys` + `pairing_requests`-Tabelle
+2. Backend: `lookupApiKey()` umbauen → gibt `{ device_id, role }` zurück
+3. Backend: Auth-Middleware setzt `deviceId` + `role` in Context
+4. Backend: Heartbeat durch Auth-Middleware schicken
+5. Backend: Ownership-Hilfsfunktionen + Checks auf allen Endpoints
+6. Backend: `POST /api/watcher` → `watcher_id` in `device_keys` setzen
+7. Backend: Pairing-Endpoints + Cron-Cleanup
+8. Backend: CORS + Error-Details + Input-Validierung
+9. Frontend: QR-Pairing auf neues Format umstellen (Person + Watcher)
+10. Cleanup: `createDeviceId()` Fallback, `schema.sql` aktualisieren
 
 ---
 
 ## Free: Verifikation
 
-1. `wrangler dev` → Person-Seite → Turnstile → Public Key in DB prüfen
-2. DevTools Network → `X-Device-Id`, `X-Timestamp`, `X-Signature` Headers vorhanden
-3. Request ohne Signatur an `/api/heartbeat` → 401
-4. IDOR: Mit Device A auf Person B's Daten → 403
-5. Pairing E2E: Person QR → Watcher scannt → Name eingeben → Person sieht entschlüsselten Namen
-6. D1 prüfen: `pairing_requests.encrypted_name` ist kein Klartext
-7. 5+ Min. warten → Pairing "expired"
-8. CORS: Request von fremder Origin → geblockt
+1. `wrangler dev` → Person registrieren → API-Key in Cookie prüfen
+2. Request ohne Auth an `/api/heartbeat` → 401
+3. IDOR: Mit Device A auf Person B's Daten → 403
+4. Pairing E2E: Person QR → Watcher scannt → Name eingeben → Watch-Relation erstellt
+5. 5+ Min. warten → Pairing "expired"
+6. CORS: Request von fremder Origin → geblockt
+7. `check_interval_minutes = -1` → 400
+8. Error-Response enthält keine Stack-Traces
 
 ---
 ---
@@ -337,8 +302,8 @@ allowHeaders: ['Content-Type', 'X-Device-Id', 'X-Timestamp', 'X-Signature']
 
 ## Pro: Auth-System
 
-- **Dashboard-Login:** Email/Passwort + MFA (kein Device-Keypair)
-- **Mitarbeiter-Smartphone:** ECDSA Device-Auth (wie Free) PLUS Org-Zugehörigkeit über Dashboard-Zuweisung
+- **Dashboard-Login:** Email/Passwort + MFA
+- **Mitarbeiter-Smartphone:** API-Key Device-Auth (wie Free) PLUS Org-Zugehörigkeit über Dashboard-Zuweisung
 - **Rollen:** Org-Owner, Care-Manager, Watcher, Read-Only/Audit
 - Dashboard-Auth und Device-Auth sind ergänzende Schichten
 
@@ -405,11 +370,11 @@ audit_logs            -- Wer hat wann was gelesen/geändert/exportiert
 ## Schritt 1: Free Web-UI fertigstellen
 **Ziel:** Stabile, sichere Web-App unter ibinda.app
 
-- [ ] ECDSA Auth implementieren (Phasen 1-4 dieses Plans)
-- [ ] Autorisierung auf allen Endpoints (Phase 5)
-- [ ] Verschlüsseltes QR-Pairing (Phasen 6, 9, 10)
-- [ ] CORS + Security Headers + Input-Validierung (Phase 7)
-- [ ] Gerätewechsel-Flow (Phase 11)
+- [ ] Auth-Middleware fixen: Device-Identifikation + Ownership (Phasen 2-3)
+- [ ] Heartbeat authentifizieren (Phase 2)
+- [ ] QR-Pairing mit Pairing-Tokens (Phasen 4, 6)
+- [ ] CORS + Security + Input-Validierung (Phase 5)
+- [ ] Gerätewechsel-Flow (Phase 7)
 - [ ] Cleanup verwaister Watch-Relations
 - [ ] Code aufteilen (2400-Zeilen-Monolith → saubere Module)
 - [ ] E2E-Tests im Browser (Person + Watcher Flow komplett durchspielen)

@@ -188,40 +188,27 @@ Phase 2:
 
 ---
 
-## 8) Pairing- und Schlüsselkonzept (für spätere Konfiguration festgehalten)
+## 8) Pairing-Konzept
 
-### Ziel
-Sicheres Pairing zwischen **Person** und **Watcher**, ohne dass jemals ein Private Key das Ursprungsgerät verlässt.
+### Entscheidung
+ECDSA/Public-Key-Pairing wurde als Overkill verworfen (siehe `DECISIONS.md`). Stattdessen einfaches Token-basiertes Pairing über TLS.
 
-### Grundregeln
-- Keypair wird **lokal auf dem Person-Gerät** erzeugt.
-- Nur der **Public Key** wird an den Server übertragen.
-- Private Keys werden **nie** über QR, API oder Datenbank geteilt.
-- Der Name ist **niemals** Schlüsselmaterial.
+### Ablauf (Free)
+1. Person erstellt Pairing-Request → Server gibt `pairing_token` (UUID, 5 Min. gültig)
+2. Person zeigt QR-Code: `{ person_id, pairing_token }`
+3. Watcher scannt QR, gibt seinen Namen ein
+4. Watcher sendet `POST /api/pair/respond` mit `{ pairing_token, watcher_name }`
+5. Server validiert Token (gültig, pending, < 5 Min), erstellt Watch-Relation
+6. Person pollt `GET /api/pair/:token` → sieht Watcher-Name bei Completion
 
-### Empfohlener Ablauf
-1. Person-Gerät erzeugt lokal Keypair (z. B. X25519/Ed25519 je nach Protokoll).
-2. Person sendet `person_public_key` + `fingerprint` an den Server.
-3. Person erzeugt einen QR-Code mit:
-   - `person_id`
-   - `person_public_key`
-   - `pairing_token` (TTL 30 Sekunden, **single-use**)
-4. Watcher scannt den QR-Code.
-5. Watcher verschlüsselt seinen Namen (oder Profilpayload) mit `person_public_key`.
-6. Watcher sendet an den Server: `pairing_token` + `watcher_public_key` + `ciphertext` + `nonce` + `timestamp`.
-7. Server validiert:
-   - Token noch gültig (30s)
-   - Token noch nicht verwendet
-   - Replay-Schutz (Nonce/Timestamp)
-8. Server speichert nur Public Keys + Ciphertext + Beziehungsdaten.
-9. Person liest den verschlüsselten Namen lokal mit eigenem Private Key aus.
+### Sicherheit
+- Token einmalig verwendbar, danach `completed`
+- TTL 5 Minuten, danach `expired` (Cron-Cleanup)
+- Rate-Limits auf Pairing-Endpoints
+- Gesamte Kommunikation über TLS
 
-### Sicherheitsanforderungen
-- Pairing-Token an `person_id` (optional zusätzlich an `watcher_device_id`) binden.
-- Token nur einmalig verwendbar, danach sofort invalidieren.
-- Serverseitige Rate-Limits auf Pairing-Endpunkte.
-- Geräteverlust-Strategie: Key-Rotation + Re-Pairing-Flow.
-- Audit-Log für Pairing-Vorgänge (ohne unnötige Klardaten).
+### Pro-Erweiterung (später)
+Für Pro-Institutionen: Pairing kann über Dashboard ausgelöst werden (kein QR nötig, Zuweisung server-seitig durch Care-Manager).
 
 ## Kurzfazit
 Ja, ein Setup mit mehreren Datenbanken ist sinnvoll und professionell:
