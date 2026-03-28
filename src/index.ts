@@ -959,7 +959,7 @@ const PERSON_PHOTOS_KEY = 'ibinda_person_photos';
 const WATCHED_PERSON_IDS_KEY = 'ibinda_watched_person_ids';
 const HIDDEN_PERSON_IDS_KEY = 'ibinda_hidden_person_ids';
 let MAX_WATCHED_PERSONS = 2;
-const PERSON_LIMIT_ALERT_TEXT = 'Maximal 2 Personen können überwacht werden.';
+function getPersonLimitAlertText() { return 'Maximal ' + MAX_WATCHED_PERSONS + ' ' + (MAX_WATCHED_PERSONS === 1 ? 'Person kann' : 'Personen können') + ' überwacht werden.'; }
 const INTERVALS = [
   { min: 1, label: '1 Min' },
   { min: 60, label: '1 Std' },
@@ -1249,6 +1249,7 @@ function updatePersonLimitUi() {
     qrButton.classList.toggle('limit-hide', isLimitReached);
   }
   if (limitMessage) {
+    limitMessage.textContent = 'Maximal ' + MAX_WATCHED_PERSONS + ' ' + (MAX_WATCHED_PERSONS === 1 ? 'Person' : 'Personen') + ' möglich.';
     limitMessage.classList.toggle('show', isLimitReached);
   }
   if (scanHint) {
@@ -1257,7 +1258,7 @@ function updatePersonLimitUi() {
 }
 
 function showPersonLimitAlert() {
-  alert(PERSON_LIMIT_ALERT_TEXT);
+  alert(getPersonLimitAlertText());
 }
 
 async function refreshPersonCount() {
