@@ -1623,13 +1623,18 @@ setInterval(loadPersons, 30000);
 </html>`;
 
 // Types
-interface Env {
+interface AppBindings {
   DB: D1Database;
   EXPO_ACCESS_TOKEN?: string;
   TURNSTILE_SITE_KEY: string;
   TURNSTILE_SECRET_KEY: string;
   DEV_TOKEN?: string;  // Nur in Dev gesetzt – ermöglicht ?dev_token=... Bypass
 }
+
+type AppEnv = {
+  Bindings: AppBindings;
+  Variables: { deviceId: string; role: string };
+};
 
 interface RateLimitRow {
   last_heartbeat_at: string;
@@ -1683,11 +1688,13 @@ async function verifyTurnstileToken(token: string, secret: string): Promise<bool
   }
 }
 
-// Security: API-Key (als Hash) in D1 nachschlagen
-async function lookupApiKey(db: D1Database, apiKey: string): Promise<boolean> {
+// Security: API-Key (als Hash) in D1 nachschlagen — gibt Device-Info zurück
+async function lookupApiKey(db: D1Database, apiKey: string): Promise<{ device_id: string; role: string } | null> {
   const hash = await hashApiKey(apiKey);
-  const row = await db.prepare('SELECT 1 FROM device_keys WHERE key_hash = ?1').bind(hash).first();
-  return row !== null;
+  const row = await db.prepare(
+    'SELECT device_id, role FROM device_keys WHERE key_hash = ?1'
+  ).bind(hash).first<{ device_id: string; role: string }>();
+  return row ?? null;
 }
 
 // Security: Check rate limit per device (max 1 per 5 minutes)
@@ -1765,6 +1772,14 @@ async function rollbackRateLimit(
   }
 }
 
+// Ownership: Prüft ob ein Gerät einer Person zugeordnet ist
+async function deviceOwnsPerson(db: D1Database, deviceId: string, personId: string): Promise<boolean> {
+  const row = await db.prepare(
+    'SELECT 1 FROM person_devices WHERE device_id = ?1 AND person_id = ?2'
+  ).bind(deviceId, personId).first();
+  return !!row;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
@@ -1826,7 +1841,7 @@ async function upsertPersonDevice(
   ).bind(personId, deviceId, deviceModel, lastSeenIso).run();
 }
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 // Static HTML routes
 app.get('/', (c) =>
@@ -1993,9 +2008,16 @@ app.use('/api/*', async (c, next) => {
   if (c.env.DEV_TOKEN) {
     const devToken = new URL(c.req.url).searchParams.get('dev_token');
     if (devToken && constantTimeEquals(devToken, c.env.DEV_TOKEN)) {
+      c.set('deviceId', 'dev');
+      c.set('role', 'person');
       return await next();
     }
   }
+
+  const setDeviceContext = (device: { device_id: string; role: string }) => {
+    c.set('deviceId', device.device_id);
+    c.set('role', device.role);
+  };
 
   // Cookie (Web/PWA)
   const cookieStr = c.req.header('Cookie') ?? '';
@@ -2004,7 +2026,13 @@ app.use('/api/*', async (c, next) => {
     if (eqIdx === -1) continue;
     if (part.slice(0, eqIdx).trim() === 'api_key') {
       const value = part.slice(eqIdx + 1).trim();
-      if (value && await lookupApiKey(c.env.DB, value)) return await next();
+      if (value) {
+        const device = await lookupApiKey(c.env.DB, value);
+        if (device) {
+          setDeviceContext(device);
+          return await next();
+        }
+      }
       break;
     }
   }
@@ -2013,7 +2041,11 @@ app.use('/api/*', async (c, next) => {
   const authHeader = c.req.header('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const apiKey = authHeader.slice(7);
-    if (await lookupApiKey(c.env.DB, apiKey)) return await next();
+    const device = await lookupApiKey(c.env.DB, apiKey);
+    if (device) {
+      setDeviceContext(device);
+      return await next();
+    }
   }
 
   return c.json({ error: 'Unauthorized' }, 401);
@@ -2060,10 +2092,17 @@ app.post('/api/person', async (c) => {
     await c.env.DB.prepare(
       'INSERT OR IGNORE INTO persons (id) VALUES (?)'
     ).bind(personId).run();
+
+    // Ownership-Bindung: Gerät wird automatisch der Person zugeordnet
+    const deviceId = c.get('deviceId');
+    const nowIso = new Date().toISOString();
+    await ensurePersonDevicesTable(c.env.DB);
+    await upsertPersonDevice(c.env.DB, personId, deviceId, detectDeviceModel(c.req.header('user-agent') ?? ''), nowIso);
+
     return c.json({ id: personId }, 201);
   } catch (e) {
     console.error('Error creating person:', e);
-    return c.json({ error: 'Failed to create person', details: String(e) }, 500);
+    return c.json({ error: 'Failed to create person' }, 500);
   }
 });
 
@@ -2090,6 +2129,12 @@ app.post('/api/heartbeat', async (c) => {
 
   if (status.length > 64 || device_id.length > 255) {
     return c.json({ error: 'person_id, status or device_id is too long' }, 400);
+  }
+
+  // Ownership-Check: Gerät muss der Person zugeordnet sein
+  const authDeviceId = c.get('deviceId');
+  if (!await deviceOwnsPerson(c.env.DB, authDeviceId, person_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
   }
 
   // Validate coordinates only if location is enabled and coordinates are provided
@@ -2187,6 +2232,9 @@ app.post('/api/heartbeat', async (c) => {
 // API: Status einer Person abfragen
 app.get('/api/person/:id', async (c) => {
   const personId = c.req.param('id');
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const person = await c.env.DB.prepare('SELECT * FROM persons WHERE id = ?').bind(personId).first();
   if (!person) return c.json({ error: 'Person not found' }, 404);
   return c.json(person);
@@ -2196,6 +2244,9 @@ app.get('/api/person/:id', async (c) => {
 app.get('/api/person/:id/has-watcher', async (c) => {
   const personId = c.req.param('id').trim();
   if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   const result = await c.env.DB.prepare(
     'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL'
@@ -2212,6 +2263,9 @@ app.get('/api/person/:id/has-watcher', async (c) => {
 app.get('/api/person/:id/watchers', async (c) => {
   const personId = c.req.param('id').trim();
   if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   const result = await c.env.DB.prepare(
     'SELECT watcher_id FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL'
@@ -2225,6 +2279,9 @@ app.get('/api/person/:id/watchers', async (c) => {
 app.get('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
   if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   await ensurePersonDevicesTable(c.env.DB);
   const devices = await c.env.DB.prepare(
@@ -2239,6 +2296,9 @@ app.get('/api/person/:id/devices', async (c) => {
 
 app.post('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const body = await c.req.json<{ device_id?: string }>().catch((): { device_id?: string } => ({}));
   const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
   if (!personId || !deviceId) {
@@ -2265,6 +2325,9 @@ app.post('/api/person/:id/devices', async (c) => {
 
 app.delete('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const body = await c.req.json<{ device_id?: string }>().catch((): { device_id?: string } => ({}));
   const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
   if (!personId || !deviceId) {
@@ -2402,10 +2465,10 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
 
 // Worker Handler
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: AppBindings, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
   },
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: AppBindings, ctx: ExecutionContext) {
     ctx.waitUntil(checkOverduePersons(env.DB, env.EXPO_ACCESS_TOKEN));
   },
 };
