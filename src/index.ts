@@ -2390,10 +2390,17 @@ app.delete('/api/person/:id/devices', async (c) => {
 
 // API: Betreuer registrieren
 app.post('/api/watcher', async (c) => {
-  const { push_token } = await c.req.json<{ push_token: string }>();
+  const { push_token, device_model = 'unknown' } = await c.req.json<{ push_token: string; device_model?: string }>();
   if (!push_token) return c.json({ error: 'push_token required' }, 400);
+  const deviceId = c.get('deviceId');
   const watcherId = crypto.randomUUID();
-  await c.env.DB.prepare('INSERT INTO watchers (id, push_token) VALUES (?, ?)').bind(watcherId, push_token).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO watchers (id, push_token) VALUES (?, \'\')').bind(watcherId),
+    c.env.DB.prepare(
+      `INSERT OR REPLACE INTO watcher_devices (watcher_id, device_id, push_token, device_model, last_seen)
+       VALUES (?, ?, ?, ?, datetime('now'))`
+    ).bind(watcherId, deviceId, push_token, device_model),
+  ]);
   return c.json({ id: watcherId }, 201);
 });
 
@@ -2463,10 +2470,10 @@ app.get('/api/watcher/:id/persons', async (c) => {
 // CRON: Überfälligkeits-Check (Intervall in Minuten)
 async function checkOverduePersons(db: D1Database, expoToken?: string) {
   const overdue = await db.prepare(
-    `SELECT p.id as person_id, p.last_heartbeat, wr.watcher_id, wr.check_interval_minutes, w.push_token
+    `SELECT p.id as person_id, p.last_heartbeat, wr.watcher_id, wr.check_interval_minutes, wd.push_token
      FROM persons p
      JOIN watch_relations wr ON p.id = wr.person_id
-     JOIN watchers w ON wr.watcher_id = w.id
+     JOIN watcher_devices wd ON wr.watcher_id = wd.watcher_id
      WHERE wr.removed_at IS NULL
      AND (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
      AND (wr.last_notified_at IS NULL OR wr.last_notified_at < datetime('now', '-1 hour'))`

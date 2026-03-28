@@ -6,11 +6,25 @@ CREATE TABLE IF NOT EXISTS persons (
   last_location_lng REAL
 );
 
--- Betreuer (Watcher) - Push-Token nötig für Benachrichtigung
+-- Betreuer (Watcher) - Identität
+-- Hinweis: push_token ist ein DB-Überbleibsel (NOT NULL, leer gesetzt), wird nicht mehr verwendet
 CREATE TABLE IF NOT EXISTS watchers (
   id TEXT PRIMARY KEY,
-  push_token TEXT NOT NULL
+  push_token TEXT NOT NULL DEFAULT ''
 );
+
+-- Geräte pro Watcher (Multi-Device Support)
+CREATE TABLE IF NOT EXISTS watcher_devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  watcher_id TEXT NOT NULL,
+  device_id TEXT NOT NULL UNIQUE,
+  push_token TEXT NOT NULL,
+  device_model TEXT NOT NULL DEFAULT 'unknown',
+  last_seen DATETIME NOT NULL,
+  FOREIGN KEY (watcher_id) REFERENCES watchers(id)
+);
+CREATE INDEX IF NOT EXISTS idx_watcher_devices_watcher_id
+  ON watcher_devices(watcher_id);
 
 -- Verknüpfung + individuelle Einstellungen (in Minuten gespeichert)
 -- Kein Hard-Delete: removed_at wird gesetzt statt Zeile zu löschen (Audit-Trail)
