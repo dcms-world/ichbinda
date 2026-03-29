@@ -461,13 +461,13 @@ h1 {
   </div>
 
   <div class="settings-section">
-    <h3>QR-Code für Betreuung</h3>
+    <h3>QR-Code zum Verbinden</h3>
     <div class="qr-container" id="qrContainer">
       <div id="qrcode"></div>
       <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
       <small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
     </div>
-    <small class="settings-help">Die Betreuungsperson kann diesen Code scannen.</small>
+    <small class="settings-help">Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</small>
   </div>
 
   <div class="settings-section">
@@ -484,7 +484,7 @@ h1 {
   </div>
 
   <div class="settings-section">
-    <h3>Betreuung</h3>
+    <h3>Verbindungen</h3>
     <div id="watcherInfo"></div>
   </div>
 
@@ -525,7 +525,7 @@ h1 {
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
 <div class="last-checkin" id="lastCheckin"></div>
-<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Betreuungsperson verbunden</div>
+<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Verbindung eingerichtet</div>
 </div>
 
 <script>
@@ -584,7 +584,7 @@ function setLocationEnabled(enabled){localStorage.setItem(LOCATION_ENABLED_KEY,e
 
 function updateLocationToggleUi(){const toggle=document.getElementById('locationToggle');if(!toggle)return;toggle.classList.toggle('active',isLocationEnabled())}
 
-async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Der Betreuer sieht dann, wo du dich befindest.');if(!confirmed)return;try{await getCurrentPosition();setLocationEnabled(true)}catch(e){console.log('Location permission denied',e);setLocationEnabled(false);alert('Standort nicht verfügbar. Bitte Standortzugriff im Browser erlauben.')}}else{setLocationEnabled(false);setLocationClearPending(true)}}
+async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Deine verbundenen Personen sehen dann, wo du dich befindest.');if(!confirmed)return;try{await getCurrentPosition();setLocationEnabled(true)}catch(e){console.log('Location permission denied',e);setLocationEnabled(false);alert('Standort nicht verfügbar. Bitte Standortzugriff im Browser erlauben.')}}else{setLocationEnabled(false);setLocationClearPending(true)}}
 
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
@@ -596,7 +596,7 @@ function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=s
 
 function resetStatus(){const status=document.getElementById('status');status.textContent='Einmal tippen: Alles okay';status.className='status idle'}
 
-function setButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.add('error');btn.innerHTML='!<span class="btn-sub">Nochmal</span>'}if(card){card.innerHTML='Meldung konnte nicht gesendet werden.<div class="error-sub">Bitte nochmal versuchen oder direkt bei deiner Betreuungsperson melden.</div>';card.classList.add('visible')}}
+function setButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.add('error');btn.innerHTML='!<span class="btn-sub">Nochmal</span>'}if(card){card.innerHTML='Meldung konnte nicht gesendet werden.<div class="error-sub">Bitte nochmal versuchen oder direkt bei einer verbundenen Person melden.</div>';card.classList.add('visible')}}
 function clearButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.remove('error');btn.innerHTML='OK<span class="btn-sub">Alles gut</span>'}if(card)card.classList.remove('visible')}
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;setTimeout(resetStatus,2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
@@ -609,7 +609,7 @@ const WATCHER_NAMES_KEY='ibinda_watcher_names';
 function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}
 function cacheWatcherNames(updates){const names=getCachedWatcherNames();Object.assign(names,updates);localStorage.setItem(WATCHER_NAMES_KEY,JSON.stringify(names))}
 function getWatcherDisplayName(id){const name=getCachedWatcherNames()[id];return name||id.slice(0,8)+'…'}
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const nameUpdates={};(data.watchers||[]).forEach(w=>{if(w.name)nameUpdates[w.id]=w.name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);const count=data.watcher_count;const label=count===1?'1 Betreuer':count+' Betreuer';const items=(data.watchers||[]).map(w=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(w.id))+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const nameUpdates={};(data.watchers||[]).forEach(w=>{if(w.name)nameUpdates[w.id]=w.name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);const count=data.watcher_count;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=(data.watchers||[]).map(w=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(w.id))+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
@@ -767,7 +767,7 @@ async function handleNewDeviceScanned(personId) {
     loadDevices();
     renderPersonName();
   } catch (e) {
-    alert('Fehler beim Hinzufügen: ' + e.message);
+    alert('Fehler beim Verbinden: ' + e.message);
   }
 }
 
@@ -781,7 +781,7 @@ const WATCHER_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>I bin da - Betreuer Dashboard</title>
+<title>I bin da - Verbundene Personen</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
@@ -884,15 +884,15 @@ button:hover{background:#5a6fd6}
 </div>
 <div class="container">
 <h1>iBinda <span id="watcherNameDisplay" class="watcher-name" onclick="askForWatcherName()" title="Namen ändern">-</span></h1>
-<p class="subtitle">Überwachte Personen im Blick behalten</p>
+<p class="subtitle">Verbundene Personen im Blick behalten</p>
 <div class="card">
 <div class="add-header">
-<h3>➕ Person hinzufügen</h3>
+<h3>➕ Verbindung hinzufügen</h3>
 <span id="personCounter" class="person-counter">0/- Personen</span>
 </div>
 <div id="addPersonControls" class="add-person">
 <input type="text" id="personId" placeholder="Person ID oder QR-Daten">
-<button id="addPersonBtn" onclick="addPerson()">Hinzufügen</button>
+<button id="addPersonBtn" onclick="addPerson()">Verbindung hinzufügen</button>
 <button type="button" id="openQrScannerBtn" onclick="openQrScanner()">QR scannen</button>
 </div>
 <div id="personLimitMessage" class="limit-message">Maximal 2 Personen möglich.</div>
@@ -900,11 +900,11 @@ button:hover{background:#5a6fd6}
 </div>
 <div class="card">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px">
-<h3 style="margin:0">📋 Meine Personen</h3>
+<h3 style="margin:0">📋 Verbundene Personen</h3>
 <button onclick="loadPersons()" style="background:none;border:1px solid #d0d5dd;border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;color:#475467">↻ Aktualisieren</button>
 </div>
 <ul class="person-list" id="personList">
-<li class="empty-state">Noch keine Personen.</li>
+<li class="empty-state">Noch keine verbundenen Personen.</li>
 </ul>
 </div>
 </div>
@@ -1490,7 +1490,7 @@ async function addPerson() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: 1440 })
     });
-    if (!watchRes.ok) throw new Error('Person nicht gefunden oder Fehler beim Hinzufügen (Status ' + watchRes.status + ')');
+    if (!watchRes.ok) throw new Error('Verbindung konnte nicht hinzugefügt werden (Status ' + watchRes.status + ')');
     unhidePersonInLocalView(personId);
     document.getElementById('personId').value = '';
     await loadPersons();
@@ -1628,7 +1628,7 @@ async function removePersonFromLocalView(personId) {
   if (!watcherId) return false;
   const personName = getPersonName(personId) || getRememberedPersonName(personId);
   const label = personName ? personName + ' (' + personId + ')' : personId;
-  const confirmed = confirm('Person "' + label + '" aus der Betreuung entfernen?');
+  const confirmed = confirm('Verbindung mit "' + label + '" entfernen?');
   if (!confirmed) return false;
   try {
     const res = await fetch(API_URL + '/watch', {
@@ -1669,7 +1669,7 @@ async function loadPersons() {
   setStoredList(WATCHED_PERSON_IDS_KEY, watchedPersonIds);
   const list = document.getElementById('personList');
   if (visiblePersons.length === 0) {
-    list.innerHTML = '<li class="empty-state">Noch keine Personen.</li>';
+    list.innerHTML = '<li class="empty-state">Noch keine verbundenen Personen.</li>';
     closeEditModal();
     return;
   }
