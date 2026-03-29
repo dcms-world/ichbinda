@@ -284,11 +284,14 @@ status="$(request POST "$WORKER_URL/api/watcher/${WATCHER_ID}/announce" '{"name"
 expect_status "POST /api/watcher/:id/announce mit ungueltigem Start" "400" "$status" "$BODY_FILE"
 expect_body_contains "POST /api/watcher/:id/announce mit ungueltigem Start" "$BODY_FILE" '"error":"name must start with 2 letters"'
 
-sleep 3
-status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person fuer Rate-Limit-Test" "201" "$status" "$BODY_FILE"
+RATE_LIMIT_PERSON_ID="$(json_field "$BODY_FILE" id)"
+
+status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "Heartbeat 1" "200" "$status" "$BODY_FILE"
 
-status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "Heartbeat 2 direkt danach" "429" "$status" "$BODY_FILE"
 expect_body_contains "Heartbeat 2 direkt danach" "$BODY_FILE" '"error":"Too many requests"'
 

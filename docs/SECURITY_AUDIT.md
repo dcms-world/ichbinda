@@ -38,9 +38,9 @@ Status: offen
 
 ## Hoch
 
-- [ ] **5. Vorhersehbarer Device-ID-Fallback**
-  `createDeviceId()` fällt auf `Date.now() + Math.random()` zurück wenn `crypto.randomUUID()` fehlt.
-  Fallback durch `crypto.getRandomValues()` ersetzen.
+- [x] **5. Vorhersehbarer Device-ID-Fallback**
+  Der fruehere Fallback `Date.now() + Math.random()` wurde entfernt.
+  Person- und Watcher-Frontend erzeugen Device-IDs jetzt auch ohne `crypto.randomUUID()` ueber `crypto.getRandomValues()` als RFC-4122-kompatible UUID.
 
 - [x] **6. `person_id` nur auf Länge geprüft, nicht auf UUID-Format**
   UUID-Regex-Validierung wurde implementiert.
@@ -61,29 +61,30 @@ Status: offen
   Die frueheren `details: String(e)`-Leaks wurden entfernt.
   `POST /api/watch` erzeugt keine interne Exception-Response mehr, sondern liefert nur noch einen festen `410`-Fehlertext fuer den deaktivierten Legacy-Pfad.
 
-- [ ] **11. Input-Validierung fehlt auf mehreren Endpoints**
-  - `POST /api/watcher`: `push_token` ohne Längen-/Format-Validierung
-  - `PUT /api/watch`: `person_id`, `watcher_id` nicht als UUID validiert
-  - `PUT /api/watch`: `check_interval_minutes` ohne Bounds-Check
-  - `GET /api/person/:id`: `:id` nicht als UUID validiert
+- [x] **11. Input-Validierung fehlt auf mehreren Endpoints**
+  Die betroffenen Endpoints validieren jetzt konsistent:
+  - `POST /api/watcher`: `push_token` auf gueltige String-Laenge und Steuerzeichen
+  - `GET /api/person/:id`, `GET /api/person/:id/has-watcher`, `GET /api/person/:id/watchers`, `GET/POST/DELETE /api/person/:id/devices`: UUID-Validierung fuer `person_id`
+  - `GET /api/watcher/:id`, `GET /api/watcher/:id/persons`, `POST /api/watcher/:id/announce`: UUID-Validierung fuer `watcher_id`
+  - `PUT /api/watch` und `DELETE /api/watch`: UUID-Validierung fuer `person_id` und `watcher_id`, plus robuste JSON-Fehlerbehandlung
+  - `POST /api/watcher/:id/announce`: robuste JSON-Fehlerbehandlung fuer `name`
 
 ---
 
 ## Mittel
 
-- [ ] **12. `check_interval_minutes` ohne Min/Max-Validierung**
-  Negative Werte, 0 oder extrem große Zahlen werden akzeptiert.
-  Der Wert wird in SQL via String-Konkatenation verwendet: `'+' || wr.check_interval_minutes || ' minutes'`.
-  Da der Wert ein INTEGER aus der DB ist, besteht kein SQL-Injection-Risiko, aber logische Fehler bei negativen/extremen Werten.
-  Sinnvolle Grenzen erzwingen (z.B. 1–10080 Minuten).
+- [x] **12. `check_interval_minutes` ohne Min/Max-Validierung**
+  `PUT /api/watch` akzeptiert `check_interval_minutes` jetzt nur noch als Integer im Bereich `1–10080`.
+  Damit werden `0`, negative und unrealistisch große Werte vor dem Schreiben in `watch_relations` abgefangen.
 
-- [ ] **13. Fehlende HTTP Security Headers**
-  Folgende Header werden nicht gesetzt:
+- [x] **13. Fehlende HTTP Security Headers**
+  Eine globale Middleware setzt jetzt:
   - `Content-Security-Policy`
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY`
-  - `Strict-Transport-Security`
-  Security-Header-Middleware hinzufügen (z.B. Hono `secureHeaders()`).
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Strict-Transport-Security` fuer HTTPS-Requests
+  Die CSP ist auf die aktuell benoetigten externen Quellen fuer Fonts, QR-Libs und Turnstile begrenzt.
 
 - [ ] **14. Sensitive Daten in `localStorage`**
   person_id, watcher_id, Namen und Fotos liegen in localStorage – bei XSS sofort kompromittiert.
@@ -163,6 +164,9 @@ Status: offen
 | `details: String(e)` aus `POST /api/person` entfernt | implementiert |
 | Pairing mit Personen-Bestaetigung (`/api/pair/*`, `POST /api/pair/confirm`) | implementiert |
 | Direkter Legacy-Pfad `POST /api/watch` deaktiviert | implementiert |
+| Sicherer Device-ID-Fallback via `crypto.getRandomValues()` | implementiert |
+| Input-Validierung fuer `push_token`, UUID-Routen und `check_interval_minutes` | implementiert |
+| HTTP Security Headers inkl. CSP/HSTS | implementiert |
 
 ---
 
@@ -171,7 +175,7 @@ Status: offen
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
 | Kritisch    | 5      | 0             |
-| Hoch        | 7      | 3             |
-| Mittel      | 7      | 7             |
+| Hoch        | 7      | 1             |
+| Mittel      | 7      | 5             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **17**        |
+| **Gesamt**  | **26** | **13**        |

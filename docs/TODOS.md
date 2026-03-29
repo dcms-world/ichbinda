@@ -45,15 +45,15 @@ Referenzen:
 
 ### Phase 5: CORS + Security + Validierung
 - [x] CORS auf erlaubte Origins begrenzen: gleicher Host, lokales Dev und Capacitor-Origins — **Security #4**
-- [ ] `createDeviceId()` Fallback fixen — **Security #5**
+- [x] `createDeviceId()` Fallback fixen — **Security #5**
 - [x] Error-Responses ohne `details: String(e)` — **Security #10**
-- [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
+- [x] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
 - [x] `POST /api/person`: bei ungültiger `id` mit `400` ablehnen statt stillschweigend neue UUID zu erzeugen
-- [ ] `check_interval_minutes` strikt auf 1–10080 begrenzen (aktuell akzeptiert API auch `0` und sehr große Werte)
+- [x] `check_interval_minutes` strikt auf 1–10080 begrenzen (aktuell akzeptiert API auch `0` und sehr große Werte)
 - [x] Namensfelder (`watcher_name`, lokale Person-/Watcher-Namen) auf 2–35 Zeichen begrenzen; die ersten 2 Zeichen müssen Buchstaben sein
-- [ ] HTTP Security Headers — **Security #13**
+- [x] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Pairing seit 2026-03-29 end-to-end vorhanden: `pairing_requests` in Schema + Migration `005_pairing_requests.sql`, neue Endpoints `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token`, `POST /api/pair/confirm`, Cron-Cleanup, QR-Payload `{ person_id, pairing_token }`, Polling im Personen-Frontend und explizite Personen-Bestätigung mit Annehmen/Ablehnen vor dem Erstellen der Verbindung. Der direkte Legacy-Pfad `POST /api/watch` ist serverseitig deaktiviert (`410`), damit Security #7 nicht mehr über einen manuellen API-Call offen bleibt. Error-Responses enthalten keine `details: String(e)` mehr; `POST /api/watch` liefert nur noch einen festen `410`-Fehlertext. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #5, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Pairing seit 2026-03-29 end-to-end vorhanden: `pairing_requests` in Schema + Migration `005_pairing_requests.sql`, neue Endpoints `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token`, `POST /api/pair/confirm`, Cron-Cleanup, QR-Payload `{ person_id, pairing_token }`, Polling im Personen-Frontend und explizite Personen-Bestätigung mit Annehmen/Ablehnen vor dem Erstellen der Verbindung. Der direkte Legacy-Pfad `POST /api/watch` ist serverseitig deaktiviert (`410`), damit Security #7 nicht mehr über einen manuellen API-Call offen bleibt. Error-Responses enthalten keine `details: String(e)` mehr; `POST /api/watch` liefert nur noch einen festen `410`-Fehlertext. Am 2026-03-29 wurden die verbleibenden Restpunkte aus Phase 5 in `src/index.ts` geschlossen: sicherer Device-ID-Fallback via `crypto.getRandomValues()`, Bounds-Checks für `check_interval_minutes` (1–10080), Push-Token-/UUID-Validierung auf den betroffenen Person- und Watcher-Routen sowie globale HTTP Security Headers inkl. CSP, `nosniff`, `DENY` und HSTS auf HTTPS. `npx tsc --noEmit` und `npm run test:smoke` laufen grün. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Nächster Schritt auf dem kritischen Pfad ist damit die kleine Regression-Testbasis für Auth und Pairing; fachlich offen bleibt davor nur noch diese Live-Verifikation.
 - **Erledigt am:** -
 
 ---
@@ -90,15 +90,31 @@ Referenzen:
 
 ---
 
+## Free: Kleine Regression-Testbasis für Pairing und Auth
+- **Status:** offen
+- **Priorität:** mittel
+- **Beschreibung:** Nach den offenen Security-Restpunkten eine kleine, stabile Regression-Testbasis für kritische Flows aufbauen, bevor die Modularisierung beginnt.
+
+- [ ] Happy Path für Geräte-Registrierung abdecken
+- [ ] Regression für `register-device`-Konfliktfall (`409` bei fremder bestehender `device_id`) abdecken
+- [ ] Pairing-Flow minimal abdecken: `create` → `respond` → `confirm` → Status `completed`
+- [ ] Negative Cases abdecken: ungültiger/abgelaufener Pairing-Token, unautorisierter Zugriff auf Pairing-Status
+
+- **Fortschritt:** Bewusst zwischen Security-Restpunkten und Codebasis-Umbau eingeordnet. Ziel ist keine breite E2E-Suite, sondern eine kleine Sicherheits- und Flow-Regression für Auth/Pairing als Rückhalt vor dem Refactor.
+- **Erledigt am:** -
+
+---
+
 ## Free: Codebasis wartbar machen
 - **Status:** offen
 - **Priorität:** mittel
 - **Beschreibung:** `src/index.ts` in saubere Module aufteilen und E2E-Tests ergänzen.
 
-- [ ] Monolith aufteilen (2400+ Zeilen → Module)
+- [ ] Backend zuerst modularisieren (`routes`, Middleware, Helpers, Typen)
+- [ ] Danach Frontend-HTML/Inline-Skripte in eigene Module ziehen
 - [ ] E2E-Tests im Browser (Person + Watcher Flow komplett, inklusive Regression: nach Personen-Bestaetigung erscheint die Verbindung beim Watcher sofort in der Liste und nicht nur als Statusmeldung)
 
-- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet.
+- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet. Reihenfolge für den Umbau: erst offene Security-Restpunkte schließen, dann kleine Regression-Testbasis für Auth/Pairing, danach Backend modularisieren und Frontend-HTML zuletzt herauslösen.
 - **Erledigt am:** -
 
 ---

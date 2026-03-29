@@ -666,7 +666,7 @@ async function ensureRegistered(){if(isRegistered())return;const overlay=documen
 function getPersonId(){return localStorage.getItem('ibinda_person_id')}
 function getPersonName(){return(localStorage.getItem(PERSON_NAME_KEY)||'').trim()}
 function setPersonName(name){localStorage.setItem(PERSON_NAME_KEY,normalizeDisplayName(name))}
-function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();return 'device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
+function createDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();if(window.crypto&&typeof window.crypto.getRandomValues==='function'){const bytes=new Uint8Array(16);window.crypto.getRandomValues(bytes);bytes[6]=bytes[6]&15|64;bytes[8]=bytes[8]&63|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20,32)}throw new Error('Secure random device id generation unavailable')}
 function getOrCreateDeviceId(){const existing=(localStorage.getItem(DEVICE_ID_KEY)||'').trim();if(existing)return existing;const created=createDeviceId();localStorage.setItem(DEVICE_ID_KEY,created);return created}
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,(char)=>{if(char==='&')return'&amp;';if(char==='<')return'&lt;';if(char==='>')return'&gt;';if(char==='"')return'&quot;';return'&#39;'})}
 function formatLastSeen(iso){const time=Date.parse(iso||'');if(Number.isNaN(time))return 'Unbekannt';return new Date(time).toLocaleString('de-DE')}
@@ -1108,7 +1108,8 @@ function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-shor
 function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
 let resolveRegistered=null;
-async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('ibinda_watcher_device')||(()=>{const id=crypto.randomUUID();localStorage.setItem('ibinda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
+function createWatcherDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();if(window.crypto&&typeof window.crypto.getRandomValues==='function'){const bytes=new Uint8Array(16);window.crypto.getRandomValues(bytes);bytes[6]=bytes[6]&15|64;bytes[8]=bytes[8]&63|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20,32)}throw new Error('Secure random device id generation unavailable')}
+async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const deviceId=localStorage.getItem('ibinda_watcher_device')||(()=>{const id=createWatcherDeviceId();localStorage.setItem('ibinda_watcher_device',id);return id})();const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
 async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
 
 const PERSON_NAMES_KEY = 'ibinda_person_names';
@@ -1940,8 +1941,13 @@ interface OverduePersonRow {
   push_token: string | null;
 }
 
-const RATE_LIMIT_WINDOW_MS = 2 * 1000; // 2 seconds (for testing)
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_DISPLAY_NAME_LENGTH = 35;
+const MIN_CHECK_INTERVAL_MINUTES = 1;
+const MAX_CHECK_INTERVAL_MINUTES = 10080;
+const MIN_PUSH_TOKEN_LENGTH = 8;
+const MAX_PUSH_TOKEN_LENGTH = 2048;
+const MAX_DEVICE_MODEL_LENGTH = 255;
 const PAIRING_TOKEN_TTL_MINUTES = 5;
 const PAIRING_CLEANUP_AFTER_MINUTES = 10;
 const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
@@ -1949,6 +1955,19 @@ const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const API_CORS_ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
 const API_CORS_ALLOW_HEADERS = 'Content-Type, Authorization';
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://challenges.cloudflare.com",
+  "frame-src https://challenges.cloudflare.com"
+].join('; ');
 const CAPACITOR_ALLOWED_ORIGINS = new Set([
   'capacitor://localhost',
   'https://localhost',
@@ -2041,6 +2060,17 @@ function applyCorsHeaders(c: Context, origin: string): void {
   c.header('Access-Control-Allow-Methods', API_CORS_ALLOW_METHODS);
   c.header('Access-Control-Allow-Headers', API_CORS_ALLOW_HEADERS);
   c.header('Vary', 'Origin');
+}
+
+function applySecurityHeaders(c: Context): void {
+  c.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  if (new URL(c.req.url).protocol === 'https:') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
 }
 
 function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string): string {
@@ -2199,6 +2229,45 @@ async function deviceOwnsPerson(db: D1Database, deviceId: string, personId: stri
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
+}
+
+function parseCheckIntervalMinutes(value: unknown): number | null {
+  let parsed: number | null = null;
+
+  if (typeof value === 'number') {
+    parsed = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    parsed = Number(value.trim());
+  }
+
+  if (parsed === null || !Number.isInteger(parsed)) {
+    return null;
+  }
+
+  const interval = parsed;
+
+  if (interval < MIN_CHECK_INTERVAL_MINUTES || interval > MAX_CHECK_INTERVAL_MINUTES) {
+    return null;
+  }
+
+  return interval;
+}
+
+function parsePushToken(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length < MIN_PUSH_TOKEN_LENGTH || trimmed.length > MAX_PUSH_TOKEN_LENGTH) {
+    return null;
+  }
+
+  if (/[\u0000-\u001F\u007F]/.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -2443,6 +2512,11 @@ h1{
 );
 app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
 app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
+
+app.use('*', async (c, next) => {
+  await next();
+  applySecurityHeaders(c);
+});
 
 // API routes with strict Origin allowlist for web, local dev and Capacitor.
 app.use('/api/*', async (c, next) => {
@@ -2739,7 +2813,10 @@ app.post('/api/heartbeat', async (c) => {
 
 // API: Status einer Person abfragen
 app.get('/api/person/:id', async (c) => {
-  const personId = c.req.param('id');
+  const personId = c.req.param('id').trim();
+  if (!isValidUUID(personId)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
+  }
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -2751,7 +2828,7 @@ app.get('/api/person/:id', async (c) => {
 // API: Prüfen ob Person bereits einem Watcher zugeordnet ist
 app.get('/api/person/:id/has-watcher', async (c) => {
   const personId = c.req.param('id').trim();
-  if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -2770,7 +2847,7 @@ app.get('/api/person/:id/has-watcher', async (c) => {
 // API: Watcher-Infos einer Person — liefert Namen einmalig aus watcher_name_announcements und löscht sie danach
 app.get('/api/person/:id/watchers', async (c) => {
   const personId = c.req.param('id').trim();
-  if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -3060,8 +3137,12 @@ app.post('/api/pair/confirm', async (c) => {
 
 // API: Watcher kündigt seinen Namen an (einmal-lesbar für Person)
 app.post('/api/watcher/:id/announce', async (c) => {
-  const watcherId = c.req.param('id');
-  const { name } = await c.req.json<{ name: string }>();
+  const watcherId = c.req.param('id').trim();
+  if (!isValidUUID(watcherId)) {
+    return c.json({ error: 'Ungültige watcher_id' }, 400);
+  }
+  const body = await c.req.json<{ name?: unknown }>().catch((): { name?: unknown } => ({}));
+  const name = typeof body.name === 'string' ? body.name : '';
   const nameError = getDisplayNameValidationError(name);
   if (nameError === 'name-too-short') {
     return c.json({ error: 'name too short' }, 400);
@@ -3091,7 +3172,7 @@ app.post('/api/watcher/:id/announce', async (c) => {
 // API: Geräte einer Person
 app.get('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
-  if (!personId) return c.json({ error: 'person_id required' }, 400);
+  if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -3109,6 +3190,9 @@ app.get('/api/person/:id/devices', async (c) => {
 
 app.post('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
+  if (!isValidUUID(personId)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
+  }
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -3138,6 +3222,9 @@ app.post('/api/person/:id/devices', async (c) => {
 
 app.delete('/api/person/:id/devices', async (c) => {
   const personId = c.req.param('id').trim();
+  if (!isValidUUID(personId)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
+  }
   if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -3174,8 +3261,13 @@ app.delete('/api/person/:id/devices', async (c) => {
 
 // API: Betreuer registrieren
 app.post('/api/watcher', async (c) => {
-  const { push_token, device_model = 'unknown' } = await c.req.json<{ push_token: string; device_model?: string }>();
-  if (!push_token) return c.json({ error: 'push_token required' }, 400);
+  const body = await c.req.json<{ push_token?: unknown; device_model?: unknown }>().catch((): { push_token?: unknown; device_model?: unknown } => ({}));
+  const pushToken = parsePushToken(body.push_token);
+  if (!pushToken) return c.json({ error: 'push_token invalid' }, 400);
+  const deviceModel = typeof body.device_model === 'string' ? body.device_model.trim() : '';
+  if (deviceModel.length > MAX_DEVICE_MODEL_LENGTH) {
+    return c.json({ error: 'device_model too long' }, 400);
+  }
   const deviceId = c.get('deviceId');
   const watcherId = crypto.randomUUID();
   await c.env.DB.batch([
@@ -3183,7 +3275,7 @@ app.post('/api/watcher', async (c) => {
     c.env.DB.prepare(
       `INSERT OR REPLACE INTO watcher_devices (watcher_id, device_id, push_token, device_model, last_seen)
        VALUES (?, ?, ?, ?, datetime('now'))`
-    ).bind(watcherId, deviceId, push_token, device_model),
+    ).bind(watcherId, deviceId, pushToken, deviceModel || 'unknown'),
   ]);
   return c.json({ id: watcherId }, 201);
 });
@@ -3195,37 +3287,63 @@ app.post('/api/watch', async (c) => {
 
 // API: Intervall für überwachte Person aktualisieren (in Minuten)
 app.put('/api/watch', async (c) => {
-  const { person_id, watcher_id, check_interval_minutes } = await c.req.json();
-  if (!person_id || !watcher_id || !check_interval_minutes) return c.json({ error: 'person_id, watcher_id and check_interval_minutes required' }, 400);
+  const body = await c.req
+    .json<{ person_id?: unknown; watcher_id?: unknown; check_interval_minutes?: unknown }>()
+    .catch((): { person_id?: unknown; watcher_id?: unknown; check_interval_minutes?: unknown } => ({}));
+  const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
+  const watcherId = typeof body.watcher_id === 'string' ? body.watcher_id.trim() : '';
+  const checkIntervalMinutes = parseCheckIntervalMinutes(body.check_interval_minutes);
+
+  if (!personId || !watcherId || typeof body.check_interval_minutes === 'undefined') {
+    return c.json({ error: 'person_id, watcher_id and check_interval_minutes required' }, 400);
+  }
+  if (!isValidUUID(personId)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
+  }
+  if (!isValidUUID(watcherId)) {
+    return c.json({ error: 'Ungültige watcher_id' }, 400);
+  }
+  if (checkIntervalMinutes === null) {
+    return c.json({ error: `check_interval_minutes must be an integer between ${MIN_CHECK_INTERVAL_MINUTES} and ${MAX_CHECK_INTERVAL_MINUTES}` }, 400);
+  }
   const deviceId = c.get('deviceId');
   const owns = await c.env.DB.prepare(
     'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
-  ).bind(watcher_id, deviceId).first();
+  ).bind(watcherId, deviceId).first();
   if (!owns) return c.json({ error: 'Forbidden' }, 403);
   await c.env.DB.prepare(
     `UPDATE watch_relations SET check_interval_minutes = ? WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
-  ).bind(check_interval_minutes, person_id, watcher_id).run();
-  return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
+  ).bind(checkIntervalMinutes, personId, watcherId).run();
+  return c.json({ success: true, person_id: personId, watcher_id: watcherId, check_interval_minutes: checkIntervalMinutes });
 });
 
 // API: Person aus Betreuung entfernen (Soft-Delete)
 app.delete('/api/watch', async (c) => {
-  const { person_id, watcher_id } = await c.req.json();
-  if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
+  const body = await c.req
+    .json<{ person_id?: unknown; watcher_id?: unknown }>()
+    .catch((): { person_id?: unknown; watcher_id?: unknown } => ({}));
+  const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
+  const watcherId = typeof body.watcher_id === 'string' ? body.watcher_id.trim() : '';
+  if (!personId || !watcherId) return c.json({ error: 'person_id and watcher_id required' }, 400);
+  if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
+  if (!isValidUUID(watcherId)) return c.json({ error: 'Ungültige watcher_id' }, 400);
   const deviceId = c.get('deviceId');
   const owns = await c.env.DB.prepare(
     'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
-  ).bind(watcher_id, deviceId).first();
+  ).bind(watcherId, deviceId).first();
   if (!owns) return c.json({ error: 'Forbidden' }, 403);
   await c.env.DB.prepare(
     `UPDATE watch_relations SET removed_at = datetime('now') WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL`
-  ).bind(person_id, watcher_id).run();
+  ).bind(personId, watcherId).run();
   return c.json({ success: true });
 });
 
 // API: Watcher-Metadaten (inkl. Personen-Limit)
 app.get('/api/watcher/:id', async (c) => {
-  const watcherId = c.req.param('id');
+  const watcherId = c.req.param('id').trim();
+  if (!isValidUUID(watcherId)) {
+    return c.json({ error: 'Ungültige watcher_id' }, 400);
+  }
   const deviceId = c.get('deviceId');
   const owns = await c.env.DB.prepare(
     'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
@@ -3240,7 +3358,10 @@ app.get('/api/watcher/:id', async (c) => {
 
 // API: Alle überwachten Personen eines Betreuers (Intervall in Minuten)
 app.get('/api/watcher/:id/persons', async (c) => {
-  const watcherId = c.req.param('id');
+  const watcherId = c.req.param('id').trim();
+  if (!isValidUUID(watcherId)) {
+    return c.json({ error: 'Ungültige watcher_id' }, 400);
+  }
   const deviceId = c.get('deviceId');
   const owns = await c.env.DB.prepare(
     'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
