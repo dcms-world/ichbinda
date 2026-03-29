@@ -19,6 +19,12 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### Ohne aktive Verbindung kein Heartbeat, sondern Pairing als Primäraktion
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Ein Heartbeat ohne verbundenen Watcher hat keinen Nutzen und wirkt in der Person-UI wie eine falsche Hauptaktion. Solange noch niemand verbunden ist, wird deshalb der große Primärbutton nicht als grünes `OK`, sondern als gelbe Pairing-Aktion dargestellt, die direkt den QR-Code öffnet. Erst mit mindestens einer aktiven Verbindung wird daraus wieder der eigentliche Heartbeat-Button.
+- **Alternativen verworfen:** Grünen `OK`-Button immer sichtbar lassen; zusätzlichen QR-Button nur unterhalb des Hinweises anzeigen; Heartbeats ohne Empfänger trotzdem zulassen.
+
 ### Watcher-Abmeldungen als bestaetigbare Ereignisse speichern
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent

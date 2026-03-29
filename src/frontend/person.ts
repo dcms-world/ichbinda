@@ -113,6 +113,20 @@ h1 {
   box-shadow: 0 10px 40px rgba(255, 59, 48, 0.4);
 }
 
+.btn-okay.setup {
+  background: var(--system-orange);
+  box-shadow: 0 10px 40px rgba(255, 149, 0, 0.35);
+  font-size: 34px;
+  line-height: 1.05;
+  text-align: center;
+  padding: 0 24px;
+}
+
+.btn-okay.setup:active {
+  background: #d67d00;
+  box-shadow: 0 4px 15px rgba(255, 149, 0, 0.28);
+}
+
 .status {
   margin-top: 40px;
   font-size: 20px;
@@ -145,18 +159,7 @@ h1 {
   text-align: center;
 }
 .no-watcher-warning.visible { display: block; }
-.no-watcher-warning-text { margin-bottom: 10px; }
-.no-watcher-action {
-  width: 100%;
-  border: none;
-  border-radius: 10px;
-  padding: 12px 16px;
-  background: var(--system-orange);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
+.no-watcher-warning-text { margin-bottom: 0; }
 
 /* Menu Button */
 .menu-btn {
@@ -632,8 +635,8 @@ h1 {
 
 <div class="container">
 <h1>iBinda</h1>
-<button class="btn-okay" id="btnOkay" onclick="sendHeartbeat()" aria-label="Okay senden">OK<span class="btn-sub">Alles gut</span></button>
-<div id="status" class="status" aria-live="polite">Einmal tippen: Alles okay</div>
+<button class="btn-okay" id="btnOkay" onclick="handlePrimaryAction()" aria-label="Aktion ausführen">OK<span class="btn-sub">Alles gut</span></button>
+<div id="status" class="status" aria-live="polite">Verbindung wird geprüft...</div>
 <div id="sendErrorCard" class="send-error-card" role="alert"></div>
 <div class="cooldown-container" id="cooldownContainer">
 <div class="cooldown-text">Bitte kurz warten...</div>
@@ -642,8 +645,7 @@ h1 {
 </div>
 <div class="last-checkin" id="lastCheckin"></div>
 <div id="noWatcherWarning" class="no-watcher-warning">
-  <div class="no-watcher-warning-text">⚠️ Keine Verbindung eingerichtet</div>
-  <button type="button" class="no-watcher-action" onclick="openPairingQrModal()">QR-Code anzeigen</button>
+  <div class="no-watcher-warning-text">⚠️ Noch keine Verbindung eingerichtet</div>
 </div>
 </div>
 
@@ -685,6 +687,7 @@ let pairingRefreshTimeout=null;
 let currentPairingRequestName='';
 let pendingDisconnectEvents=[];
 let watcherRefreshInterval=null;
+let hasActiveWatcherConnection=false;
 const WATCHER_REFRESH_INTERVAL_MS=30000;
 
 function clearPairingTimers(){if(pairingPollInterval){clearInterval(pairingPollInterval);pairingPollInterval=null}if(pairingRefreshTimeout){clearTimeout(pairingRefreshTimeout);pairingRefreshTimeout=null}}
@@ -739,20 +742,23 @@ function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigato
 
 function startWatcherRefresh(){if(watcherRefreshInterval)return;watcherRefreshInterval=setInterval(()=>{if(currentPersonId&&document.visibilityState==='visible')loadWatchers(currentPersonId)},WATCHER_REFRESH_INTERVAL_MS)}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID unusable, creating new person',error);personId=await createPerson()}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID unusable, creating new person',error);personId=await createPerson()}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();updatePrimaryActionButton();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
 function formatCountdown(seconds){const mins=Math.floor(seconds/60);const secs=seconds%60;return mins+':'+(secs<10?'0':'')+secs}
 
-function resetStatus(){const status=document.getElementById('status');status.textContent='Einmal tippen: Alles okay';status.className='status idle'}
+function getIdleStatusMessage(){return hasActiveWatcherConnection?'Einmal tippen: Alles okay':'Richte zuerst eine Verbindung ein'}
+function updatePrimaryActionButton(){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(!btn)return;if(!hasActiveWatcherConnection&&cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.classList.remove('error');if(hasActiveWatcherConnection){btn.classList.remove('setup');btn.innerHTML='OK<span class="btn-sub">Alles gut</span>';btn.setAttribute('aria-label','Okay senden');btn.disabled=!!cooldownInterval}else{btn.classList.add('setup');btn.innerHTML='Verbinden<span class="btn-sub">QR-Code anzeigen</span>';btn.setAttribute('aria-label','Verbindung einrichten');btn.disabled=false}if(status&&!cooldownInterval&&!(status.classList.contains('success')||status.classList.contains('error'))){status.className='status idle';status.textContent=getIdleStatusMessage()}}
+function resetStatus(){const status=document.getElementById('status');status.textContent=getIdleStatusMessage();status.className='status idle'}
+function handlePrimaryAction(){if(!hasActiveWatcherConnection){openPairingQrModal();return}sendHeartbeat()}
 
 function setButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.add('error');btn.innerHTML='!<span class="btn-sub">Nochmal</span>'}if(card){card.innerHTML='Meldung konnte nicht gesendet werden.<div class="error-sub">Bitte nochmal versuchen oder direkt bei einer verbundenen Person melden.</div>';card.classList.add('visible')}}
-function clearButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.remove('error');btn.innerHTML='OK<span class="btn-sub">Alles gut</span>'}if(card)card.classList.remove('visible')}
+function clearButtonError(){const card=document.getElementById('sendErrorCard');if(card)card.classList.remove('visible');updatePrimaryActionButton()}
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;setTimeout(resetStatus,2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(()=>status.textContent='',5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(resetStatus,5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
@@ -760,7 +766,7 @@ const WATCHER_NAMES_KEY='ibinda_watcher_names';
 function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}
 function cacheWatcherNames(updates){const names=getCachedWatcherNames();Object.assign(names,updates);localStorage.setItem(WATCHER_NAMES_KEY,JSON.stringify(names))}
 function getWatcherDisplayName(id){const name=getCachedWatcherNames()[id];return name||id.slice(0,8)+'…'}
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const watchers=Array.isArray(data.watchers)?data.watchers:[];const disconnectEvents=Array.isArray(data.disconnect_events)?data.disconnect_events:[];const nameUpdates={};watchers.forEach((watcher)=>{if(watcher&&watcher.name&&watcher.id)nameUpdates[watcher.id]=watcher.name});disconnectEvents.forEach((event)=>{if(event&&event.watcher_name&&event.watcher_id)nameUpdates[event.watcher_id]=event.watcher_name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);pendingDisconnectEvents=disconnectEvents;const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!watchers.length){if(el){el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div><button type="button" class="device-delete-btn" id="watcherQrEntryBtn">QR-Code anzeigen</button></div></div>';const qrEntryBtn=document.getElementById('watcherQrEntryBtn');if(qrEntryBtn)qrEntryBtn.onclick=()=>openPairingQrModal()}if(warn)warn.classList.add('visible')}else{const count=watchers.length;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=watchers.map((watcher)=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(watcher.id))+'</div>').join('');if(el)el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';const watcherToggle=document.getElementById('watcherToggle');if(watcherToggle)watcherToggle.onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}if(disconnectEvents.length){if(!isPairingRequestModalOpen())showDisconnectModal(disconnectEvents)}else if(isDisconnectModalOpen()){hideDisconnectModal()}}catch(e){console.error('loadWatchers failed',e)}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const watchers=Array.isArray(data.watchers)?data.watchers:[];const disconnectEvents=Array.isArray(data.disconnect_events)?data.disconnect_events:[];const nameUpdates={};watchers.forEach((watcher)=>{if(watcher&&watcher.name&&watcher.id)nameUpdates[watcher.id]=watcher.name});disconnectEvents.forEach((event)=>{if(event&&event.watcher_name&&event.watcher_id)nameUpdates[event.watcher_id]=event.watcher_name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);pendingDisconnectEvents=disconnectEvents;hasActiveWatcherConnection=watchers.length>0;updatePrimaryActionButton();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!watchers.length){if(el){el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div><button type="button" class="device-delete-btn" id="watcherQrEntryBtn">QR-Code anzeigen</button></div></div>';const qrEntryBtn=document.getElementById('watcherQrEntryBtn');if(qrEntryBtn)qrEntryBtn.onclick=()=>openPairingQrModal()}if(warn)warn.classList.add('visible')}else{const count=watchers.length;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=watchers.map((watcher)=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(watcher.id))+'</div>').join('');if(el)el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';const watcherToggle=document.getElementById('watcherToggle');if(watcherToggle)watcherToggle.onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}if(disconnectEvents.length){if(!isPairingRequestModalOpen())showDisconnectModal(disconnectEvents)}else if(isDisconnectModalOpen()){hideDisconnectModal()}}catch(e){console.error('loadWatchers failed',e)}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
