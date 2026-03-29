@@ -693,6 +693,8 @@ let currentQrModalMode='pairing';
 let currentDeviceLinkToken='';
 let currentDeviceLinkMode='switch';
 let pendingDisconnectEvents=[];
+const PAIRING_QR_SIZE=240;
+const PAIRING_QR_CORRECTION_LEVEL=typeof QRCode!=='undefined'&&QRCode.CorrectLevel?QRCode.CorrectLevel.M:undefined;
 let watcherRefreshInterval=null;
 let hasActiveWatcherConnection=false;
 let isResettingPersonApp=false;
@@ -717,9 +719,10 @@ function buildDisconnectModalMessage(events){const names=getDisconnectDisplayNam
 function showDisconnectModal(events){const overlay=document.getElementById('disconnectModalOverlay');const text=document.getElementById('disconnectModalText');pendingDisconnectEvents=Array.isArray(events)?events:[];if(!overlay||pendingDisconnectEvents.length===0)return;setDisconnectModalStatus('',false);if(text)text.textContent=buildDisconnectModalMessage(pendingDisconnectEvents);overlay.classList.add('open')}
 function hidePairingRequest(){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');currentPairingRequestName='';if(overlay)overlay.classList.remove('open');if(text)text.textContent='Mit jemandem verbinden?';setPairingRequestStatus('',false);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false;if(pendingDisconnectEvents.length)showDisconnectModal(pendingDisconnectEvents)}
 function showPairingRequest(name){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const displayName=(name||'jemandem');closePairingQrModal(false);hideDisconnectModal();currentPairingRequestName=displayName;if(text)text.textContent='Mit '+displayName+' verbinden?';setPairingRequestStatus('',false);if(overlay)overlay.classList.add('open')}
-function buildPairingQrPayload(){if(!currentPersonId||!currentPairingToken)return'';return JSON.stringify({person_id:currentPersonId,pairing_token:currentPairingToken,name:currentPersonName||getPersonName()})}
+function buildPairingQrPayload(){if(!currentPersonId||!currentPairingToken)return'';const payload={p:currentPersonId,t:currentPairingToken};const displayName=(currentPersonName||getPersonName()||'').trim();if(displayName)payload.n=displayName;return JSON.stringify(payload)}
 function buildDeviceLinkQrPayload(){if(!currentDeviceLinkToken)return'';return JSON.stringify({type:'person-device-link',link_token:currentDeviceLinkToken,device_mode:currentDeviceLinkMode,person_name:currentPersonName||getPersonName()})}
 function buildActiveQrPayload(){return currentQrModalMode==='device-link'?buildDeviceLinkQrPayload():buildPairingQrPayload()}
+function buildQrPayload(){return buildActiveQrPayload()}
 let qrCopyStatusTimeout=null;
 function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
 async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();const qrPayload=buildActiveQrPayload();if(!qrPayload){setQrCopyStatus('QR-Code wird vorbereitet',true);return}if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
@@ -729,7 +732,7 @@ async function acknowledgeDisconnectEvents(){if(!currentPersonId||pendingDisconn
 async function respondToPairingRequest(action){if(!currentPairingToken)return;const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');if(approveBtn)approveBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;setPairingRequestStatus('',false);try{const res=await fetch(API_URL+'/pair/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pairing_token:currentPairingToken,action})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Pairing confirm failed: '+res.status));hidePairingRequest();if(action==='approve'){currentPairingToken='';clearPairingTimers();if(currentPersonId)loadWatchers(currentPersonId);return}openPairingQrModal(true)}catch(e){console.error('Pairing confirm failed',e);setPairingRequestStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}}
 async function pollPairingStatus(pairingToken){if(!currentPersonId||!pairingToken)return;try{const res=await fetch(API_URL+'/pair/'+encodeURIComponent(pairingToken));if(!res.ok){if(res.status===404)return;throw new Error('Pairing poll failed: '+res.status)}const data=await res.json();if(data.status==='requested'){showPairingRequest(data.watcher_name||'jemandem');return}hidePairingRequest();if(data.status==='completed'){clearPairingTimers();currentPairingToken='';closePairingQrModal(false);loadWatchers(currentPersonId);return}if(data.status==='expired'){setQrCopyStatus('QR-Code wird erneuert...',false);await renderQrCode(true)}}catch(e){console.error('Pairing poll failed',e)}}
 function startPairingPolling(pairingToken){clearPairingTimers();pollPairingStatus(pairingToken);pairingPollInterval=setInterval(()=>{pollPairingStatus(pairingToken)},5000);pairingRefreshTimeout=setTimeout(()=>{renderQrCode(true)},300000)}
-function renderQrCodeInto(id,qrPayload){const qrEl=document.getElementById(id);if(!qrEl)return;qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
+function renderQrCodeInto(id,qrPayload){const qrEl=document.getElementById(id);if(!qrEl)return;qrEl.innerHTML='';const qrOptions={text:qrPayload,width:PAIRING_QR_SIZE,height:PAIRING_QR_SIZE};if(PAIRING_QR_CORRECTION_LEVEL!==undefined)qrOptions.correctLevel=PAIRING_QR_CORRECTION_LEVEL;new QRCode(qrEl,qrOptions);qrEl.onclick=copyQrPayload}
 async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildPairingQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startPairingPolling(currentPairingToken)}
 async function renderCurrentQrCode(forceRefresh){if(currentQrModalMode==='device-link'){clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentDeviceLinkToken){try{currentDeviceLinkToken=await createDeviceLinkToken(currentDeviceLinkMode)}catch(e){console.error('Device link QR render failed',e);setQrCopyStatus('Geräte-QR konnte nicht erstellt werden',true);return}}const qrPayload=buildDeviceLinkQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);return}await renderQrCode(forceRefresh)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
@@ -801,6 +804,14 @@ async function loadDevices(){if(!currentPersonId)return;const listEl=document.ge
 let deviceCameraStream = null;
 let deviceScanFrameRequestId = 0;
 let deviceScanContext = null;
+let lastDeviceScanAttemptAt = 0;
+const DEVICE_QR_SCAN_INTERVAL_MS=120;
+const DEVICE_QR_SCAN_VARIANTS=[
+  {cropRatio:1,maxSide:960},
+  {cropRatio:1,maxSide:640},
+  {cropRatio:0.82,maxSide:640},
+  {cropRatio:0.62,maxSide:480}
+];
 
 function stopDeviceQrScanner() {
   if (deviceScanFrameRequestId) {
@@ -808,6 +819,7 @@ function stopDeviceQrScanner() {
     deviceScanFrameRequestId = 0;
   }
   deviceScanContext = null;
+  lastDeviceScanAttemptAt = 0;
   if (deviceCameraStream) {
     deviceCameraStream.getTracks().forEach((track) => track.stop());
     deviceCameraStream = null;
@@ -819,27 +831,53 @@ function stopDeviceQrScanner() {
   }
 }
 
+function decodeQrFromVideoFrame(video, canvas, variants) {
+  if (typeof window.jsQR !== 'function') return '';
+  const videoWidth = Number(video.videoWidth || 0);
+  const videoHeight = Number(video.videoHeight || 0);
+  if (videoWidth <= 0 || videoHeight <= 0) return '';
+
+  for (const variant of variants) {
+    const cropRatio = Math.max(0.2, Math.min(1, Number(variant?.cropRatio) || 1));
+    const maxSide = Math.max(180, Math.round(Number(variant?.maxSide) || Math.max(videoWidth, videoHeight)));
+    const sourceWidth = Math.max(1, Math.round(videoWidth * cropRatio));
+    const sourceHeight = Math.max(1, Math.round(videoHeight * cropRatio));
+    const sourceX = Math.max(0, Math.round((videoWidth - sourceWidth) / 2));
+    const sourceY = Math.max(0, Math.round((videoHeight - sourceHeight) / 2));
+    const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) continue;
+    deviceScanContext = context;
+    context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+    const imageData = context.getImageData(0, 0, targetWidth, targetHeight);
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
+    const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+    if (qrText) return qrText;
+  }
+
+  return '';
+}
+
 async function scanDeviceQrFrame() {
   const video = document.getElementById('deviceQrVideo');
   const canvas = document.getElementById('deviceQrCanvas');
   if (!video || !canvas || !deviceCameraStream) return;
   
   if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    if (!deviceScanContext) {
-      deviceScanContext = canvas.getContext('2d', { willReadFrequently: true });
-    }
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    deviceScanContext.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    const imageData = deviceScanContext.getImageData(0, 0, canvas.width, canvas.height);
-    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'attemptBoth'
-    });
-    
-    if (result && result.data) {
-      try {
-        const data = JSON.parse(result.data);
+    const now = Date.now();
+    if (now - lastDeviceScanAttemptAt >= DEVICE_QR_SCAN_INTERVAL_MS) {
+      lastDeviceScanAttemptAt = now;
+      const qrText = decodeQrFromVideoFrame(video, canvas, DEVICE_QR_SCAN_VARIANTS);
+      if (qrText) {
+        try {
+        const data = JSON.parse(qrText);
         const isDeviceLinkPayload = data?.type === 'person-device-link';
         const scannedLinkToken = isDeviceLinkPayload && typeof data?.link_token === 'string'
           ? data.link_token
@@ -853,8 +891,9 @@ async function scanDeviceQrFrame() {
           handleNewDeviceScanned(scannedLinkToken, scannedMode, scannedPersonName);
           return;
         }
-      } catch (e) {
-        // Kein gültiger JSON QR Code, weiter scannen
+        } catch (e) {
+          // Kein gültiger JSON QR Code, weiter scannen
+        }
       }
     }
   }

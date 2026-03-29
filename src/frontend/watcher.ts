@@ -246,6 +246,7 @@ const INTERVALS = [
 let cameraStream = null;
 let scanFrameRequestId = 0;
 let scanContext = null;
+let lastScanAttemptAt = 0;
 let visiblePersonsById = {};
 let activeEditPersonId = '';
 let currentPersonCount = 0;
@@ -253,6 +254,13 @@ let dialogFocusTarget = null;
 let confirmModalResolver = null;
 let outgoingPairingPollInterval = null;
 let outgoingPairingTimeout = null;
+const QR_SCAN_INTERVAL_MS = 120;
+const QR_SCAN_VARIANTS = [
+  { cropRatio: 1, maxSide: 960 },
+  { cropRatio: 1, maxSide: 640 },
+  { cropRatio: 0.82, maxSide: 640 },
+  { cropRatio: 0.62, maxSide: 480 },
+];
 
 function getWatcherId() {
   return localStorage.getItem('ibinda_watcher_id');
@@ -556,9 +564,10 @@ function parsePersonInput(rawValue) {
   try {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === 'object') {
-      const personId = String(parsed.id || parsed.person_id || '').trim();
-      const pairingToken = String(parsed.pairing_token || '').trim();
-      const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+      const personId = String(parsed.id || parsed.person_id || parsed.p || '').trim();
+      const pairingToken = String(parsed.pairing_token || parsed.t || '').trim();
+      const nameValue = parsed.name ?? parsed.n;
+      const name = typeof nameValue === 'string' ? nameValue.trim() : '';
       if (name) {
         const nameError = getDisplayNameValidationError(name);
         if (nameError) return { personId, pairingToken: '', name: '', error: nameError };
@@ -575,8 +584,17 @@ function parsePersonInput(rawValue) {
 
   try {
     const parsedUrl = new URL(value);
-      const personIdFromUrl = (parsedUrl.searchParams.get('id') || parsedUrl.searchParams.get('person_id') || '').trim();
-    const pairingTokenFromUrl = (parsedUrl.searchParams.get('pairing_token') || '').trim();
+    const personIdFromUrl = (
+      parsedUrl.searchParams.get('id') ||
+      parsedUrl.searchParams.get('person_id') ||
+      parsedUrl.searchParams.get('p') ||
+      ''
+    ).trim();
+    const pairingTokenFromUrl = (
+      parsedUrl.searchParams.get('pairing_token') ||
+      parsedUrl.searchParams.get('t') ||
+      ''
+    ).trim();
     if (personIdFromUrl && !isValidFrontendPersonId(personIdFromUrl)) return { personId: '', pairingToken: '', name: '', error: 'invalid-person-id' };
     if (pairingTokenFromUrl && !isValidFrontendPairingToken(pairingTokenFromUrl)) return { personId: personIdFromUrl, pairingToken: pairingTokenFromUrl, name: '', error: 'invalid-pairing-token' };
     if (personIdFromUrl && !pairingTokenFromUrl) return { personId: personIdFromUrl, pairingToken: '', name: '', error: 'pairing-required' };
@@ -665,6 +683,50 @@ function setCameraStatus(message, isError) {
   statusElement.className = isError ? 'camera-status error' : 'camera-status';
 }
 
+function decodeQrFromVideoFrame(video, canvas, variants) {
+  if (typeof window.jsQR !== 'function') return '';
+  const videoWidth = Number(video.videoWidth || 0);
+  const videoHeight = Number(video.videoHeight || 0);
+  if (videoWidth <= 0 || videoHeight <= 0) return '';
+
+  for (const variant of variants) {
+    const cropRatio = Math.max(0.2, Math.min(1, Number(variant?.cropRatio) || 1));
+    const maxSide = Math.max(180, Math.round(Number(variant?.maxSide) || Math.max(videoWidth, videoHeight)));
+    const sourceWidth = Math.max(1, Math.round(videoWidth * cropRatio));
+    const sourceHeight = Math.max(1, Math.round(videoHeight * cropRatio));
+    const sourceX = Math.max(0, Math.round((videoWidth - sourceWidth) / 2));
+    const sourceY = Math.max(0, Math.round((videoHeight - sourceHeight) / 2));
+    const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) continue;
+    scanContext = context;
+    context.drawImage(
+      video,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      targetWidth,
+      targetHeight,
+    );
+    const imageData = context.getImageData(0, 0, targetWidth, targetHeight);
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
+    const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+    if (qrText) return qrText;
+  }
+
+  return '';
+}
+
 function stopQrScanner() {
   if (scanFrameRequestId) {
     cancelAnimationFrame(scanFrameRequestId);
@@ -680,6 +742,7 @@ function stopQrScanner() {
     cameraStream = null;
   }
   scanContext = null;
+  lastScanAttemptAt = 0;
 }
 
 function closeQrScanner() {
@@ -698,16 +761,10 @@ function scanQrFrame() {
   if (!video || !canvas) return;
 
   if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    if (!scanContext) scanContext = canvas.getContext('2d', { willReadFrequently: true });
-    if (scanContext) {
-      scanContext.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = scanContext.getImageData(0, 0, canvas.width, canvas.height);
-      const result = window.jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth'
-      });
-      const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+    const now = Date.now();
+    if (now - lastScanAttemptAt >= QR_SCAN_INTERVAL_MS) {
+      lastScanAttemptAt = now;
+      const qrText = decodeQrFromVideoFrame(video, canvas, QR_SCAN_VARIANTS);
       if (qrText) {
         closeQrScanner();
         ensureCanAddPerson().then((canAdd) => {
@@ -759,7 +816,7 @@ async function openQrScanner() {
     const video = document.getElementById('cameraVideo');
     video.srcObject = cameraStream;
     await video.play();
-    setCameraStatus('QR-Code vor die Kamera halten.', false);
+    setCameraStatus('QR-Code vor die Kamera halten. Wenn nichts passiert, etwas Abstand halten.', false);
     scanQrFrame();
   } catch (err) {
     stopQrScanner();

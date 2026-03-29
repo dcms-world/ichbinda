@@ -69,7 +69,7 @@ Referenzen:
 - [x] Watcher-Seite: Watcher-Name-Eingabe + `POST /api/pair/respond`
 - [x] Legacy-Format `{ id, name }` entfernen
 
-- **Fortschritt:** Frontend seit 2026-03-29 vollständig auf Pairing umgestellt. Personen erzeugen beim Öffnen der Einstellungen einen kurzlebigen QR-Code mit `pairing_token`; die Watcher-Seite akzeptiert nur noch Pairing-Daten und sendet damit eine Verbindungsanfrage über `POST /api/pair/respond`. Die Person sieht danach im offenen QR-Sheet eine explizite Abfrage mit Annehmen/Ablehnen; erst `POST /api/pair/confirm` legt die Verbindung tatsächlich an. Der direkte Legacy-Flow über reine `person_id` ist aus der UI entfernt.
+- **Fortschritt:** Frontend seit 2026-03-29 vollständig auf Pairing umgestellt. Personen erzeugen beim Öffnen der Einstellungen einen kurzlebigen QR-Code mit `pairing_token`; die Watcher-Seite akzeptiert nur noch Pairing-Daten und sendet damit eine Verbindungsanfrage über `POST /api/pair/respond`. Die Person sieht danach im offenen QR-Sheet eine explizite Abfrage mit Annehmen/Ablehnen; erst `POST /api/pair/confirm` legt die Verbindung tatsächlich an. Der direkte Legacy-Flow über reine `person_id` ist aus der UI entfernt. Nach einer Scan-Regression am 2026-03-29 wurde der Personen-QR zusaetzlich wieder scannerfreundlicher gemacht: kompakteres Pairing-Format (`p`/`t`/`n` statt lange JSON-Keys), groessere Renderflaeche (`240px`) und mittlere Fehlerkorrektur; der Watcher-Parser akzeptiert sowohl das kompakte als auch das bisherige Format. Ebenfalls am 2026-03-29 wurden beide Kamera-Scanner robuster gegen sehr nahe QR-Codes gemacht: pro Frame laufen jetzt mehrere Decode-Varianten mit Downscaling und Center-Crop, damit auch uebergrosse Codes im Bild besser erkannt werden.
 - **Erledigt am:** 2026-03-29
 
 ---
@@ -147,7 +147,7 @@ Referenzen:
 
 - [ ] Capacitor-Projekt aufsetzen
 - [ ] Push Notifications: Capacitor Push Plugin (APNs + FCM)
-- [ ] Backend: Push-Endpunkt auf APNs/FCM umstellen
+- [ ] Backend: Expo-Abhängigkeiten entfernen und Push auf APNs/FCM umstellen (`src/app/helpers/db.ts` `checkOverduePersons`, `src/app/types.ts` `EXPO_ACCESS_TOKEN`, `wrangler.toml`, `README.md`, `scripts/smoke-test.sh` Expo-Push-Token-Format)
 - [ ] Cookie-/Storage-Auth in WebViews prüfen
 - [ ] Splash Screen + App Icon
 - [ ] Deep Links (QR → App)

@@ -81,6 +81,66 @@ async function registerWatcher(page: Page, displayName: string): Promise<void> {
   await expect(page.locator('#personList')).toContainText('Noch keine verbundenen Personen.');
 }
 
+async function decodeRenderedQr(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const qrRoot = document.querySelector('#qrcode');
+    if (!qrRoot) throw new Error('QR root missing');
+    const jsQRFn = (window as Window & {
+      jsQR?: (
+        data: Uint8ClampedArray,
+        width: number,
+        height: number,
+        options?: unknown,
+      ) => { data?: string } | null;
+    }).jsQR;
+    if (typeof jsQRFn !== 'function') throw new Error('jsQR missing');
+
+    const sourceCanvas = qrRoot.querySelector('canvas');
+    if (sourceCanvas instanceof HTMLCanvasElement) {
+      const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      if (!sourceContext) throw new Error('QR canvas context missing');
+      const imageData = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const result = jsQRFn(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      return result?.data || '';
+    }
+
+    const svg = qrRoot.querySelector('svg');
+    if (!(svg instanceof SVGElement)) throw new Error('QR render element missing');
+
+    const svgMarkup = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('QR image load failed'));
+        image.src = objectUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width || 240;
+      canvas.height = image.height || 240;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) throw new Error('QR canvas context missing');
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const result = jsQRFn(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      return result?.data || '';
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  });
+}
+
 test('pairing confirmation updates watcher list immediately', async ({ browser }) => {
   const personContext = await browser.newContext();
   const watcherContext = await browser.newContext();
@@ -104,6 +164,7 @@ test('pairing confirmation updates watcher list immediately', async ({ browser }
   const pairingPayload = await personPage.evaluate(() => {
     return (window as Window & { buildQrPayload: () => string }).buildQrPayload();
   });
+  await expect.poll(async () => decodeRenderedQr(personPage)).toBe(pairingPayload);
 
   await watcherPage.locator('#personId').fill(pairingPayload);
   await watcherPage.locator('#addPersonBtn').click();

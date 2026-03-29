@@ -139,6 +139,13 @@ Status: offen
   Device-Modell wird aus User-Agent geparst – trivial zu fälschen.
   Akzeptierte Limitierung, rein kosmetisch.
 
+- [ ] **26. Namen werden dauerhaft in DB gespeichert ohne Cleanup**
+  `watcher_name` in `pairing_requests` bleibt nach erfolgreichem Pairing erhalten (completed-Requests werden nicht gelöscht).
+  `name` in `watcher_name_announcements` und `watcher_name_snapshot` in `watcher_disconnect_events` haben keinen Ablauf-Mechanismus.
+  Namen sollten nach Zweckerfüllung entfernt oder maskiert werden. Zwei Optionen:
+  - **Löschen:** Feld auf `NULL` setzen wenn nicht mehr benötigt (z.B. `pairing_requests.watcher_name` nach Abschluss, `watcher_disconnect_events.watcher_name_snapshot` nach Bestätigung, `watcher_name_announcements.name` bei Verbindungstrennung).
+  - **Maskieren:** Name auf erstes + letztes Zeichen reduzieren, Mitte durch `*` ersetzen (z.B. `Max Mustermann` → `M************n`) — bleibt als Referenz erkennbar, ist aber kein personenbezogenes Datum mehr. Sinnvoll wo der Eintrag selbst (z.B. Disconnect-Event) erhalten bleiben soll.
+
 - [ ] **25. Expo Access Token könnte in Logs landen**
   `Authorization: Bearer ${expoToken}` wird in Fetch-Requests an Expo verwendet.
   Bei Cloudflare Worker Logs potenziell sichtbar. Token-Redaction prüfen.
@@ -178,5 +185,5 @@ Status: offen
 | Kritisch    | 5      | 0             |
 | Hoch        | 7      | 1             |
 | Mittel      | 7      | 4             |
-| Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **12**        |
+| Niedrig     | 8      | 8             |
+| **Gesamt**  | **27** | **13**        |
