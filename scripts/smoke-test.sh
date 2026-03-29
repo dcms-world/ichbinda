@@ -15,6 +15,8 @@ TURNSTILE_TEST_TOKEN='XXXX.DUMMY.TOKEN.XXXX'
 PERSON_API_KEY="${PERSON_API_KEY:-test-person-key}"
 WATCHER_API_KEY="${WATCHER_API_KEY:-test-watcher-key}"
 PERSON_DEVICE_ID="${PERSON_DEVICE_ID:-test-person-device-$(node -e "console.log(crypto.randomUUID())")}"
+PERSON_SECOND_DEVICE_ID="${PERSON_SECOND_DEVICE_ID:-test-person-device-second-$(node -e "console.log(crypto.randomUUID())")}"
+PERSON_THIRD_DEVICE_ID="${PERSON_THIRD_DEVICE_ID:-test-person-device-third-$(node -e "console.log(crypto.randomUUID())")}"
 WATCHER_DEVICE_ID="${WATCHER_DEVICE_ID:-test-watcher-device-$(node -e "console.log(crypto.randomUUID())")}"
 PERSON_ID="${PERSON_ID:-$(node -e "console.log(crypto.randomUUID())")}"
 REGISTER_DEVICE_ID="smoke-register-$(node -e "console.log(crypto.randomUUID())")"
@@ -319,6 +321,19 @@ status="$(request GET "$WORKER_URL/api/watcher/${WATCHER_ID}/persons" "" "$BODY_
 expect_status "GET /api/watcher/:id/persons" "200" "$status" "$BODY_FILE"
 expect_body_contains "GET /api/watcher/:id/persons" "$BODY_FILE" "$PERSON_ID"
 
+status="$(request_with_headers POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${PERSON_SECOND_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" "$HEADERS_FILE" -H 'Content-Type: application/json')"
+expect_status "POST /api/auth/register-device fuer zweites Person-Geraet" "201" "$status" "$BODY_FILE"
+
+status="$(request POST "$WORKER_URL/api/person/${PERSON_ID}/devices" "{\"device_id\":\"${PERSON_SECOND_DEVICE_ID}\",\"mode\":\"add\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person/:id/devices add bei max_devices=1" "409" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/:id/devices add bei max_devices=1" "$BODY_FILE" '"error":"Gerätelimit erreicht."'
+
+run_local_d1 --command="UPDATE persons SET max_devices = 2 WHERE id = '${PERSON_ID}';"
+
+status="$(request POST "$WORKER_URL/api/person/${PERSON_ID}/devices" "{\"device_id\":\"${PERSON_SECOND_DEVICE_ID}\",\"mode\":\"add\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person/:id/devices add bei max_devices=2" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/:id/devices add bei max_devices=2" "$BODY_FILE" "\"device_id\":\"${PERSON_SECOND_DEVICE_ID}\""
+
 status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/has-watcher" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "GET /api/person/:id/has-watcher" "200" "$status" "$BODY_FILE"
 expect_body_contains "GET /api/person/:id/has-watcher" "$BODY_FILE" '"has_watcher":true'
@@ -358,14 +373,33 @@ status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/has-watcher" "" "$BOD
 expect_status "GET /api/person/:id/has-watcher nach Trennung" "200" "$status" "$BODY_FILE"
 expect_body_contains "GET /api/person/:id/has-watcher nach Trennung" "$BODY_FILE" '"has_watcher":false'
 
-status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+status="$(request_with_headers POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${PERSON_THIRD_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" "$HEADERS_FILE" -H 'Content-Type: application/json')"
+expect_status "POST /api/auth/register-device fuer Transfer-Geraet" "201" "$status" "$BODY_FILE"
+THIRD_PERSON_API_KEY="$(cookie_value_from_headers "$HEADERS_FILE" "api_key_person")"
+
+status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
+expect_status "POST /api/person fuer Transfer-Geraet" "201" "$status" "$BODY_FILE"
+
+status="$(request POST "$WORKER_URL/api/person/${PERSON_ID}/device-link/create" '{"mode":"switch"}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person/:id/device-link/create" "201" "$status" "$BODY_FILE"
+DEVICE_LINK_TOKEN="$(json_field "$BODY_FILE" link_token)"
+
+status="$(request POST "$WORKER_URL/api/person/device-link/claim" "{\"link_token\":\"${DEVICE_LINK_TOKEN}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
+expect_status "POST /api/person/device-link/claim" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/device-link/claim" "$BODY_FILE" "\"person_id\":\"${PERSON_ID}\""
+
+status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/devices" "" "$BODY_FILE" -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
+expect_status "GET /api/person/:id/devices nach Transfer" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/:id/devices nach Transfer" "$BODY_FILE" "\"device_id\":\"${PERSON_THIRD_DEVICE_ID}\""
+
+status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
 expect_status "POST /api/person fuer Rate-Limit-Test" "201" "$status" "$BODY_FILE"
 RATE_LIMIT_PERSON_ID="$(json_field "$BODY_FILE" id)"
 
-status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
 expect_status "Heartbeat 1" "200" "$status" "$BODY_FILE"
 
-status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${RATE_LIMIT_PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
 expect_status "Heartbeat 2 direkt danach" "429" "$status" "$BODY_FILE"
 expect_body_contains "Heartbeat 2 direkt danach" "$BODY_FILE" '"error":"Too many requests"'
 

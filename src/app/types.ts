@@ -28,11 +28,27 @@ export interface PersonDeviceRow {
   last_seen: string;
 }
 
+export interface PersonDevicesResponse {
+  devices: PersonDeviceRow[];
+  max_devices: number;
+  device_count: number;
+  device_action: 'switch' | 'add' | 'full';
+}
+
 export interface PairingRequestRow {
   pairing_token: string;
   person_id: string;
   watcher_name: string | null;
   watcher_device_id: string | null;
+  status: 'pending' | 'completed' | 'expired';
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface DeviceLinkRequestRow {
+  link_token: string;
+  person_id: string;
+  mode: 'switch' | 'add';
   status: 'pending' | 'completed' | 'expired';
   created_at: string;
   completed_at: string | null;

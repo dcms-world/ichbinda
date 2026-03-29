@@ -19,6 +19,18 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### `max_devices` pro Person in DB; bei `1` wird gewechselt statt hinzugefügt
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Die Personen-Seite braucht eine klare, einfache Regel für Geräteverwaltung. Ein zusätzliches Feld `persons.max_devices` macht das Limit pro Person serverseitig konfigurierbar und später monetarisierbar, analog zu `watchers.max_persons`. Wenn `max_devices = 1`, ist die fachlich korrekte Aktion kein "Neues Gerät hinzufügen", sondern ein echter Gerätewechsel: dieselbe `person_id` bleibt bestehen, aber das alte Person-Gerät wird aus `person_devices` und `device_keys` entfernt. Wenn `max_devices > 1`, darf nur bis zum freien Slot hinzugefügt werden. Der ursprünglich vergebene Personenname bleibt dabei geräteunabhängig und wird durch Wechsel/Hinzufügen nicht geändert.
+- **Alternativen verworfen:** Immer nur "Gerät hinzufügen" nennen obwohl bei `1` effektiv ersetzt wird; unbegrenzte Person-Geräte; komplexer Transfer-Flow als Voraussetzung für jede erste Umsetzung.
+
+### Gerätewechsel: bestehendes Person-Gerät zeigt QR, neues unverbundenes Gerät scannt
+- **Datum:** 2026-03-30
+- **Entschieden von:** User + Agent
+- **Begründung:** Der Scan gehört fachlich auf das neue Gerät, nicht auf das bestehende. Das bestehende Person-Gerät besitzt die bestehende `person_id` und erzeugt deshalb einen kurzlebigen Geräte-QR über einen serverseitigen Device-Link-Token. Das neue Gerät darf diesen QR nur scannen und claimen, wenn es noch an keine Person mit aktiven Watchern gebunden ist. So bleibt der Flow verständlich und die Ownership-Prüfung bleibt serverseitig sauber.
+- **Alternativen verworfen:** Auf dem bestehenden Person-Gerät weiter "QR-Code scannen" anzeigen; bloßes Weiterreichen der `person_id` ohne serverseitigen Claim-Token; clientseitige Sonderlogik ohne Backend-Absicherung.
+
 ### Ohne aktive Verbindung kein Heartbeat, sondern Pairing als Primäraktion
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent

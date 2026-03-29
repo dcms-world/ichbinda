@@ -1,7 +1,7 @@
 # iBinda – Editions- und Preismodell
 
 Erstellt: 2026-03-26
-Aktualisiert: 2026-03-28
+Aktualisiert: 2026-03-30
 Status: Entwurf
 
 Dieses Dokument beschreibt nur die **Produktgrenzen zwischen Free und Pro**.
@@ -23,6 +23,7 @@ iBinda wird als zweistufiges Produkt geführt:
 
 **Rahmen:**
 - pro Watcher maximal 2 beobachtete Personen (`watchers.max_persons = 2`)
+- pro Person standardmäßig maximal 1 aktives eigenes Gerät (`persons.max_devices = 1`)
 - eine Person kann von mehreren Watchern beobachtet werden
 - nur Basisfunktionen
 
@@ -41,6 +42,7 @@ iBinda wird als zweistufiges Produkt geführt:
 
 **Merkmale:**
 - höheres Personen-Limit pro Watcher (`max_persons > 2`, per DB-Feld konfigurierbar)
+- optional höheres Geräte-Limit pro Person (`max_devices > 1`, per DB-Feld konfigurierbar)
 - mehrere Watcher und Teamstrukturen
 - eigenes Dashboard mit Login
 - Rollen und Berechtigungen

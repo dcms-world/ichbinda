@@ -282,17 +282,30 @@ erlaubte Origins:
   - Automatischer Cleanup: Watch-Relations mit ungültigem Push-Token nach X fehlgeschlagenen Notifications deaktivieren
 
 ### Szenario: Gerät noch funktionsfähig (Upgrade)
-- Multi-Device ist bereits über `person_devices` unterstützt
-- Person: Neues Gerät hinzufügen → neues Gerät registrieren, eigenen API-Key erhalten → gleiche person_id verknüpfen via `POST /api/person/:id/devices`
-- **Problem:** Neues Gerät muss beweisen, dass es zur gleichen Person gehört
-  - Lösung: Device-Transfer-QR vom alten Gerät → enthält kurzlebiges Transfer-Token + person_id
-  - Neues Gerät sendet dieses Transfer-Token bei Registrierung mit
+- Person-Geräte werden über `persons.max_devices` begrenzt (Default Free: `1`)
+- `GET /api/person/:id/devices` liefert neben der Geräteliste auch `max_devices`, `device_count` und die UI-Aktion `switch | add | full`
+- Bei `max_devices = 1` lautet die Aktion fachlich **Gerät wechseln**
+  - gleiche `person_id` bleibt erhalten
+  - `POST /api/person/:id/devices` mit `mode = switch` bindet das neue Gerät und entfernt alle bisherigen Person-Geräte aus `person_devices`
+  - zugehörige alte Person-API-Keys werden aus `device_keys` gelöscht
+  - Watcher und bestehende `watch_relations` bleiben unverändert
+- Bei `max_devices > 1` und freiem Slot lautet die Aktion **Neues Gerät hinzufügen**
+  - `POST /api/person/:id/devices` mit `mode = add` bindet ein weiteres Person-Gerät an dieselbe `person_id`
+  - wenn `device_count >= max_devices`, verschwindet die Scan-Aktion im Menü
+- Der konkrete Transfer-Flow läuft jetzt über einen serverseitigen Claim-Token:
+  - bestehendes Person-Gerät: `POST /api/person/:id/device-link/create` → QR anzeigen
+  - neues unverbundenes Person-Gerät: `POST /api/person/device-link/claim` nach QR-Scan
+  - Claim ist nur erlaubt, wenn das neue Gerät nicht an eine Person mit aktiven Watchern gebunden ist
+- Ein hinzuzufügendes Person-Gerät darf nicht bereits als Watcher-Gerät registriert sein
+- Der ursprünglich vergebene Personenname bleibt geräteunabhängig und wird durch Wechsel/Hinzufügen nicht verändert
 - Watcher: Analog ueber bestehendes `watcher_devices`-Konzept
   - **TODO:** Transfer- und Recovery-Flow fuer mehrere Watcher-Geraete designen
 
 ### Offene Punkte für den Plan:
-- [ ] Device-Transfer-QR-Flow für Person (altes Gerät → neues Gerät, per Transfer-Token)
+- [x] Device-Transfer-QR-Flow für Person als eigener QR-Payload `type = person-device-link` mit Claim-Token
 - [ ] Device-Transfer-QR-Flow für Watcher (per Transfer-Token)
+- [x] Person-Limit über `persons.max_devices` serverseitig erzwingen
+- [x] UI-Logik für `Gerät wechseln` vs. `Neues Gerät hinzufügen` aus `max_devices` ableiten
 - [ ] Multi-Device-Regeln für Watcher auf Basis von `watcher_devices` konkretisieren
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
 - [ ] Person: Möglichkeit alte/unbekannte Watcher zu entfernen

@@ -1,7 +1,7 @@
 # Security Audit – iBinda
 
 Erstellt: 2026-03-21
-Aktualisiert: 2026-03-29
+Aktualisiert: 2026-03-30
 Status: offen
 
 ---
@@ -90,9 +90,9 @@ Status: offen
   person_id, watcher_id, Namen und Fotos liegen in localStorage – bei XSS sofort kompromittiert.
   Kritische IDs nur in HttpOnly-Cookies speichern (API-Key ist bereits als HttpOnly-Cookie gelöst).
 
-- [ ] **15. Unbegrenzte Geräte pro Person (Resource Exhaustion)**
-  Keine Obergrenze für Devices pro Person implementiert.
-  Maximum (z.B. 10 Geräte) einführen.
+- [x] **15. Unbegrenzte Geräte pro Person (Resource Exhaustion)**
+  `persons.max_devices` wurde eingeführt (Default `1`) und wird serverseitig in `POST /api/person/:id/devices` erzwungen.
+  `mode = add` liefert ohne freien Slot einen `409`, `mode = switch` ersetzt bei Ein-Gerät-Setups die alte Person-Gerätebindung kontrolliert.
 
 - [ ] **16. Kein Key-Rotation / Kein Key-Revocation**
   API-Keys sind 1 Jahr gültig (Cookie Max-Age), es gibt keinen Endpoint zum Invalidieren oder Rotieren.
@@ -167,6 +167,7 @@ Status: offen
 | Sicherer Device-ID-Fallback via `crypto.getRandomValues()` | implementiert |
 | Input-Validierung fuer `push_token`, UUID-Routen und `check_interval_minutes` | implementiert |
 | HTTP Security Headers inkl. CSP/HSTS | implementiert |
+| Geräteobergrenze pro Person via `persons.max_devices` | implementiert |
 
 ---
 
@@ -176,6 +177,6 @@ Status: offen
 |-------------|--------|-------------|
 | Kritisch    | 5      | 0             |
 | Hoch        | 7      | 1             |
-| Mittel      | 7      | 5             |
+| Mittel      | 7      | 4             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **13**        |
+| **Gesamt**  | **26** | **12**        |

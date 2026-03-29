@@ -75,17 +75,19 @@ Referenzen:
 ---
 
 ## Free: Gerätewechsel und Watcher-Multi-Device klären
-- **Status:** offen
+- **Status:** in Bearbeitung
 - **Priorität:** mittel
 - **Beschreibung:** Phase 11 aus `docs/MASTERPLAN.md` konkretisieren und umsetzbar machen.
 
-- [ ] Device-Transfer-QR-Flow für Person designen (per Transfer-Token)
+- [x] Device-Transfer-QR-Flow für Person finalisieren (eigener QR-Payload fuer `switch`/`add`)
 - [ ] Device-Transfer-QR-Flow für Watcher designen
+- [x] `persons.max_devices` einführen und serverseitig erzwingen
+- [x] Person-UI zwischen `Auf anderes Gerät wechseln` und `Neues Gerät hinzufügen` unterscheiden
 - [ ] Multi-Device-Regeln für Watcher auf Basis von `watcher_devices` entscheiden
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
 - [ ] Person: Möglichkeit alte/unbekannte Watcher zu entfernen
 
-- **Fortschritt:** Plan grob beschrieben, nicht in technische Schritte zerlegt.
+- **Fortschritt:** Am 2026-03-29 konkretisiert und teilweise umgesetzt: `persons.max_devices` wurde analog zu `watchers.max_persons` ins Schema aufgenommen (Default `1`), `POST /api/person/:id/devices` erzwingt jetzt serverseitig `mode = switch | add`, blockiert Watcher-Geräte und liefert bei `add` ohne freien Slot einen `409`. `GET /api/person/:id/devices` liefert zusätzlich `max_devices`, `device_count` und die abgeleitete UI-Aktion `switch | add | full`. Das Personen-Frontend zeigt bei `max_devices = 1` jetzt `Auf anderes Gerät wechseln`, bei freiem Multi-Device-Slot `Neues Gerät hinzufügen` und blendet den Scan-Button aus, wenn das Mehrgeräte-Limit voll ist. Am 2026-03-30 wurde der Person-Transfer-Flow sauber zu Ende gezogen: bestehende Person-Geräte erzeugen über `POST /api/person/:id/device-link/create` einen kurzlebigen Geräte-QR, neue unverbundene Person-Geräte scannen ihn und claimen die bestehende `person_id` über `POST /api/person/device-link/claim`. Dabei übernimmt das neue Gerät auch den bisherigen lokalen Personenname, und der Claim ist nur erlaubt, wenn das neue Gerät nicht bereits an eine Person mit aktiven Watchern hängt. `scripts/smoke-test.sh` deckt den neuen `create -> claim`-Flow inzwischen mit ab.
 - **Erledigt am:** -
 
 ---
@@ -126,7 +128,7 @@ Referenzen:
 
 - [ ] IP-basiertes Rate-Limiting — **Security #9**
 - [ ] Sensitive Daten aus localStorage → HttpOnly-Cookies — **Security #14**
-- [ ] Obergrenze Geräte pro Person — **Security #15**
+- [x] Obergrenze Geräte pro Person — **Security #15**
 - [ ] API-Key Revocation — **Security #16**
 - [ ] DSGVO-Lösch-Endpoint — **Security #19**
 - [ ] innerHTML-Audit — **Security #18**

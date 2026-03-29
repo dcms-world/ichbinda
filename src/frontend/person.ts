@@ -526,7 +526,7 @@ h1 {
 <div class="pairing-modal-overlay" id="pairingQrModalOverlay">
 <div class="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairingQrTitle">
 <h2 id="pairingQrTitle">QR-Code anzeigen</h2>
-<p>Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</p>
+<p id="pairingQrDescription">Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</p>
 <div class="qr-container">
   <div id="qrcode"></div>
   <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
@@ -615,10 +615,11 @@ h1 {
     <small class="settings-help">Verknüpfte Geräte für diese Person.</small>
   </div>
 
-  <div class="settings-section">
-    <h3>Neues Gerät hinzufügen</h3>
-    <button type="button" class="qr-scan-btn" onclick="startDeviceQrScan()">QR-Code scannen</button>
+  <div class="settings-section" id="deviceActionSection">
+    <h3 id="deviceActionTitle">Auf anderes Gerät wechseln</h3>
+    <button type="button" class="qr-scan-btn" id="deviceActionButton" onclick="startDeviceQrScan()">QR-Code scannen</button>
     <div id="deviceQrScanner" class="qr-scanner-container"></div>
+    <small class="settings-help" id="deviceActionHelp">Scanne den QR-Code eines neuen Geräts. Der ursprünglich vergebene Name bleibt unverändert.</small>
   </div>
 </div>
 </div>
@@ -656,6 +657,9 @@ const DEVICE_ID_KEY='ibinda_device_id';
 let currentPersonId=null;
 let currentPersonName='';
 let currentDeviceId='';
+let currentPersonMaxDevices=1;
+let currentPersonDeviceCount=0;
+let currentPersonDeviceAction='switch';
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_person')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_person','1')}
@@ -685,9 +689,13 @@ let currentPairingToken='';
 let pairingPollInterval=null;
 let pairingRefreshTimeout=null;
 let currentPairingRequestName='';
+let currentQrModalMode='pairing';
+let currentDeviceLinkToken='';
+let currentDeviceLinkMode='switch';
 let pendingDisconnectEvents=[];
 let watcherRefreshInterval=null;
 let hasActiveWatcherConnection=false;
+let isResettingPersonApp=false;
 const WATCHER_REFRESH_INTERVAL_MS=30000;
 
 function clearPairingTimers(){if(pairingPollInterval){clearInterval(pairingPollInterval);pairingPollInterval=null}if(pairingRefreshTimeout){clearTimeout(pairingRefreshTimeout);pairingRefreshTimeout=null}}
@@ -697,26 +705,33 @@ function isPairingRequestModalOpen(){const overlay=document.getElementById('pair
 function isDisconnectModalOpen(){const overlay=document.getElementById('disconnectModalOverlay');return !!overlay&&overlay.classList.contains('open')}
 function setPairingRequestStatus(message,isError){const statusEl=document.getElementById('pairingRequestStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError)}
 function setDisconnectModalStatus(message,isError){const statusEl=document.getElementById('disconnectModalStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError)}
-function openPairingQrModal(forceRefresh){const overlay=document.getElementById('pairingQrModalOverlay');if(!overlay||!currentPersonId)return;overlay.classList.add('open');setQrCopyStatus('',false);renderQrCode(!!forceRefresh)}
+function setQrModalCopyButtonLabel(label){const button=document.querySelector('.qr-copy-btn');if(button)button.textContent=label}
+function setQrModalContent(title,description){const titleEl=document.getElementById('pairingQrTitle');const descriptionEl=document.getElementById('pairingQrDescription');if(titleEl)titleEl.textContent=title;if(descriptionEl)descriptionEl.textContent=description}
+function openPairingQrModal(forceRefresh){const overlay=document.getElementById('pairingQrModalOverlay');if(!overlay||!currentPersonId)return;currentQrModalMode='pairing';setQrModalContent('QR-Code anzeigen','Jemand kann diesen Code scannen, um sich mit dir zu verbinden.');setQrModalCopyButtonLabel('QR kopieren');overlay.classList.add('open');setQrCopyStatus('',false);renderCurrentQrCode(!!forceRefresh)}
+function openDeviceLinkQrModal(mode){const overlay=document.getElementById('pairingQrModalOverlay');if(!overlay||!currentPersonId)return;currentQrModalMode='device-link';currentDeviceLinkMode=mode==='add'?'add':'switch';setQrModalContent(currentDeviceLinkMode==='add'?'Neues Gerät hinzufügen':'Auf anderes Gerät wechseln',currentDeviceLinkMode==='add'?'Scanne diesen QR-Code mit dem neuen unverbundenen Gerät, um es zusätzlich hinzuzufügen.':'Scanne diesen QR-Code mit dem neuen unverbundenen Gerät, um dieses Gerät zu ersetzen.');setQrModalCopyButtonLabel('Transfer-QR kopieren');overlay.classList.add('open');setQrCopyStatus('',false);renderCurrentQrCode(true)}
 function clearQrCodeElement(id){const qrEl=document.getElementById(id);if(qrEl)qrEl.innerHTML=''}
-function closePairingQrModal(resetState=true){const overlay=document.getElementById('pairingQrModalOverlay');if(overlay)overlay.classList.remove('open');clearQrCodeElement('qrcode');if(resetState&&!isSettingsOpen()&&!isPairingRequestModalOpen()){clearPairingTimers();currentPairingToken=''}setQrCopyStatus('',false)}
+function closePairingQrModal(resetState=true){const overlay=document.getElementById('pairingQrModalOverlay');if(overlay)overlay.classList.remove('open');clearQrCodeElement('qrcode');if(resetState&&!isSettingsOpen()&&!isPairingRequestModalOpen()){clearPairingTimers();currentPairingToken=''}currentDeviceLinkToken='';currentQrModalMode='pairing';setQrCopyStatus('',false)}
 function hideDisconnectModal(){const overlay=document.getElementById('disconnectModalOverlay');const button=document.getElementById('disconnectModalAcknowledgeBtn');if(overlay)overlay.classList.remove('open');setDisconnectModalStatus('',false);if(button)button.disabled=false}
 function getDisconnectDisplayNames(events){return events.map((event)=>{if(event&&typeof event.watcher_name==='string'&&event.watcher_name.trim())return event.watcher_name.trim();if(event&&typeof event.watcher_id==='string')return getWatcherDisplayName(event.watcher_id);return'Eine verbundene Person'})}
 function buildDisconnectModalMessage(events){const names=getDisconnectDisplayNames(events);if(names.length===0)return'Eine verbundene Person ist nicht mehr mit dir verbunden. Bitte prüfe, ob noch jemand deinen Status sehen kann.';if(names.length===1)return names[0]+' ist nicht mehr mit dir verbunden. Bitte prüfe, ob noch jemand deinen Status sehen kann.';if(names.length===2)return names[0]+' und '+names[1]+' sind nicht mehr mit dir verbunden. Bitte prüfe, ob noch jemand deinen Status sehen kann.';return names[0]+' und '+(names.length-1)+' weitere Personen sind nicht mehr mit dir verbunden. Bitte prüfe, ob noch jemand deinen Status sehen kann.'}
 function showDisconnectModal(events){const overlay=document.getElementById('disconnectModalOverlay');const text=document.getElementById('disconnectModalText');pendingDisconnectEvents=Array.isArray(events)?events:[];if(!overlay||pendingDisconnectEvents.length===0)return;setDisconnectModalStatus('',false);if(text)text.textContent=buildDisconnectModalMessage(pendingDisconnectEvents);overlay.classList.add('open')}
 function hidePairingRequest(){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');currentPairingRequestName='';if(overlay)overlay.classList.remove('open');if(text)text.textContent='Mit jemandem verbinden?';setPairingRequestStatus('',false);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false;if(pendingDisconnectEvents.length)showDisconnectModal(pendingDisconnectEvents)}
 function showPairingRequest(name){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const displayName=(name||'jemandem');closePairingQrModal(false);hideDisconnectModal();currentPairingRequestName=displayName;if(text)text.textContent='Mit '+displayName+' verbinden?';setPairingRequestStatus('',false);if(overlay)overlay.classList.add('open')}
-function buildQrPayload(){if(!currentPersonId||!currentPairingToken)return'';return JSON.stringify({person_id:currentPersonId,pairing_token:currentPairingToken,name:currentPersonName||getPersonName()})}
+function buildPairingQrPayload(){if(!currentPersonId||!currentPairingToken)return'';return JSON.stringify({person_id:currentPersonId,pairing_token:currentPairingToken,name:currentPersonName||getPersonName()})}
+function buildDeviceLinkQrPayload(){if(!currentDeviceLinkToken)return'';return JSON.stringify({type:'person-device-link',link_token:currentDeviceLinkToken,device_mode:currentDeviceLinkMode,person_name:currentPersonName||getPersonName()})}
+function buildActiveQrPayload(){return currentQrModalMode==='device-link'?buildDeviceLinkQrPayload():buildPairingQrPayload()}
 let qrCopyStatusTimeout=null;
 function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
-async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!qrPayload){setQrCopyStatus('QR-Code wird vorbereitet',true);return}if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
+async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();const qrPayload=buildActiveQrPayload();if(!qrPayload){setQrCopyStatus('QR-Code wird vorbereitet',true);return}if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
 async function createPairingToken(){if(!currentPersonId)throw new Error('Keine Person ID');const res=await fetch(API_URL+'/pair/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:currentPersonId})});if(!res.ok)throw new Error('Pairing create failed: '+res.status);const data=await res.json();if(!data.pairing_token)throw new Error('Pairing token missing');return data.pairing_token}
+async function createDeviceLinkToken(mode){if(!currentPersonId)throw new Error('Keine Person ID');const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/device-link/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Device link create failed: '+res.status));if(!data.link_token)throw new Error('Device link token missing');return data.link_token}
 async function acknowledgeDisconnectEvents(){if(!currentPersonId||pendingDisconnectEvents.length===0){hideDisconnectModal();return}const button=document.getElementById('disconnectModalAcknowledgeBtn');const eventIds=pendingDisconnectEvents.map((event)=>Number(event.id)).filter((id)=>Number.isInteger(id)&&id>0);if(eventIds.length===0){pendingDisconnectEvents=[];hideDisconnectModal();return}if(button)button.disabled=true;setDisconnectModalStatus('',false);try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/disconnect-events/ack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_ids:eventIds})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Bestätigung fehlgeschlagen: '+res.status));pendingDisconnectEvents=[];hideDisconnectModal();await loadWatchers(currentPersonId)}catch(e){console.error('Disconnect acknowledge failed',e);setDisconnectModalStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(button)button.disabled=false}}
 async function respondToPairingRequest(action){if(!currentPairingToken)return;const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');if(approveBtn)approveBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;setPairingRequestStatus('',false);try{const res=await fetch(API_URL+'/pair/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pairing_token:currentPairingToken,action})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Pairing confirm failed: '+res.status));hidePairingRequest();if(action==='approve'){currentPairingToken='';clearPairingTimers();if(currentPersonId)loadWatchers(currentPersonId);return}openPairingQrModal(true)}catch(e){console.error('Pairing confirm failed',e);setPairingRequestStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}}
 async function pollPairingStatus(pairingToken){if(!currentPersonId||!pairingToken)return;try{const res=await fetch(API_URL+'/pair/'+encodeURIComponent(pairingToken));if(!res.ok){if(res.status===404)return;throw new Error('Pairing poll failed: '+res.status)}const data=await res.json();if(data.status==='requested'){showPairingRequest(data.watcher_name||'jemandem');return}hidePairingRequest();if(data.status==='completed'){clearPairingTimers();currentPairingToken='';closePairingQrModal(false);loadWatchers(currentPersonId);return}if(data.status==='expired'){setQrCopyStatus('QR-Code wird erneuert...',false);await renderQrCode(true)}}catch(e){console.error('Pairing poll failed',e)}}
 function startPairingPolling(pairingToken){clearPairingTimers();pollPairingStatus(pairingToken);pairingPollInterval=setInterval(()=>{pollPairingStatus(pairingToken)},5000);pairingRefreshTimeout=setTimeout(()=>{renderQrCode(true)},300000)}
 function renderQrCodeInto(id,qrPayload){const qrEl=document.getElementById(id);if(!qrEl)return;qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
-async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startPairingPolling(currentPairingToken)}
+async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildPairingQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startPairingPolling(currentPairingToken)}
+async function renderCurrentQrCode(forceRefresh){if(currentQrModalMode==='device-link'){clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentDeviceLinkToken){try{currentDeviceLinkToken=await createDeviceLinkToken(currentDeviceLinkMode)}catch(e){console.error('Device link QR render failed',e);setQrCopyStatus('Geräte-QR konnte nicht erstellt werden',true);return}}const qrPayload=buildDeviceLinkQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);return}await renderQrCode(forceRefresh)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
 function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
 
@@ -741,8 +756,12 @@ async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!c
 function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
 function startWatcherRefresh(){if(watcherRefreshInterval)return;watcherRefreshInterval=setInterval(()=>{if(currentPersonId&&document.visibilityState==='visible')loadWatchers(currentPersonId)},WATCHER_REFRESH_INTERVAL_MS)}
+function isPersonSessionLostStatus(status){return status===401||status===403}
+function isLostOwnershipError(error){return !!error&&typeof error.message==='string'&&(error.message.includes(' 401')||error.message.includes(' 403')||error.message.includes(': 401')||error.message.includes(': 403'))}
+function clearPersonLocalState(){localStorage.removeItem('ibinda_registered_person');localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(DEVICE_ID_KEY);localStorage.removeItem(LOCATION_ENABLED_KEY);localStorage.removeItem(LOCATION_CLEAR_PENDING_KEY);localStorage.removeItem(WATCHER_NAMES_KEY)}
+function resetPersonApp(reason){if(isResettingPersonApp)return;isResettingPersonApp=true;console.warn('Resetting person app state',reason);if(watcherRefreshInterval){clearInterval(watcherRefreshInterval);watcherRefreshInterval=null}clearPairingTimers();stopDeviceQrScanner();clearPersonLocalState();currentPersonId=null;currentPersonName='';currentDeviceId='';hasActiveWatcherConnection=false;pendingDisconnectEvents=[];setTimeout(()=>{window.location.replace('/person.html')},50)}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID unusable, creating new person',error);personId=await createPerson()}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error)});renderPersonName();updateLocationToggleUi();updatePrimaryActionButton();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);document.getElementById('status').textContent='Fehler beim Laden. Bitte Seite neu laden.';document.getElementById('status').className='status error'}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID unusable, creating new person',error);if(isLostOwnershipError(error)){resetPersonApp('init-lost-ownership-existing');return}personId=await createPerson()}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error);if(isLostOwnershipError(error))resetPersonApp('init-register-lost-ownership')});renderPersonName();updateLocationToggleUi();updatePrimaryActionButton();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);if(isLostOwnershipError(e)){resetPersonApp('init-lost-ownership');return}setButtonError('Fehler<span class="btn-sub">Neu laden</span>','App konnte nicht geladen werden.<div class="error-sub">Bitte Seite neu laden. Wenn der Fehler bleibt, kurz später erneut versuchen.</div>');const status=document.getElementById('status');if(status){status.textContent='Fehler beim Laden. Bitte Seite neu laden.';status.className='status error'}}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -753,28 +772,30 @@ function updatePrimaryActionButton(){const btn=document.getElementById('btnOkay'
 function resetStatus(){const status=document.getElementById('status');status.textContent=getIdleStatusMessage();status.className='status idle'}
 function handlePrimaryAction(){if(!hasActiveWatcherConnection){openPairingQrModal();return}sendHeartbeat()}
 
-function setButtonError(){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.add('error');btn.innerHTML='!<span class="btn-sub">Nochmal</span>'}if(card){card.innerHTML='Meldung konnte nicht gesendet werden.<div class="error-sub">Bitte nochmal versuchen oder direkt bei einer verbundenen Person melden.</div>';card.classList.add('visible')}}
+function setButtonError(buttonHtml,cardHtml){const btn=document.getElementById('btnOkay');const card=document.getElementById('sendErrorCard');if(btn){btn.classList.remove('setup');btn.classList.add('error');btn.innerHTML=buttonHtml||'!<span class="btn-sub">Nochmal</span>';btn.setAttribute('aria-label','Fehlerzustand')}if(card){card.innerHTML=cardHtml||'Meldung konnte nicht gesendet werden.<div class="error-sub">Bitte nochmal versuchen oder direkt bei einer verbundenen Person melden.</div>';card.classList.add('visible')}}
 function clearButtonError(){const card=document.getElementById('sendErrorCard');if(card)card.classList.remove('visible');updatePrimaryActionButton()}
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;setTimeout(resetStatus,2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(resetStatus,5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(resetStatus,5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else if(isPersonSessionLostStatus(res.status)){resetPersonApp('heartbeat-lost-ownership');return}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
 
-async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
+async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(isPersonSessionLostStatus(res.status)){resetPersonApp('status-lost-ownership');return}if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 
 const WATCHER_NAMES_KEY='ibinda_watcher_names';
 function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}
 function cacheWatcherNames(updates){const names=getCachedWatcherNames();Object.assign(names,updates);localStorage.setItem(WATCHER_NAMES_KEY,JSON.stringify(names))}
 function getWatcherDisplayName(id){const name=getCachedWatcherNames()[id];return name||id.slice(0,8)+'…'}
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const watchers=Array.isArray(data.watchers)?data.watchers:[];const disconnectEvents=Array.isArray(data.disconnect_events)?data.disconnect_events:[];const nameUpdates={};watchers.forEach((watcher)=>{if(watcher&&watcher.name&&watcher.id)nameUpdates[watcher.id]=watcher.name});disconnectEvents.forEach((event)=>{if(event&&event.watcher_name&&event.watcher_id)nameUpdates[event.watcher_id]=event.watcher_name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);pendingDisconnectEvents=disconnectEvents;hasActiveWatcherConnection=watchers.length>0;updatePrimaryActionButton();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!watchers.length){if(el){el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div><button type="button" class="device-delete-btn" id="watcherQrEntryBtn">QR-Code anzeigen</button></div></div>';const qrEntryBtn=document.getElementById('watcherQrEntryBtn');if(qrEntryBtn)qrEntryBtn.onclick=()=>openPairingQrModal()}if(warn)warn.classList.add('visible')}else{const count=watchers.length;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=watchers.map((watcher)=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(watcher.id))+'</div>').join('');if(el)el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';const watcherToggle=document.getElementById('watcherToggle');if(watcherToggle)watcherToggle.onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}if(disconnectEvents.length){if(!isPairingRequestModalOpen())showDisconnectModal(disconnectEvents)}else if(isDisconnectModalOpen()){hideDisconnectModal()}}catch(e){console.error('loadWatchers failed',e)}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(isPersonSessionLostStatus(res.status)){resetPersonApp('watchers-lost-ownership');return}if(!res.ok)return;const data=await res.json();const watchers=Array.isArray(data.watchers)?data.watchers:[];const disconnectEvents=Array.isArray(data.disconnect_events)?data.disconnect_events:[];const nameUpdates={};watchers.forEach((watcher)=>{if(watcher&&watcher.name&&watcher.id)nameUpdates[watcher.id]=watcher.name});disconnectEvents.forEach((event)=>{if(event&&event.watcher_name&&event.watcher_id)nameUpdates[event.watcher_id]=event.watcher_name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);pendingDisconnectEvents=disconnectEvents;hasActiveWatcherConnection=watchers.length>0;updatePrimaryActionButton();updateDeviceActionSection({max_devices:currentPersonMaxDevices,device_count:currentPersonDeviceCount,device_action:currentPersonDeviceAction});const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!watchers.length){if(el){el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div><button type="button" class="device-delete-btn" id="watcherQrEntryBtn">QR-Code anzeigen</button></div></div>';const qrEntryBtn=document.getElementById('watcherQrEntryBtn');if(qrEntryBtn)qrEntryBtn.onclick=()=>openPairingQrModal()}if(warn)warn.classList.add('visible')}else{const count=watchers.length;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=watchers.map((watcher)=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(watcher.id))+'</div>').join('');if(el)el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';const watcherToggle=document.getElementById('watcherToggle');if(watcherToggle)watcherToggle.onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}if(disconnectEvents.length){if(!isPairingRequestModalOpen())showDisconnectModal(disconnectEvents)}else if(isDisconnectModalOpen()){hideDisconnectModal()}}catch(e){console.error('loadWatchers failed',e)}}
 
-async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
+async function registerCurrentDevice(personId,mode){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const body={device_id:deviceId};if(mode==='switch'||mode==='add')body.mode=mode;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(isPersonSessionLostStatus(res.status)){resetPersonApp('register-device-lost-ownership');throw new Error('Device registration failed: '+res.status)}if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}return await res.json().catch(()=>({}))}
 
 async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed=confirm('Gerät wirklich entfernen?');if(!confirmed)return;try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(res.ok){await loadDevices();return}const data=await res.json().catch(()=>({}));if(res.status===409){alert(data.error||'Das letzte Gerät kann nicht gelöscht werden.');return}throw new Error(data.error||'Löschen fehlgeschlagen')}catch(e){console.error('Delete device failed',e);alert('Gerät konnte nicht gelöscht werden. Bitte erneut versuchen.')}}
 
+function updateDeviceActionSection(meta){const section=document.getElementById('deviceActionSection');const title=document.getElementById('deviceActionTitle');const button=document.getElementById('deviceActionButton');const help=document.getElementById('deviceActionHelp');if(!section||!title||!button||!help)return;currentPersonMaxDevices=Number(meta&&meta.max_devices)||1;currentPersonDeviceCount=Number(meta&&meta.device_count)||0;const action=meta&&typeof meta.device_action==='string'?meta.device_action:'';currentPersonDeviceAction=action==='add'||action==='full'?action:'switch';button.style.display='inline-flex';button.disabled=false;if(hasActiveWatcherConnection){stopDeviceQrScanner();if(currentPersonDeviceAction==='switch'){title.textContent='Auf anderes Gerät wechseln';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('switch');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Danach bleibt nur noch das neue Gerät aktiv. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}if(currentPersonDeviceAction==='add'){title.textContent='Neues Gerät hinzufügen';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('add');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}title.textContent='Weitere Geräte';help.textContent='Gerätelimit erreicht. Solange alle Plätze belegt sind, kann kein weiteres Gerät hinzugefügt werden.';button.style.display='none';section.style.display='block';return}title.textContent='Bestehende Person übernehmen';button.textContent='QR-Code scannen';button.onclick=()=>startDeviceQrScan();help.textContent='Wenn dieses neue Gerät eine bestehende Person ersetzen oder ergänzen soll, scanne hier den Geräte-QR vom bisherigen Person-Gerät. Das geht nur, solange dieses Gerät noch keinen Watcher hat.';section.style.display='block'}
+
 function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===currentDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div>'+(isCurrent?'':'<button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'">Löschen</button>')+'</div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
 
-async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const devicesRaw=await res.json();const devices=Array.isArray(devicesRaw)?devicesRaw:[];renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
+async function loadDevices(){if(!currentPersonId)return;const listEl=document.getElementById('deviceList');if(!listEl)return;listEl.innerHTML='<div class="device-empty">Geräte werden geladen...</div>';try{await registerCurrentDevice(currentPersonId);const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices');if(isPersonSessionLostStatus(res.status)){resetPersonApp('devices-lost-ownership');return}if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device list failed: '+res.status+' '+text)}const payload=await res.json();const devices=Array.isArray(payload)?payload:Array.isArray(payload&&payload.devices)?payload.devices:[];const meta=Array.isArray(payload)?{max_devices:1,device_count:devices.length,device_action:'switch'}:payload;updateDeviceActionSection(meta||{max_devices:1,device_count:devices.length,device_action:'switch'});renderDeviceList(devices)}catch(e){console.error('Failed to load devices',e);listEl.innerHTML='<div class="device-error">Geräte konnten nicht geladen werden.</div>'}}
 
 // QR Scanner für neues Gerät (verbesserte Version aus watcher.html)
 let deviceCameraStream = null;
@@ -819,17 +840,17 @@ async function scanDeviceQrFrame() {
     if (result && result.data) {
       try {
         const data = JSON.parse(result.data);
-        if (typeof data?.name === 'string') {
-          const nameError = getDisplayNameValidationError(data.name);
-          if (nameError) {
-            stopDeviceQrScanner();
-            showDisplayNameValidationError(nameError);
-            return;
-          }
-        }
-        if (data.id) {
+        const isDeviceLinkPayload = data?.type === 'person-device-link';
+        const scannedLinkToken = isDeviceLinkPayload && typeof data?.link_token === 'string'
+          ? data.link_token
+          : '';
+        const scannedMode = isDeviceLinkPayload && (data?.device_mode === 'switch' || data?.device_mode === 'add')
+          ? data.device_mode
+          : null;
+        const scannedPersonName = isDeviceLinkPayload && typeof data?.person_name === 'string' ? data.person_name : '';
+        if (scannedLinkToken) {
           stopDeviceQrScanner();
-          handleNewDeviceScanned(data.id);
+          handleNewDeviceScanned(scannedLinkToken, scannedMode, scannedPersonName);
           return;
         }
       } catch (e) {
@@ -875,56 +896,25 @@ async function startDeviceQrScan() {
   }
 }
 
-async function handleNewDeviceScanned(personId) {
-  if (!personId) return;
-  
-  // Prüfe ob Person bereits existiert und ein Name gesetzt ist
+async function handleNewDeviceScanned(linkToken,mode,personName) {
+  if (!linkToken) return;
   try {
-    const personRes = await fetch(API_URL + '/person/' + encodeURIComponent(personId));
-    if (personRes.ok) {
-      const personData = await personRes.json();
-      
-      // Wenn die Person bereits existiert, übernehme ihren Namen
-      if (personData.id) {
-        // Prüfe ob dieses Gerät bereits einer anderen Person zugeordnet ist
-        // (durch Abgleich mit localStorage - jedes Gerät kennt nur seine eigene person_id)
-        const existingPersonId = localStorage.getItem('ibinda_person_id');
-        if (existingPersonId && existingPersonId !== personId) {
-          alert('Dieses Gerät ist bereits mit einer anderen Person verknüpft und kann nicht übertragen werden.');
-          return;
-        }
-        
-        // Name aus der bestehenden Person übernehmen
-        if (personData.name && personData.name !== getPersonName()) {
-          const confirmed = confirm('Diese Person existiert bereits mit dem Namen "' + personData.name + '"\. Möchtest du diesen Namen übernehmen?');
-          if (confirmed) {
-            setPersonName(personData.name);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Person check failed', e);
-    // Bei Fehler trotzdem fortfahren
-  }
-  
-  // Speichere person_id
-  localStorage.setItem('ibinda_person_id', personId);
-  currentPersonId = personId;
-  
-  // Update URL
-  const url = new URL(window.location);
-  url.searchParams.set('id', personId);
-  window.history.replaceState({}, '', url);
-  
-  // Registriere dieses Gerät
-  try {
-    await registerCurrentDevice(personId);
-    alert('Gerät erfolgreich hinzugefügt!');
+    const res=await fetch(API_URL+'/person/device-link/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({link_token:linkToken})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(data.error||('Gerätewechsel fehlgeschlagen: '+res.status));
+    const personId=typeof data.person_id==='string'?data.person_id:'';
+    if(!personId)throw new Error('Person-ID fehlt');
+    localStorage.setItem('ibinda_person_id',personId);
+    currentPersonId=personId;
+    if(personName){setPersonName(personName);currentPersonName=personName}
+    const url=new URL(window.location);
+    url.searchParams.set('id',personId);
+    window.history.replaceState({},'',url);
+    alert((mode||data.device_action)==='add'?'Gerät erfolgreich hinzugefügt!':'Gerät erfolgreich gewechselt!');
+    renderPersonName();
     loadStatus(personId);
     loadWatchers(personId);
     loadDevices();
-    renderPersonName();
   } catch (e) {
     alert('Fehler beim Verbinden: ' + e.message);
   }

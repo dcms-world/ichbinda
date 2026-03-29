@@ -1,5 +1,5 @@
 import { PAIRING_CLEANUP_AFTER_MINUTES, PAIRING_TOKEN_TTL_MINUTES, RATE_LIMIT_WINDOW_MS } from '../constants';
-import type { OverduePersonRow, PairingRequestRow, RateLimitRow } from '../types';
+import type { DeviceLinkRequestRow, OverduePersonRow, PairingRequestRow, RateLimitRow } from '../types';
 import { hashApiKey } from './security';
 
 export async function lookupApiKey(db: D1Database, apiKey: string): Promise<{ device_id: string; role: string } | null> {
@@ -126,6 +126,19 @@ export async function ensurePersonDevicesTable(db: D1Database): Promise<void> {
   ).run();
 }
 
+export async function ensurePersonsMaxDevicesColumn(db: D1Database): Promise<void> {
+  try {
+    await db.prepare(
+      'ALTER TABLE persons ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1',
+    ).run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes('duplicate column name')) {
+      throw error;
+    }
+  }
+}
+
 export async function ensurePairingRequestsTable(db: D1Database): Promise<void> {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS pairing_requests (
@@ -144,6 +157,26 @@ export async function ensurePairingRequestsTable(db: D1Database): Promise<void> 
   ).run();
   await db.prepare(
     'CREATE INDEX IF NOT EXISTS idx_pairing_requests_created ON pairing_requests(created_at)',
+  ).run();
+}
+
+export async function ensureDeviceLinkRequestsTable(db: D1Database): Promise<void> {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS device_link_requests (
+      link_token TEXT PRIMARY KEY,
+      person_id TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK(mode IN ('switch', 'add')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'expired')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      FOREIGN KEY (person_id) REFERENCES persons(id)
+    )`,
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_device_link_requests_person_status ON device_link_requests(person_id, status)',
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_device_link_requests_created ON device_link_requests(created_at)',
   ).run();
 }
 
@@ -173,6 +206,16 @@ export async function expirePendingPairingToken(db: D1Database, pairingToken: st
        AND status = 'pending'
        AND created_at < datetime('now', ?2)`,
   ).bind(pairingToken, `-${PAIRING_TOKEN_TTL_MINUTES} minutes`).run();
+}
+
+export async function expirePendingDeviceLinkToken(db: D1Database, linkToken: string): Promise<void> {
+  await db.prepare(
+    `UPDATE device_link_requests
+     SET status = 'expired'
+     WHERE link_token = ?1
+       AND status = 'pending'
+       AND created_at < datetime('now', ?2)`,
+  ).bind(linkToken, `-${PAIRING_TOKEN_TTL_MINUTES} minutes`).run();
 }
 
 export async function upsertPersonDevice(
