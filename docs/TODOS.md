@@ -91,17 +91,17 @@ Referenzen:
 ---
 
 ## Free: Kleine Regression-Testbasis für Pairing und Auth
-- **Status:** in Bearbeitung
+- **Status:** erledigt
 - **Priorität:** mittel
 - **Beschreibung:** Nach den offenen Security-Restpunkten eine kleine, stabile Regression-Testbasis für kritische Flows aufbauen, bevor die Modularisierung beginnt.
 
 - [x] Happy Path für Geräte-Registrierung abdecken
 - [x] Regression für `register-device`-Konfliktfall (`409` bei fremder bestehender `device_id`) abdecken
 - [x] Pairing-Flow minimal abdecken: `create` → `respond` → `confirm` → Status `completed`
-- [ ] Negative Cases abdecken: ungültiger/abgelaufener Pairing-Token, unautorisierter Zugriff auf Pairing-Status
+- [x] Negative Cases abdecken: ungültiger/abgelaufener Pairing-Token, unautorisierter Zugriff auf Pairing-Status
 
-- **Fortschritt:** `scripts/smoke-test.sh` deckt jetzt stabil den Geräte-Registrierungs-Happy-Path, den `409`-Konfliktfall bei wiederverwendeter `device_id`, den minimalen Pairing-Flow (`create` → `respond` → `confirm` → `completed`) sowie negative Fälle für ungültigen Pairing-Token (`400`) und unautorisierten Pairing-Status-Zugriff (`403`) ab. Dafür wurde der Test-Harness auf eine temporäre Wrangler-Config ohne `.dev.vars` umgestellt; die Registrierung holt sich echte API-Keys per `Set-Cookie` aus `POST /api/auth/register-device` statt vorab DB-Hashes zu seeden. Offen bleibt für diese Aufgabe noch ein sauber reproduzierbarer Test des abgelaufenen Pairing-Tokens (`410`), weil der aktuelle lokale D1-Harness gezielte Zeit-/Status-Manipulationen außerhalb des laufenden Workers nicht konsistent übernimmt.
-- **Erledigt am:** -
+- **Fortschritt:** `scripts/smoke-test.sh` deckt jetzt stabil den Geräte-Registrierungs-Happy-Path, den `409`-Konfliktfall bei wiederverwendeter `device_id`, den minimalen Pairing-Flow (`create` → `respond` → `confirm` → `completed`) sowie negative Fälle für ungültigen Pairing-Token (`400`), abgelaufenen Pairing-Token (`410`) und unautorisierten Pairing-Status-Zugriff (`403`) ab. Dafür nutzt der Test-Harness einen gemeinsamen Wrangler-`--persist-to`-Pfad für Worker und lokales D1 sowie einen vorab gesäten, 6 Minuten alten Pending-Token; so wird der `410`-Pfad reproduzierbar über die echte API geprüft statt über nachträgliche Live-Manipulationen an der laufenden DB. Die Registrierung holt sich weiterhin echte API-Keys per `Set-Cookie` aus `POST /api/auth/register-device` statt vorab DB-Hashes zu seeden. Kritischer Pfad danach: `Free: Codebasis wartbar machen`.
+- **Erledigt am:** 2026-03-29
 
 ---
 

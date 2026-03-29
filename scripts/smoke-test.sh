@@ -18,12 +18,14 @@ PERSON_DEVICE_ID="${PERSON_DEVICE_ID:-test-person-device-$(node -e "console.log(
 WATCHER_DEVICE_ID="${WATCHER_DEVICE_ID:-test-watcher-device-$(node -e "console.log(crypto.randomUUID())")}"
 PERSON_ID="${PERSON_ID:-$(node -e "console.log(crypto.randomUUID())")}"
 REGISTER_DEVICE_ID="smoke-register-$(node -e "console.log(crypto.randomUUID())")"
+EXPIRED_PAIRING_TOKEN="${EXPIRED_PAIRING_TOKEN:-$(node -e "console.log(crypto.randomUUID())")}"
 
 TMP_DIR="$(mktemp -d)"
 export XDG_CONFIG_HOME="$TMP_DIR/xdg-config"
 export HOME="$TMP_DIR/home"
 mkdir -p "$XDG_CONFIG_HOME" "$HOME"
 WRANGLER_CONFIG="$TMP_DIR/wrangler.smoke.toml"
+PERSIST_DIR="$TMP_DIR/persist"
 
 write_wrangler_config() {
   cat >"$WRANGLER_CONFIG" <<EOF
@@ -69,7 +71,7 @@ fail() {
 }
 
 run_local_d1() {
-  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" d1 execute "$DB_NAME" --local "$@" >/dev/null
+  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" d1 execute "$DB_NAME" --local --persist-to "$PERSIST_DIR" "$@" >/dev/null
 }
 
 request() {
@@ -185,7 +187,7 @@ cookie_value_from_headers() {
 }
 
 start_worker() {
-  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" dev --local --port "$PORT" --ip 127.0.0.1 >"$TMP_DIR/worker.log" 2>&1 &
+  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" dev --local --port "$PORT" --ip 127.0.0.1 --persist-to "$PERSIST_DIR" >"$TMP_DIR/worker.log" 2>&1 &
   WORKER_PID="$!"
 
   for _ in $(seq 1 40); do
@@ -208,6 +210,7 @@ start_worker() {
 
 log "Bereite lokale D1 vor"
 run_local_d1 --file="$ROOT_DIR/schema.sql"
+run_local_d1 --command="INSERT OR IGNORE INTO persons (id) VALUES ('${PERSON_ID}'); INSERT INTO pairing_requests (pairing_token, person_id, status, created_at) VALUES ('${EXPIRED_PAIRING_TOKEN}', '${PERSON_ID}', 'pending', datetime('now', '-6 minutes'));"
 
 start_worker
 
@@ -262,6 +265,10 @@ status="$(request POST "$WORKER_URL/api/watcher" '{"push_token":"ExponentPushTok
 expect_status "POST /api/watcher" "201" "$status" "$BODY_FILE"
 WATCHER_ID="$(json_field "$BODY_FILE" id)"
 log "Watcher-ID: $WATCHER_ID"
+
+status="$(request POST "$WORKER_URL/api/pair/respond" "{\"pairing_token\":\"${EXPIRED_PAIRING_TOKEN}\",\"watcher_name\":\"Max Muster\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "POST /api/pair/respond mit abgelaufenem Token" "410" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/pair/respond mit abgelaufenem Token" "$BODY_FILE" '"error":"Pairing abgelaufen"'
 
 status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
 expect_status "POST /api/heartbeat mit falscher Rolle" "403" "$status" "$BODY_FILE"
