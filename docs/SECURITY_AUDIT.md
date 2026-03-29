@@ -45,9 +45,10 @@ Status: offen
 - [x] **6. `person_id` nur auf Länge geprüft, nicht auf UUID-Format**
   UUID-Regex-Validierung wurde implementiert.
 
-- [ ] **7. Jeder kann beliebige Watch-Relations erstellen**
-  `POST /api/watch` erlaubt beliebige person_id + watcher_id Kombinationen ohne Autorisierung.
-  Verknüpfung nur nach Bestätigung durch die Person oder Ownership-Prüfung erlauben.
+- [ ] **7. Watch-Relations ohne Bestätigung der Person möglich**
+  `POST /api/watch` prüft inzwischen, ob das anfragende Gerät den `watcher_id` besitzt.
+  Offenes Rest-Risiko: Ein legitimer Watcher kann sich weiterhin an beliebige `person_id`s hängen, solange er deren ID kennt.
+  Verknüpfung nur nach Bestätigung durch die Person (Pairing-Token/Consent-Flow) oder äquivalenten Besitznachweis erlauben.
 
 - [x] **8. Fehlende Ownership-Prüfung bei DELETE**
   `DELETE /api/person/:id/devices` prüft jetzt via `deviceOwnsPerson()` ob der Requester die Person besitzt.
@@ -117,7 +118,8 @@ Status: offen
   Endpoint + Datenlöschroutine implementieren (inkl. Devices, Watch-Relations, Rate-Limits).
 
 - [ ] **20. Push-Tokens unverschlüsselt in DB**
-  Expo Push Tokens werden als Klartext in der `watchers`-Tabelle gespeichert.
+  Expo Push Tokens werden als Klartext in der `watcher_devices`-Tabelle gespeichert.
+  Die Spalte `watchers.push_token` ist nur noch ein Legacy-Überbleibsel und wird faktisch nicht mehr genutzt.
   Tokens verschlüsselt ablegen.
 
 - [ ] **21. Kein Audit-Log**
