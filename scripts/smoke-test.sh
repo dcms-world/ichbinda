@@ -8,14 +8,14 @@ cd "$ROOT_DIR"
 PORT="${PORT:-8787}"
 WORKER_URL="${WORKER_URL:-http://127.0.0.1:${PORT}}"
 DB_NAME="${DB_NAME:-dev-ibinda-db}"
+TURNSTILE_TEST_SITE_KEY='1x00000000000000000000AA'
+TURNSTILE_TEST_SECRET_KEY='1x0000000000000000000000000000000AA'
 TURNSTILE_TEST_TOKEN='XXXX.DUMMY.TOKEN.XXXX'
 
 PERSON_API_KEY="${PERSON_API_KEY:-test-person-key}"
 WATCHER_API_KEY="${WATCHER_API_KEY:-test-watcher-key}"
-PERSON_DEVICE_ID="${PERSON_DEVICE_ID:-test-person-device}"
-WATCHER_DEVICE_ID="${WATCHER_DEVICE_ID:-test-watcher-device}"
-PERSON_KEY_HASH="186582d521edf14917d097fb50b4898ae384ac5d6c5732ab1c1579a179344ea0"
-WATCHER_KEY_HASH="931132119d780e554aa848330588b9faa7e1759d0c454a2fe2c91c86b4ac18d5"
+PERSON_DEVICE_ID="${PERSON_DEVICE_ID:-test-person-device-$(node -e "console.log(crypto.randomUUID())")}"
+WATCHER_DEVICE_ID="${WATCHER_DEVICE_ID:-test-watcher-device-$(node -e "console.log(crypto.randomUUID())")}"
 PERSON_ID="${PERSON_ID:-$(node -e "console.log(crypto.randomUUID())")}"
 REGISTER_DEVICE_ID="smoke-register-$(node -e "console.log(crypto.randomUUID())")"
 
@@ -23,6 +23,29 @@ TMP_DIR="$(mktemp -d)"
 export XDG_CONFIG_HOME="$TMP_DIR/xdg-config"
 export HOME="$TMP_DIR/home"
 mkdir -p "$XDG_CONFIG_HOME" "$HOME"
+WRANGLER_CONFIG="$TMP_DIR/wrangler.smoke.toml"
+
+write_wrangler_config() {
+  cat >"$WRANGLER_CONFIG" <<EOF
+name = "ibinda-smoke"
+main = "$ROOT_DIR/src/index.ts"
+compatibility_date = "2024-01-01"
+account_id = "bcde28cac6ec64c3ed3a810c62971db5"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "$DB_NAME"
+database_id = "c6136eb7-5dce-4c0c-b937-a47207b3f6ef"
+migrations_dir = "$ROOT_DIR/migrations"
+
+[vars]
+TURNSTILE_SITE_KEY = "$TURNSTILE_TEST_SITE_KEY"
+TURNSTILE_SECRET_KEY = "$TURNSTILE_TEST_SECRET_KEY"
+DEV_TOKEN = "smoke-dev-token"
+EOF
+}
+
+write_wrangler_config
 
 WORKER_PID=""
 
@@ -46,7 +69,7 @@ fail() {
 }
 
 run_local_d1() {
-  npx wrangler d1 execute "$DB_NAME" --local "$@" >/dev/null
+  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" d1 execute "$DB_NAME" --local "$@" >/dev/null
 }
 
 request() {
@@ -141,8 +164,28 @@ json_field() {
   ' "$field" <"$body_file"
 }
 
+cookie_value_from_headers() {
+  local headers_file="$1"
+  local cookie_name="$2"
+
+  node -e '
+    const fs = require("fs");
+    const headers = fs.readFileSync(process.argv[1], "utf8");
+    const cookieName = process.argv[2];
+    const line = headers.split(/\r?\n/).find((entry) => entry.toLowerCase().startsWith("set-cookie:"));
+    if (!line) process.exit(1);
+    const cookiePart = line.slice(line.indexOf(":") + 1).trim().split(";")[0];
+    const eqIndex = cookiePart.indexOf("=");
+    if (eqIndex === -1) process.exit(1);
+    const name = cookiePart.slice(0, eqIndex);
+    const value = cookiePart.slice(eqIndex + 1);
+    if (name !== cookieName || !value) process.exit(1);
+    process.stdout.write(value);
+  ' "$headers_file" "$cookie_name"
+}
+
 start_worker() {
-  npx wrangler dev --local --port "$PORT" --ip 127.0.0.1 >"$TMP_DIR/worker.log" 2>&1 &
+  npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" dev --local --port "$PORT" --ip 127.0.0.1 >"$TMP_DIR/worker.log" 2>&1 &
   WORKER_PID="$!"
 
   for _ in $(seq 1 40); do
@@ -164,22 +207,7 @@ start_worker() {
 }
 
 log "Bereite lokale D1 vor"
-run_local_d1 --file=./schema.sql
-run_local_d1 --command "
-  INSERT INTO device_keys (device_id, key_hash, created_at, role)
-  VALUES ('${PERSON_DEVICE_ID}', '${PERSON_KEY_HASH}', datetime('now'), 'person')
-  ON CONFLICT(device_id) DO UPDATE SET
-    key_hash = excluded.key_hash,
-    created_at = excluded.created_at,
-    role = excluded.role;
-
-  INSERT INTO device_keys (device_id, key_hash, created_at, role)
-  VALUES ('${WATCHER_DEVICE_ID}', '${WATCHER_KEY_HASH}', datetime('now'), 'watcher')
-  ON CONFLICT(device_id) DO UPDATE SET
-    key_hash = excluded.key_hash,
-    created_at = excluded.created_at,
-    role = excluded.role;
-"
+run_local_d1 --file="$ROOT_DIR/schema.sql"
 
 start_worker
 
@@ -198,12 +226,21 @@ expect_status "GET /watcher.html" "200" "$status" "$BODY_FILE"
 status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json')"
 expect_status "POST /api/person ohne Auth" "401" "$status" "$BODY_FILE"
 
+status="$(request_with_headers POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${PERSON_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" "$HEADERS_FILE" -H 'Content-Type: application/json')"
+expect_status "POST /api/auth/register-device lokal mit Test-Token" "201" "$status" "$BODY_FILE"
+PERSON_API_KEY="$(cookie_value_from_headers "$HEADERS_FILE" "api_key_person")"
+
+status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${PERSON_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json')"
+expect_status "POST /api/auth/register-device Konfliktfall" "409" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/auth/register-device Konfliktfall" "$BODY_FILE" '"error":"device_id bereits registriert"'
+
+status="$(request_with_headers POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${WATCHER_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"watcher\"}" "$BODY_FILE" "$HEADERS_FILE" -H 'Content-Type: application/json')"
+expect_status "POST /api/auth/register-device fuer Watcher" "201" "$status" "$BODY_FILE"
+WATCHER_API_KEY="$(cookie_value_from_headers "$HEADERS_FILE" "api_key_watcher")"
+
 status="$(request POST "$WORKER_URL/api/person" '{"id":"not-a-uuid"}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "POST /api/person mit ungueltiger id" "400" "$status" "$BODY_FILE"
 expect_body_contains "POST /api/person mit ungueltiger id" "$BODY_FILE" '"error":"Ungültige person_id"'
-
-status="$(request POST "$WORKER_URL/api/auth/register-device" "{\"device_id\":\"${REGISTER_DEVICE_ID}\",\"turnstile_token\":\"${TURNSTILE_TEST_TOKEN}\",\"role\":\"person\"}" "$BODY_FILE" -H 'Content-Type: application/json')"
-expect_status "POST /api/auth/register-device lokal mit Test-Token" "201" "$status" "$BODY_FILE"
 
 status="$(request_with_headers OPTIONS "$WORKER_URL/api/auth/register-device" "" "$BODY_FILE" "$HEADERS_FILE" -H 'Origin: http://127.0.0.1:8787' -H 'Access-Control-Request-Method: POST')"
 expect_status "OPTIONS /api/auth/register-device mit lokalem Origin" "204" "$status" "$BODY_FILE"
@@ -237,6 +274,14 @@ log "Pairing-Token: $PAIRING_TOKEN"
 status="$(request GET "$WORKER_URL/api/pair/${PAIRING_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "GET /api/pair/:token vor Antwort" "200" "$status" "$BODY_FILE"
 expect_body_contains "GET /api/pair/:token vor Antwort" "$BODY_FILE" '"status":"pending"'
+
+status="$(request GET "$WORKER_URL/api/pair/not-a-uuid" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/pair/:token mit ungueltigem Token" "400" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/pair/:token mit ungueltigem Token" "$BODY_FILE" '"error":"Ungültiger pairing_token"'
+
+status="$(request GET "$WORKER_URL/api/pair/${PAIRING_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "GET /api/pair/:token ohne Berechtigung" "403" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/pair/:token ohne Berechtigung" "$BODY_FILE" '"error":"Forbidden"'
 
 status="$(request POST "$WORKER_URL/api/watch" "{\"person_id\":\"${PERSON_ID}\",\"watcher_id\":\"${WATCHER_ID}\",\"check_interval_minutes\":60}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
 expect_status "POST /api/watch deaktiviert" "410" "$status" "$BODY_FILE"

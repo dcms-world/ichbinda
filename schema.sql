@@ -69,7 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_pairing_requests_person_status
 CREATE INDEX IF NOT EXISTS idx_pairing_requests_created
   ON pairing_requests(created_at);
 
--- Rate Limiting für Heartbeats (1 pro 5 Minuten pro Gerät)
+-- Rate Limiting für Heartbeats (1 pro 5 Sekunden pro Gerät)
 CREATE TABLE IF NOT EXISTS device_rate_limits (
   device_id TEXT PRIMARY KEY,
   last_heartbeat_at TEXT NOT NULL

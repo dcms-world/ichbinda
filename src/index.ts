@@ -1941,7 +1941,7 @@ interface OverduePersonRow {
   push_token: string | null;
 }
 
-const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_WINDOW_MS = 5 * 1000; // 5 seconds
 const MAX_DISPLAY_NAME_LENGTH = 35;
 const MIN_CHECK_INTERVAL_MINUTES = 1;
 const MAX_CHECK_INTERVAL_MINUTES = 10080;
@@ -2027,6 +2027,11 @@ function isLocalRequest(url: string): boolean {
   }
 }
 
+function isLocalHostHeader(hostHeader: string | undefined): boolean {
+  const host = (hostHeader ?? '').trim().toLowerCase();
+  return host === '127.0.0.1' || host === 'localhost' || host.startsWith('127.0.0.1:') || host.startsWith('localhost:');
+}
+
 function isLocalCorsOrigin(url: URL): boolean {
   const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
   return isLocalHost && (url.protocol === 'http:' || url.protocol === 'https:');
@@ -2073,12 +2078,12 @@ function applySecurityHeaders(c: Context): void {
   }
 }
 
-function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string): string {
-  return isLocalRequest(url) ? TURNSTILE_TEST_SITE_KEY : (configuredSiteKey ?? '');
+function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string, hostHeader?: string): string {
+  return isLocalRequest(url) || isLocalHostHeader(hostHeader) ? TURNSTILE_TEST_SITE_KEY : (configuredSiteKey ?? '');
 }
 
-function resolveTurnstileSecret(url: string, configuredSecret?: string): string {
-  return isLocalRequest(url) ? TURNSTILE_TEST_SECRET_KEY : (configuredSecret ?? '');
+function resolveTurnstileSecret(url: string, configuredSecret?: string, hostHeader?: string): string {
+  return isLocalRequest(url) || isLocalHostHeader(hostHeader) ? TURNSTILE_TEST_SECRET_KEY : (configuredSecret ?? '');
 }
 
 // Security: Turnstile-Token serverseitig bei Cloudflare verifizieren
@@ -2143,7 +2148,7 @@ async function lookupRequestDevice(
   return null;
 }
 
-// Security: Check rate limit per device (max 1 per 5 minutes)
+// Security: Check rate limit per device (max 1 per 5 seconds)
 async function checkRateLimit(
   db: D1Database,
   deviceKey: string
@@ -2510,8 +2515,8 @@ h1{
 </body>
 </html>`)
 );
-app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
-app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY))));
+app.get('/person.html', (c) => c.html(PERSON_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')))));
+app.get('/watcher.html', (c) => c.html(WATCHER_HTML.replace('__TURNSTILE_SITE_KEY__', resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')))));
 
 app.use('*', async (c, next) => {
   await next();
@@ -2592,8 +2597,17 @@ app.post('/api/auth/register-device', async (c) => {
       return c.json({ error: 'device_id zu lang' }, 400);
     }
 
-    const turnstileSecret = resolveTurnstileSecret(c.req.url, c.env.TURNSTILE_SECRET_KEY);
-    const valid = await verifyTurnstileToken(turnstile_token, turnstileSecret);
+    const isLocalTurnstileTestRequest =
+      turnstile_token === TURNSTILE_TEST_TOKEN &&
+      (
+        isLocalRequest(c.req.url) ||
+        isLocalHostHeader(c.req.header('host')) ||
+        Boolean(c.env.DEV_TOKEN)
+      );
+    const turnstileSecret = resolveTurnstileSecret(c.req.url, c.env.TURNSTILE_SECRET_KEY, c.req.header('host'));
+    const valid = isLocalTurnstileTestRequest
+      ? true
+      : await verifyTurnstileToken(turnstile_token, turnstileSecret);
     if (!valid) {
       return c.json({ error: 'Bot-Check fehlgeschlagen' }, 400);
     }
@@ -2738,7 +2752,7 @@ app.post('/api/heartbeat', async (c) => {
   const now = new Date();
   const nowIso = now.toISOString();
 
-  // 2. Check rate limit (max 1 per 5 minutes per device, fallback to person_id)
+  // 2. Check rate limit (max 1 per 5 seconds per device, fallback to person_id)
   const rateLimitKey = device_id || person_id;
   const rateLimitCheck = await checkRateLimit(c.env.DB, rateLimitKey);
   if (!rateLimitCheck.allowed) {

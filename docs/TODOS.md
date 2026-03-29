@@ -91,16 +91,16 @@ Referenzen:
 ---
 
 ## Free: Kleine Regression-Testbasis für Pairing und Auth
-- **Status:** offen
+- **Status:** in Bearbeitung
 - **Priorität:** mittel
 - **Beschreibung:** Nach den offenen Security-Restpunkten eine kleine, stabile Regression-Testbasis für kritische Flows aufbauen, bevor die Modularisierung beginnt.
 
-- [ ] Happy Path für Geräte-Registrierung abdecken
-- [ ] Regression für `register-device`-Konfliktfall (`409` bei fremder bestehender `device_id`) abdecken
-- [ ] Pairing-Flow minimal abdecken: `create` → `respond` → `confirm` → Status `completed`
+- [x] Happy Path für Geräte-Registrierung abdecken
+- [x] Regression für `register-device`-Konfliktfall (`409` bei fremder bestehender `device_id`) abdecken
+- [x] Pairing-Flow minimal abdecken: `create` → `respond` → `confirm` → Status `completed`
 - [ ] Negative Cases abdecken: ungültiger/abgelaufener Pairing-Token, unautorisierter Zugriff auf Pairing-Status
 
-- **Fortschritt:** Bewusst zwischen Security-Restpunkten und Codebasis-Umbau eingeordnet. Ziel ist keine breite E2E-Suite, sondern eine kleine Sicherheits- und Flow-Regression für Auth/Pairing als Rückhalt vor dem Refactor.
+- **Fortschritt:** `scripts/smoke-test.sh` deckt jetzt stabil den Geräte-Registrierungs-Happy-Path, den `409`-Konfliktfall bei wiederverwendeter `device_id`, den minimalen Pairing-Flow (`create` → `respond` → `confirm` → `completed`) sowie negative Fälle für ungültigen Pairing-Token (`400`) und unautorisierten Pairing-Status-Zugriff (`403`) ab. Dafür wurde der Test-Harness auf eine temporäre Wrangler-Config ohne `.dev.vars` umgestellt; die Registrierung holt sich echte API-Keys per `Set-Cookie` aus `POST /api/auth/register-device` statt vorab DB-Hashes zu seeden. Offen bleibt für diese Aufgabe noch ein sauber reproduzierbarer Test des abgelaufenen Pairing-Tokens (`410`), weil der aktuelle lokale D1-Harness gezielte Zeit-/Status-Manipulationen außerhalb des laufenden Workers nicht konsistent übernimmt.
 - **Erledigt am:** -
 
 ---
