@@ -106,15 +106,15 @@ Referenzen:
 ---
 
 ## Free: Codebasis wartbar machen
-- **Status:** offen
+- **Status:** in Bearbeitung
 - **Priorität:** mittel
 - **Beschreibung:** `src/index.ts` in saubere Module aufteilen und E2E-Tests ergänzen.
 
-- [ ] Backend zuerst modularisieren (`routes`, Middleware, Helpers, Typen)
+- [x] Backend zuerst modularisieren (`routes`, Middleware, Helpers, Typen)
 - [ ] Danach Frontend-HTML/Inline-Skripte in eigene Module ziehen
 - [ ] E2E-Tests im Browser (Person + Watcher Flow komplett, inklusive Regression: nach Personen-Bestaetigung erscheint die Verbindung beim Watcher sofort in der Liste und nicht nur als Statusmeldung)
 
-- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet. Reihenfolge für den Umbau: erst offene Security-Restpunkte schließen, dann kleine Regression-Testbasis für Auth/Pairing, danach Backend modularisieren und Frontend-HTML zuletzt herauslösen.
+- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet. Reihenfolge für den Umbau: erst offene Security-Restpunkte schließen, dann kleine Regression-Testbasis für Auth/Pairing, danach Backend modularisieren und Frontend-HTML zuletzt herauslösen. Backend-Modularisierung am 2026-03-29 gestartet und im ersten Schritt abgeschlossen: `src/index.ts` ist jetzt wieder ein schlanker Worker-Einstieg mit statischen HTML-Routen, während API-Middleware und `/api/*`-Routen in `src/app/api.ts` liegen und gemeinsame Backend-Helfer/Typen/Konstanten unter `src/app/` ausgelagert sind. Verifikation nach dem Split: `npx tsc --noEmit` und `npm run test:smoke` grün.
 - **Erledigt am:** -
 
 ---
