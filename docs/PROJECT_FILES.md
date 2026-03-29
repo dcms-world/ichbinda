@@ -37,8 +37,9 @@ Lies die Dateien, die für deine aktuelle Aufgabe relevant sind — nicht alle a
 
 | Datei | Wann lesen | Inhalt |
 |---|---|---|
-| `src/index.ts` | Bei jeder Code-Aufgabe | Hauptdatei: alle Routen, Middleware, Business-Logik |
+| `src/index.ts` | Bei jeder Code-Aufgabe | Worker-Einstieg: Frontend-Routen, API-Registrierung, Cron-Export |
 | `src/app/api.ts` | Bei Backend-/API-Aufgaben | Registriert API-Middleware und alle `/api/*`-Routen |
+| `src/frontend/*.ts` | Bei Frontend-Web-UI-Aufgaben | HTML-Templates und Inline-Skripte für Landing-, Person- und Watcher-Ansicht |
 | `src/app/helpers/*.ts` | Bei Auth-, DB-, Security- oder Validierungs-Aufgaben | Herausgezogene Backend-Helfer für Auth, D1, CORS/Security und Parsing |
 | `src/app/types.ts` | Bei Backend-Refactors | Gemeinsame Worker-/D1-Typen für Backend-Module |
 | `src/app/constants.ts` | Bei Security-/Validierungs-Änderungen | Kanonische Backend-Konstanten für Limits, CORS, Pairing und Turnstile |
