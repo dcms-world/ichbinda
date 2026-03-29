@@ -7,12 +7,14 @@ Welfare-Check-App fuer Senioren, Kinder oder Menschen, die Unterstuetzung brauch
 - Nicht produktiv, Breaking Changes sind aktuell erlaubt
 - Free-Version laeuft als Cloudflare-Worker mit Web-UI
 - Native App ist spaeter als Capacitor-Verpackung der Web-UI geplant
+- Zielbild fuer Native: eine gemeinsame App, beim ersten Start Rollenauswahl `Person` oder `Watcher`, danach persistenter Modus pro Geraet
 
 ## Konzept
 
 - Die betreute Person meldet sich regelmaessig per Button
 - Watcher bekommen Push-Benachrichtigungen, wenn keine Meldung erfolgt
 - In der Cloud liegen nur anonyme IDs, Heartbeats und technische Betriebsdaten
+- Person- und Watcher-Modus greifen auf dasselbe Cloudflare-Backend zu
 
 ## Aktueller Stack
 
@@ -93,6 +95,8 @@ npm run deploy
 - Start: `/`
 - Person: `/person.html`
 - Watcher: `/watcher.html`
+
+Hinweis: Diese getrennten Seiten beschreiben den aktuellen Web-Stand. Das Ziel fuer Native ist eine gemeinsame App mit persistenter Rollenauswahl pro Geraet.
 
 ## Aktuelle API-Basis
 

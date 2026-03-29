@@ -69,6 +69,26 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 
 ---
 
+## Zielbild Client-Architektur
+
+### Heute
+- Web-Frontend liegt direkt im Worker und ist aktuell in zwei Einstiege getrennt: Person und Watcher
+- Beide Einstiege sprechen dasselbe Cloudflare-Backend an
+
+### Ziel fuer die native App
+- Eine gemeinsame Capacitor-App fuer iOS und Android
+- Beim ersten Start waehlt das Geraet einmalig den Modus `person` oder `watcher`
+- Die gewaehlte Rolle bleibt lokal persistent gespeichert und wird bei spaeteren App-Starts direkt wiederverwendet
+- Die App bootet danach direkt in die passende UI fuer diesen Modus
+- Beide Modi verwenden weiterhin dieselbe Worker-API auf Cloudflare als Backend
+
+### Konsequenz fuer die Codebasis
+- Die heutige Trennung in Person-/Watcher-Frontend bleibt fachlich sinnvoll, soll spaeter aber unter einem gemeinsamen App-Shell-Einstieg zusammengefuehrt werden
+- Routing und Bootstrapping sollen perspektivisch von "zwei HTML-Seiten" zu "eine App, zwei persistente Modi" migrieren
+- Backend-Endpoints bleiben rollengetrennt, auch wenn der Client spaeter als eine einzige App ausgeliefert wird
+
+---
+
 ## Phase 1: DB-Migration
 
 ### `migrations/005_pairing_requests.sql`

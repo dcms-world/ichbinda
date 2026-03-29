@@ -19,6 +19,13 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### Eine native App mit persistenter Geraeterolle statt zwei getrennten Apps
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Fachlich gibt es zwei Modi (`person` und `watcher`), aber keine Notwendigkeit fuer zwei getrennte native Anwendungen. Eine gemeinsame App mit Rollenauswahl beim ersten Start reduziert Wartungsaufwand, haelt die Codebasis zusammen und passt zur bereits getroffenen Capacitor-Entscheidung. Die gewaehlte Rolle bleibt pro Geraet persistent gespeichert, damit sich die App danach direkt im passenden Modus oeffnet.
+- **Alternativen verworfen:** Zwei getrennte native Apps fuer Person und Watcher; jedes Mal beim App-Start die Rolle neu abfragen.
+- **Konsequenz:** Die heutige Trennung in `/person.html` und `/watcher.html` ist ein Zwischenstand der Web-Version. Ziel fuer die native App ist ein gemeinsamer Einstieg mit Rollenauswahl, persistentem lokalem Rollenstatus und gemeinsamem Cloudflare-Backend fuer beide Modi.
+
 ### CORS strikt auf Same-Host, lokales Dev und Capacitor-Origins begrenzen
 - **Datum:** 2026-03-28
 - **Entschieden von:** User + Agent
