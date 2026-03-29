@@ -19,6 +19,20 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### Subdomain-Struktur für ibinda.app
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Klare Trennung von API und Pro-Dashboard, konsistentes Schema `dienst.umgebung.ibinda.app`. `portal` wurde für das Dashboard gewählt weil es Behörden und Hilfsorganisationen im DACH-Raum vertraut ist ("Bürgerportal", "Spendenportal") ohne bürokratisch zu klingen.
+- **Alternativen verworfen:** `dash.ibinda.app` — zu tech-lastig für institutionelle Zielgruppe; `app.ibinda.app` — doppeltes "app".
+- **Konsequenz:**
+  - API Prod: `api.ibinda.app`
+  - API Staging: `api.staging.ibinda.app`
+  - API Dev: `api.dev.ibinda.app`
+  - Portal Prod: `portal.ibinda.app`
+  - Portal Staging: `portal.staging.ibinda.app`
+  - Portal Dev: `portal.dev.ibinda.app`
+  - Aktuell läuft alles über `ibinda.johann-zehner.workers.dev`. Subdomains werden erst eingerichtet wenn Custom Domains aktiv benötigt werden.
+
 ### Eine native App mit persistenter Geraeterolle statt zwei getrennten Apps
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent
