@@ -106,16 +106,16 @@ Referenzen:
 ---
 
 ## Free: Codebasis wartbar machen
-- **Status:** in Bearbeitung
+- **Status:** erledigt
 - **Priorität:** mittel
 - **Beschreibung:** `src/index.ts` in saubere Module aufteilen und E2E-Tests ergänzen.
 
 - [x] Backend zuerst modularisieren (`routes`, Middleware, Helpers, Typen)
 - [x] Danach Frontend-HTML/Inline-Skripte in eigene Module ziehen
-- [ ] E2E-Tests im Browser (Person + Watcher Flow komplett, inklusive Regression: nach Personen-Bestaetigung erscheint die Verbindung beim Watcher sofort in der Liste und nicht nur als Statusmeldung)
+- [x] E2E-Tests im Browser (Person + Watcher Flow komplett, inklusive Regression: nach Personen-Bestaetigung erscheint die Verbindung beim Watcher sofort in der Liste und nicht nur als Statusmeldung)
 
-- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet. Reihenfolge für den Umbau: erst offene Security-Restpunkte schließen, dann kleine Regression-Testbasis für Auth/Pairing, danach Backend modularisieren und Frontend-HTML zuletzt herauslösen. Backend-Modularisierung am 2026-03-29 gestartet und im ersten Schritt abgeschlossen: `src/index.ts` ist jetzt wieder ein schlanker Worker-Einstieg mit statischen HTML-Routen, während API-Middleware und `/api/*`-Routen in `src/app/api.ts` liegen und gemeinsame Backend-Helfer/Typen/Konstanten unter `src/app/` ausgelagert sind. Am 2026-03-29 folgte der Frontend-Split: Landing-, Person- und Watcher-HTML inklusive Inline-Skripten liegen jetzt unter `src/frontend/`, `src/index.ts` verdrahtet nur noch die drei HTML-Routen plus API/Cron. Ebenfalls am 2026-03-29 wurden die bislang extern geladenen QR-Runtime-Abhängigkeiten (`qrcodejs`, `jsQR`) lokal in die Render-Schicht eingebettet und die Google-Font-Abhängigkeit aus der Person-Ansicht entfernt; externe Runtime-Requests bleiben damit im Frontend auf Turnstile beschränkt. Verifikation nach den Splits: `npx tsc --noEmit` und `npm run test:smoke` grün.
-- **Erledigt am:** -
+- **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet. Reihenfolge für den Umbau: erst offene Security-Restpunkte schließen, dann kleine Regression-Testbasis für Auth/Pairing, danach Backend modularisieren und Frontend-HTML zuletzt herauslösen. Backend-Modularisierung am 2026-03-29 gestartet und im ersten Schritt abgeschlossen: `src/index.ts` ist jetzt wieder ein schlanker Worker-Einstieg mit statischen HTML-Routen, während API-Middleware und `/api/*`-Routen in `src/app/api.ts` liegen und gemeinsame Backend-Helfer/Typen/Konstanten unter `src/app/` ausgelagert sind. Am 2026-03-29 folgte der Frontend-Split: Landing-, Person- und Watcher-HTML inklusive Inline-Skripten liegen jetzt unter `src/frontend/`, `src/index.ts` verdrahtet nur noch die drei HTML-Routen plus API/Cron. Ebenfalls am 2026-03-29 wurden die bislang extern geladenen QR-Runtime-Abhängigkeiten (`qrcodejs`, `jsQR`) lokal in die Render-Schicht eingebettet und die Google-Font-Abhängigkeit aus der Person-Ansicht entfernt; externe Runtime-Requests bleiben damit im Frontend auf Turnstile beschränkt. Verifikation nach den Splits: `npx tsc --noEmit` und `npm run test:smoke` grün. Am 2026-03-29 kam die erste Browser-E2E-Basis dazu: Playwright-Setup mit lokalem Wrangler-Testserver (`scripts/e2e-server.sh`), npm-Script `test:e2e` und ein echter Pairing-Spec fuer den kritischen Person/Watcher-Flow inklusive der Regression "nach Bestaetigung sofort in der Watcher-Liste sichtbar". Nach Installation der fehlenden Playwright-Systembibliotheken laeuft jetzt auch der volle Browserlauf gruen: `npm run test:e2e` deckt den echten Person/Watcher-Flow vom Registrieren ueber QR-Pairing bis zur sofort aktualisierten Watcher-Liste nach Personen-Bestaetigung erfolgreich ab.
+- **Erledigt am:** 2026-03-29
 
 ---
 
