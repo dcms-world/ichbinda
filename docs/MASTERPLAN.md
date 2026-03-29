@@ -295,6 +295,8 @@ erlaubte Origins:
 - Der konkrete Transfer-Flow läuft jetzt über einen serverseitigen Claim-Token:
   - bestehendes Person-Gerät: `POST /api/person/:id/device-link/create` → QR anzeigen
   - neues unverbundenes Person-Gerät: `POST /api/person/device-link/claim` nach QR-Scan
+  - bei `mode = switch` wird der Wechsel erst nach `POST /api/person/:id/device-link/confirm` auf dem alten Gerät finalisiert
+  - bei `mode = add` darf der Claim direkt abschließen
   - Claim ist nur erlaubt, wenn das neue Gerät nicht an eine Person mit aktiven Watchern gebunden ist
 - Ein hinzuzufügendes Person-Gerät darf nicht bereits als Watcher-Gerät registriert sein
 - Der ursprünglich vergebene Personenname bleibt geräteunabhängig und wird durch Wechsel/Hinzufügen nicht verändert

@@ -55,6 +55,17 @@ type PersonMetaRow = {
   max_devices: number | string | null;
 };
 
+type DeviceLinkPublicStatus = 'pending' | 'requested' | 'completed' | 'expired' | 'rejected';
+
+class ApiRouteError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 function resolvePersonMaxDevices(value: number | string | null | undefined): number {
   const parsed = Number(value ?? 1);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
@@ -68,6 +79,20 @@ function resolvePersonDeviceAction(deviceCount: number, maxDevices: number): Per
   return deviceCount < maxDevices ? 'add' : 'full';
 }
 
+function resolveDeviceLinkStatus(request: DeviceLinkRequestRow | null): DeviceLinkPublicStatus {
+  if (!request) return 'expired';
+  if (request.status === 'completed' || request.status === 'expired') {
+    return request.status;
+  }
+  if (request.rejected_at) {
+    return 'rejected';
+  }
+  if (request.requested_device_id) {
+    return 'requested';
+  }
+  return 'pending';
+}
+
 async function deletePersonDeviceKeys(db: D1Database, deviceIds: string[]): Promise<void> {
   if (deviceIds.length === 0) return;
   await db.prepare(
@@ -75,6 +100,102 @@ async function deletePersonDeviceKeys(db: D1Database, deviceIds: string[]): Prom
      WHERE role = 'person'
        AND device_id IN (${deviceIds.map((_, index) => `?${index + 1}`).join(', ')})`,
   ).bind(...deviceIds).run();
+}
+
+async function bindPersonDeviceToPerson(
+  db: D1Database,
+  options: {
+    personId: string;
+    deviceId: string;
+    mode: 'switch' | 'add';
+    deviceModel: string;
+    allowReassignFromWatcherlessPerson: boolean;
+  },
+): Promise<{ removedDeviceIds: string[]; maxDevices: number }> {
+  const watcherBinding = await db.prepare(
+    'SELECT watcher_id FROM watcher_devices WHERE device_id = ?1',
+  ).bind(options.deviceId).first<{ watcher_id: string }>();
+  if (watcherBinding?.watcher_id) {
+    throw new ApiRouteError(409, 'Dieses Gerät ist bereits als Watcher registriert.');
+  }
+
+  const deviceKey = await db.prepare(
+    'SELECT role FROM device_keys WHERE device_id = ?1',
+  ).bind(options.deviceId).first<{ role: string }>();
+  if (!deviceKey) {
+    throw new ApiRouteError(404, 'Dieses Gerät ist noch nicht registriert.');
+  }
+  if (deviceKey.role !== 'person') {
+    throw new ApiRouteError(409, 'Dieses Gerät ist bereits einer anderen Rolle zugeordnet.');
+  }
+
+  const existingBinding = await db.prepare(
+    'SELECT person_id FROM person_devices WHERE device_id = ?1',
+  ).bind(options.deviceId).first<{ person_id: string }>();
+  if (existingBinding?.person_id && existingBinding.person_id !== options.personId) {
+    if (!options.allowReassignFromWatcherlessPerson) {
+      throw new ApiRouteError(409, 'Dieses Gerät ist bereits mit einer anderen Person verknüpft.');
+    }
+
+    const watcherCount = await db.prepare(
+      'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL',
+    ).bind(existingBinding.person_id).first<{ count: number | string }>();
+    if (Number(watcherCount?.count ?? 0) > 0) {
+      throw new ApiRouteError(409, 'Dieses Gerät ist bereits mit einer anderen Person verbunden.');
+    }
+
+    await db.prepare(
+      'DELETE FROM person_devices WHERE device_id = ?1 AND person_id = ?2',
+    ).bind(options.deviceId, existingBinding.person_id).run();
+  }
+
+  const targetPerson = await db.prepare(
+    'SELECT id, max_devices FROM persons WHERE id = ?1',
+  ).bind(options.personId).first<PersonMetaRow>();
+  if (!targetPerson) {
+    throw new ApiRouteError(404, 'Person not found');
+  }
+
+  const maxDevices = resolvePersonMaxDevices(targetPerson.max_devices);
+  const targetCountRow = await db.prepare(
+    'SELECT COUNT(*) as count FROM person_devices WHERE person_id = ?1',
+  ).bind(options.personId).first<{ count: number | string }>();
+  const targetDeviceCount = Number(targetCountRow?.count ?? 0);
+  const isAlreadyBoundToTarget = existingBinding?.person_id === options.personId;
+
+  if (options.mode === 'add' && !isAlreadyBoundToTarget && targetDeviceCount >= maxDevices) {
+    throw new ApiRouteError(409, 'Gerätelimit erreicht.');
+  }
+
+  await upsertPersonDevice(
+    db,
+    options.personId,
+    options.deviceId,
+    options.deviceModel,
+    new Date().toISOString(),
+  );
+
+  let removedDeviceIds: string[] = [];
+  if (options.mode === 'switch') {
+    const removableDevices = await db.prepare(
+      `SELECT device_id
+       FROM person_devices
+       WHERE person_id = ?1 AND device_id <> ?2`,
+    ).bind(options.personId, options.deviceId).all<{ device_id: string }>();
+    removedDeviceIds = (removableDevices.results ?? []).map((row) => row.device_id).filter(Boolean);
+
+    if (removedDeviceIds.length > 0) {
+      await db.prepare(
+        `DELETE FROM person_devices
+         WHERE person_id = ?1
+           AND device_id <> ?2
+           AND device_id IN (${removedDeviceIds.map((_, index) => `?${index + 3}`).join(', ')})`,
+      ).bind(options.personId, options.deviceId, ...removedDeviceIds).run();
+      await deletePersonDeviceKeys(db, removedDeviceIds);
+    }
+  }
+
+  return { removedDeviceIds, maxDevices };
 }
 
 export function registerApiRoutes(app: Hono<AppEnv>): void {
@@ -531,6 +652,45 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     }, 201);
   });
 
+  app.get('/api/person/device-link/:token', async (c) => {
+    const linkToken = c.req.param('token').trim();
+    if (!linkToken || !isValidUUID(linkToken)) {
+      return c.json({ error: 'Ungültiger link_token' }, 400);
+    }
+
+    await ensureDeviceLinkRequestsTable(c.env.DB);
+    await expirePendingDeviceLinkToken(c.env.DB, linkToken);
+
+    const request = await c.env.DB.prepare(
+      `SELECT link_token, person_id, mode, status, requested_device_id, requested_device_model,
+              requested_person_id, requested_at, rejected_at, created_at, completed_at
+       FROM device_link_requests
+       WHERE link_token = ?1`,
+    ).bind(linkToken).first<DeviceLinkRequestRow>();
+
+    if (!request) {
+      return c.json({ error: 'Gerätewechsel nicht gefunden' }, 404);
+    }
+
+    const deviceId = c.get('deviceId');
+    const ownsPerson = await deviceOwnsPerson(c.env.DB, deviceId, request.person_id);
+    const isRequestingDevice = request.requested_device_id === deviceId;
+    if (!ownsPerson && !isRequestingDevice) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    return c.json({
+      link_token: request.link_token,
+      person_id: request.person_id,
+      mode: request.mode,
+      status: resolveDeviceLinkStatus(request),
+      requested_device_id: ownsPerson ? request.requested_device_id : undefined,
+      requested_device_model: request.requested_device_model,
+      requested_at: request.requested_at,
+      completed_at: request.completed_at,
+    });
+  });
+
   app.post('/api/person/device-link/claim', async (c) => {
     try {
       const body = await c.req.json<{ link_token?: unknown }>().catch((): { link_token?: unknown } => ({}));
@@ -545,7 +705,8 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       await expirePendingDeviceLinkToken(c.env.DB, linkToken);
 
       const request = await c.env.DB.prepare(
-        `SELECT link_token, person_id, mode, status, created_at, completed_at
+        `SELECT link_token, person_id, mode, status, requested_device_id, requested_device_model,
+                requested_person_id, requested_at, rejected_at, created_at, completed_at
          FROM device_link_requests
          WHERE link_token = ?1`,
       ).bind(linkToken).first<DeviceLinkRequestRow>();
@@ -553,18 +714,57 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       if (!request) {
         return c.json({ error: 'Gerätewechsel nicht gefunden' }, 404);
       }
-      if (request.status === 'expired') {
+      const requestStatus = resolveDeviceLinkStatus(request);
+      if (requestStatus === 'expired') {
         return c.json({ error: 'Gerätewechsel abgelaufen' }, 410);
       }
-      if (request.status === 'completed') {
+      if (requestStatus === 'completed') {
         return c.json({ error: 'Gerätewechsel bereits abgeschlossen' }, 409);
+      }
+      if (requestStatus === 'rejected') {
+        return c.json({ error: 'Gerätewechsel wurde abgelehnt' }, 409);
       }
 
       const deviceId = c.get('deviceId');
+      const deviceModel = detectDeviceModel(c.req.header('user-agent') ?? '');
+
+      if (request.mode === 'add') {
+        const result = await bindPersonDeviceToPerson(c.env.DB, {
+          personId: request.person_id,
+          deviceId,
+          mode: 'add',
+          deviceModel,
+          allowReassignFromWatcherlessPerson: true,
+        });
+
+        await c.env.DB.prepare(
+          `UPDATE device_link_requests
+           SET status = 'completed',
+               requested_device_id = ?2,
+               requested_device_model = ?3,
+               requested_at = COALESCE(requested_at, datetime('now')),
+               rejected_at = NULL,
+               completed_at = datetime('now')
+           WHERE link_token = ?1`,
+        ).bind(linkToken, deviceId, deviceModel).run();
+
+        return c.json({
+          success: true,
+          person_id: request.person_id,
+          device_id: deviceId,
+          device_action: request.mode,
+          max_devices: result.maxDevices,
+          removed_device_ids: result.removedDeviceIds,
+        });
+      }
+
+      if (request.requested_device_id && request.requested_device_id !== deviceId) {
+        return c.json({ error: 'Gerätewechsel wurde bereits von einem anderen Gerät angefragt' }, 409);
+      }
+
       const currentBinding = await c.env.DB.prepare(
         'SELECT person_id FROM person_devices WHERE device_id = ?1',
       ).bind(deviceId).first<{ person_id: string }>();
-
       if (currentBinding?.person_id && currentBinding.person_id !== request.person_id) {
         const watcherCount = await c.env.DB.prepare(
           'SELECT COUNT(*) as count FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL',
@@ -572,75 +772,132 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
         if (Number(watcherCount?.count ?? 0) > 0) {
           return c.json({ error: 'Dieses Gerät ist bereits mit einer anderen Person verbunden.' }, 409);
         }
-
-        await c.env.DB.prepare(
-          'DELETE FROM person_devices WHERE device_id = ?1 AND person_id = ?2',
-        ).bind(deviceId, currentBinding.person_id).run();
-      }
-
-      const targetPerson = await c.env.DB.prepare(
-        'SELECT id, max_devices FROM persons WHERE id = ?1',
-      ).bind(request.person_id).first<PersonMetaRow>();
-      if (!targetPerson) {
-        return c.json({ error: 'Person not found' }, 404);
-      }
-
-      const maxDevices = resolvePersonMaxDevices(targetPerson.max_devices);
-      const targetCountRow = await c.env.DB.prepare(
-        'SELECT COUNT(*) as count FROM person_devices WHERE person_id = ?1',
-      ).bind(request.person_id).first<{ count: number | string }>();
-      const targetDeviceCount = Number(targetCountRow?.count ?? 0);
-      const alreadyBoundToTarget = currentBinding?.person_id === request.person_id;
-
-      if (request.mode === 'add' && !alreadyBoundToTarget && targetDeviceCount >= maxDevices) {
-        return c.json({ error: 'Gerätelimit erreicht.' }, 409);
-      }
-
-      await upsertPersonDevice(
-        c.env.DB,
-        request.person_id,
-        deviceId,
-        detectDeviceModel(c.req.header('user-agent') ?? ''),
-        new Date().toISOString(),
-      );
-
-      let removedDeviceIds: string[] = [];
-      if (request.mode === 'switch') {
-        const removableDevices = await c.env.DB.prepare(
-          `SELECT device_id
-           FROM person_devices
-           WHERE person_id = ?1 AND device_id <> ?2`,
-        ).bind(request.person_id, deviceId).all<{ device_id: string }>();
-        removedDeviceIds = (removableDevices.results ?? []).map((row) => row.device_id).filter(Boolean);
-
-        if (removedDeviceIds.length > 0) {
-          await c.env.DB.prepare(
-            `DELETE FROM person_devices
-             WHERE person_id = ?1
-               AND device_id <> ?2
-               AND device_id IN (${removedDeviceIds.map((_, index) => `?${index + 3}`).join(', ')})`,
-          ).bind(request.person_id, deviceId, ...removedDeviceIds).run();
-          await deletePersonDeviceKeys(c.env.DB, removedDeviceIds);
-        }
       }
 
       await c.env.DB.prepare(
         `UPDATE device_link_requests
-         SET status = 'completed',
-             completed_at = datetime('now')
+         SET requested_device_id = ?2,
+             requested_device_model = ?3,
+             requested_person_id = ?4,
+             requested_at = datetime('now'),
+             rejected_at = NULL
          WHERE link_token = ?1`,
-      ).bind(linkToken).run();
+      ).bind(linkToken, deviceId, deviceModel, currentBinding?.person_id ?? null).run();
 
       return c.json({
         success: true,
         person_id: request.person_id,
         device_id: deviceId,
         device_action: request.mode,
-        removed_device_ids: removedDeviceIds,
-      });
+        status: 'requested',
+      }, 202);
     } catch (error) {
+      if (error instanceof ApiRouteError) {
+        return c.json({ error: error.message }, error.status);
+      }
       console.error('Error claiming person device link:', error);
       return c.json({ error: 'Gerätewechsel fehlgeschlagen' }, 500);
+    }
+  });
+
+  app.post('/api/person/:id/device-link/confirm', async (c) => {
+    const personId = c.req.param('id').trim();
+    if (!isValidUUID(personId)) {
+      return c.json({ error: 'Ungültige person_id' }, 400);
+    }
+    if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    try {
+      const body = await c.req.json<{ link_token?: unknown; action?: unknown }>().catch(
+        (): { link_token?: unknown; action?: unknown } => ({}),
+      );
+      const linkToken = typeof body.link_token === 'string' ? body.link_token.trim() : '';
+      const action = body.action === 'approve' || body.action === 'reject' ? body.action : null;
+      if (!linkToken || !isValidUUID(linkToken)) {
+        return c.json({ error: 'Ungültiger link_token' }, 400);
+      }
+      if (!action) {
+        return c.json({ error: 'Ungültige Aktion' }, 400);
+      }
+
+      await ensurePersonDevicesTable(c.env.DB);
+      await ensurePersonsMaxDevicesColumn(c.env.DB);
+      await ensureDeviceLinkRequestsTable(c.env.DB);
+      await expirePendingDeviceLinkToken(c.env.DB, linkToken);
+
+      const request = await c.env.DB.prepare(
+        `SELECT link_token, person_id, mode, status, requested_device_id, requested_device_model,
+                requested_person_id, requested_at, rejected_at, created_at, completed_at
+         FROM device_link_requests
+         WHERE link_token = ?1 AND person_id = ?2`,
+      ).bind(linkToken, personId).first<DeviceLinkRequestRow>();
+
+      if (!request) {
+        return c.json({ error: 'Gerätewechsel nicht gefunden' }, 404);
+      }
+
+      const requestStatus = resolveDeviceLinkStatus(request);
+      if (requestStatus === 'expired') {
+        return c.json({ error: 'Gerätewechsel abgelaufen' }, 410);
+      }
+      if (requestStatus === 'completed') {
+        return c.json({ error: 'Gerätewechsel bereits abgeschlossen' }, 409);
+      }
+      if (requestStatus === 'rejected') {
+        return c.json({ error: 'Gerätewechsel wurde bereits abgelehnt' }, 409);
+      }
+      if (requestStatus !== 'requested' || !request.requested_device_id) {
+        return c.json({ error: 'Noch keine Geräteanfrage vorhanden' }, 409);
+      }
+
+      if (action === 'reject') {
+        await c.env.DB.prepare(
+          `UPDATE device_link_requests
+           SET rejected_at = datetime('now')
+           WHERE link_token = ?1`,
+        ).bind(linkToken).run();
+
+        return c.json({
+          success: true,
+          person_id: request.person_id,
+          device_action: request.mode,
+          status: 'rejected',
+        });
+      }
+
+      const result = await bindPersonDeviceToPerson(c.env.DB, {
+        personId: request.person_id,
+        deviceId: request.requested_device_id,
+        mode: request.mode,
+        deviceModel: request.requested_device_model || 'unknown',
+        allowReassignFromWatcherlessPerson: true,
+      });
+
+      await c.env.DB.prepare(
+        `UPDATE device_link_requests
+         SET status = 'completed',
+             completed_at = datetime('now'),
+             rejected_at = NULL
+         WHERE link_token = ?1`,
+      ).bind(linkToken).run();
+
+      return c.json({
+        success: true,
+        person_id: request.person_id,
+        device_id: request.requested_device_id,
+        device_action: request.mode,
+        max_devices: result.maxDevices,
+        removed_device_ids: result.removedDeviceIds,
+        status: 'completed',
+      });
+    } catch (error) {
+      if (error instanceof ApiRouteError) {
+        return c.json({ error: error.message }, error.status);
+      }
+      console.error('Error confirming person device link:', error);
+      return c.json({ error: 'Gerätewechsel-Bestätigung fehlgeschlagen' }, 500);
     }
   });
 
@@ -952,7 +1209,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       return c.json({ error: 'person_id or device_id is too long' }, 400);
     }
 
-    const nowIso = new Date().toISOString();
     const deviceModel = detectDeviceModel(c.req.header('user-agent') ?? '');
     await ensurePersonDevicesTable(c.env.DB);
     await ensurePersonsMaxDevicesColumn(c.env.DB);
@@ -967,62 +1223,21 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
     const maxDevices = resolvePersonMaxDevices(person.max_devices);
     const effectiveMode: 'switch' | 'add' = mode ?? (maxDevices <= 1 ? 'switch' : 'add');
-
-    const watcherBinding = await c.env.DB.prepare(
-      'SELECT watcher_id FROM watcher_devices WHERE device_id = ?1',
-    ).bind(deviceId).first<{ watcher_id: string }>();
-    if (watcherBinding?.watcher_id) {
-      return c.json({ error: 'Dieses Gerät ist bereits als Watcher registriert.' }, 409);
-    }
-
-    const deviceKey = await c.env.DB.prepare(
-      'SELECT role FROM device_keys WHERE device_id = ?1',
-    ).bind(deviceId).first<{ role: string }>();
-    if (!deviceKey) {
-      return c.json({ error: 'Dieses Gerät ist noch nicht registriert.' }, 404);
-    }
-    if (deviceKey.role !== 'person') {
-      return c.json({ error: 'Dieses Gerät ist bereits einer anderen Rolle zugeordnet.' }, 409);
-    }
-
-    const existingBinding = await c.env.DB.prepare(
-      'SELECT person_id FROM person_devices WHERE device_id = ?1',
-    ).bind(deviceId).first<{ person_id: string }>();
-    if (existingBinding?.person_id && existingBinding.person_id !== personId) {
-      return c.json({ error: 'Dieses Gerät ist bereits mit einer anderen Person verknüpft.' }, 409);
-    }
-
-    const countRow = await c.env.DB.prepare(
-      'SELECT COUNT(*) as count FROM person_devices WHERE person_id = ?1',
-    ).bind(personId).first<{ count: number | string }>();
-    const deviceCount = Number(countRow?.count ?? 0);
-    const isAlreadyBoundToPerson = existingBinding?.person_id === personId;
-
-    if (effectiveMode === 'add' && !isAlreadyBoundToPerson && deviceCount >= maxDevices) {
-      return c.json({ error: 'Gerätelimit erreicht.' }, 409);
-    }
-
-    await upsertPersonDevice(c.env.DB, personId, deviceId, deviceModel, nowIso);
-
     let removedDeviceIds: string[] = [];
-    if (effectiveMode === 'switch') {
-      const removableDevices = await c.env.DB.prepare(
-        `SELECT device_id
-         FROM person_devices
-         WHERE person_id = ?1 AND device_id <> ?2`,
-      ).bind(personId, deviceId).all<{ device_id: string }>();
-      removedDeviceIds = (removableDevices.results ?? []).map((row) => row.device_id).filter(Boolean);
-
-      if (removedDeviceIds.length > 0) {
-        const placeholders = removedDeviceIds.map((_, index) => `?${index + 3}`).join(', ');
-        await c.env.DB.prepare(
-          `DELETE FROM person_devices
-           WHERE person_id = ?1
-             AND device_id <> ?2
-             AND device_id IN (${placeholders})`,
-        ).bind(personId, deviceId, ...removedDeviceIds).run();
-        await deletePersonDeviceKeys(c.env.DB, removedDeviceIds);
+    try {
+      const result = await bindPersonDeviceToPerson(c.env.DB, {
+        personId,
+        deviceId,
+        mode: effectiveMode,
+        deviceModel,
+        allowReassignFromWatcherlessPerson: false,
+      });
+      removedDeviceIds = result.removedDeviceIds;
+    } catch (error) {
+      if (error instanceof ApiRouteError) {
+        return c.json({ error: error.message }, error.status);
       }
+      throw error;
     }
 
     return c.json({
@@ -1030,7 +1245,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       person_id: personId,
       device_id: deviceId,
       device_model: deviceModel,
-      last_seen: nowIso,
+      last_seen: new Date().toISOString(),
       max_devices: maxDevices,
       device_action: effectiveMode,
       removed_device_ids: removedDeviceIds,

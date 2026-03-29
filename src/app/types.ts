@@ -50,6 +50,11 @@ export interface DeviceLinkRequestRow {
   person_id: string;
   mode: 'switch' | 'add';
   status: 'pending' | 'completed' | 'expired';
+  requested_device_id: string | null;
+  requested_device_model: string | null;
+  requested_person_id: string | null;
+  requested_at: string | null;
+  rejected_at: string | null;
   created_at: string;
   completed_at: string | null;
 }

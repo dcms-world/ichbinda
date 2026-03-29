@@ -8,16 +8,25 @@ import type { AppBindings, AppEnv } from './app/types';
 
 const app = new Hono<AppEnv>();
 
-app.get('/', (c) => c.html(LANDING_HTML));
+function htmlResponse(html: string): Response {
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=UTF-8',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
+app.get('/', () => htmlResponse(LANDING_HTML));
 app.get('/person.html', (c) =>
-  c.html(
+  htmlResponse(
     renderPersonHtml(
       resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')),
     ),
   ),
 );
 app.get('/watcher.html', (c) =>
-  c.html(
+  htmlResponse(
     renderWatcherHtml(
       resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')),
     ),

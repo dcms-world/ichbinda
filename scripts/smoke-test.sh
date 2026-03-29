@@ -221,12 +221,21 @@ HEADERS_FILE="$TMP_DIR/headers.txt"
 
 status="$(request GET "$WORKER_URL/" "" "$BODY_FILE")"
 expect_status "GET /" "200" "$status" "$BODY_FILE"
+status="$(request_with_headers GET "$WORKER_URL/" "" "$BODY_FILE" "$HEADERS_FILE")"
+expect_status "GET / mit Headers" "200" "$status" "$BODY_FILE"
+expect_headers_contains "GET / mit Headers" "$HEADERS_FILE" 'cache-control: no-store'
 
 status="$(request GET "$WORKER_URL/person.html" "" "$BODY_FILE")"
 expect_status "GET /person.html" "200" "$status" "$BODY_FILE"
+status="$(request_with_headers GET "$WORKER_URL/person.html" "" "$BODY_FILE" "$HEADERS_FILE")"
+expect_status "GET /person.html mit Headers" "200" "$status" "$BODY_FILE"
+expect_headers_contains "GET /person.html mit Headers" "$HEADERS_FILE" 'cache-control: no-store'
 
 status="$(request GET "$WORKER_URL/watcher.html" "" "$BODY_FILE")"
 expect_status "GET /watcher.html" "200" "$status" "$BODY_FILE"
+status="$(request_with_headers GET "$WORKER_URL/watcher.html" "" "$BODY_FILE" "$HEADERS_FILE")"
+expect_status "GET /watcher.html mit Headers" "200" "$status" "$BODY_FILE"
+expect_headers_contains "GET /watcher.html mit Headers" "$HEADERS_FILE" 'cache-control: no-store'
 
 status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json')"
 expect_status "POST /api/person ohne Auth" "401" "$status" "$BODY_FILE"
@@ -385,11 +394,28 @@ expect_status "POST /api/person/:id/device-link/create" "201" "$status" "$BODY_F
 DEVICE_LINK_TOKEN="$(json_field "$BODY_FILE" link_token)"
 
 status="$(request POST "$WORKER_URL/api/person/device-link/claim" "{\"link_token\":\"${DEVICE_LINK_TOKEN}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
-expect_status "POST /api/person/device-link/claim" "200" "$status" "$BODY_FILE"
+expect_status "POST /api/person/device-link/claim" "202" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/device-link/claim" "$BODY_FILE" '"status":"requested"'
 expect_body_contains "POST /api/person/device-link/claim" "$BODY_FILE" "\"person_id\":\"${PERSON_ID}\""
+
+status="$(request GET "$WORKER_URL/api/person/device-link/${DEVICE_LINK_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/person/device-link/:token auf altem Geraet" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/device-link/:token auf altem Geraet" "$BODY_FILE" '"status":"requested"'
+
+status="$(request POST "$WORKER_URL/api/person/${PERSON_ID}/device-link/confirm" "{\"link_token\":\"${DEVICE_LINK_TOKEN}\",\"action\":\"approve\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person/:id/device-link/confirm approve" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/:id/device-link/confirm approve" "$BODY_FILE" '"status":"completed"'
+
+status="$(request GET "$WORKER_URL/api/person/device-link/${DEVICE_LINK_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
+expect_status "GET /api/person/device-link/:token auf neuem Geraet" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/device-link/:token auf neuem Geraet" "$BODY_FILE" '"status":"completed"'
+
+status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/devices" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/person/:id/devices mit altem API-Key nach Transfer" "401" "$status" "$BODY_FILE"
 
 status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/devices" "" "$BODY_FILE" -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"
 expect_status "GET /api/person/:id/devices nach Transfer" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/:id/devices nach Transfer" "$BODY_FILE" "\"person_id\":\"${PERSON_ID}\""
 expect_body_contains "GET /api/person/:id/devices nach Transfer" "$BODY_FILE" "\"device_id\":\"${PERSON_THIRD_DEVICE_ID}\""
 
 status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${THIRD_PERSON_API_KEY}")"

@@ -167,6 +167,11 @@ export async function ensureDeviceLinkRequestsTable(db: D1Database): Promise<voi
       person_id TEXT NOT NULL,
       mode TEXT NOT NULL CHECK(mode IN ('switch', 'add')),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'expired')),
+      requested_device_id TEXT,
+      requested_device_model TEXT,
+      requested_person_id TEXT,
+      requested_at TEXT,
+      rejected_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
       FOREIGN KEY (person_id) REFERENCES persons(id)
@@ -178,6 +183,22 @@ export async function ensureDeviceLinkRequestsTable(db: D1Database): Promise<voi
   await db.prepare(
     'CREATE INDEX IF NOT EXISTS idx_device_link_requests_created ON device_link_requests(created_at)',
   ).run();
+  await addDeviceLinkRequestColumn(db, 'requested_device_id TEXT');
+  await addDeviceLinkRequestColumn(db, 'requested_device_model TEXT');
+  await addDeviceLinkRequestColumn(db, 'requested_person_id TEXT');
+  await addDeviceLinkRequestColumn(db, 'requested_at TEXT');
+  await addDeviceLinkRequestColumn(db, 'rejected_at TEXT');
+}
+
+async function addDeviceLinkRequestColumn(db: D1Database, definition: string): Promise<void> {
+  try {
+    await db.prepare(`ALTER TABLE device_link_requests ADD COLUMN ${definition}`).run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes('duplicate column name')) {
+      throw error;
+    }
+  }
 }
 
 export async function ensureWatcherDisconnectEventsTable(db: D1Database): Promise<void> {

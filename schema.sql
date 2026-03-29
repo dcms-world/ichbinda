@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS device_link_requests (
   person_id TEXT NOT NULL,
   mode TEXT NOT NULL CHECK(mode IN ('switch', 'add')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'expired')),
+  requested_device_id TEXT,
+  requested_device_model TEXT,
+  requested_person_id TEXT,
+  requested_at TEXT,
+  rejected_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   completed_at TEXT,
   FOREIGN KEY (person_id) REFERENCES persons(id)
