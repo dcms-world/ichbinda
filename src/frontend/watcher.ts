@@ -4,7 +4,7 @@ export const WATCHER_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>I bin da - Verbundene Personen</title>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>__JSQR_SCRIPT__</script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -55,6 +55,14 @@ button:hover{background:#5a6fd6}
 .camera-video{display:block;width:100%;max-height:70vh;border-radius:10px;background:#111;object-fit:cover}
 .camera-actions{display:flex;justify-content:flex-end;margin-top:14px}
 .camera-canvas{display:none}
+.status-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:2200}
+.status-modal-overlay.open{display:flex}
+.status-modal{width:100%;max-width:420px;background:#fff;border-radius:16px;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.22)}
+.status-modal-title{margin:0 0 10px;font-size:20px;font-weight:700;color:#101828}
+.status-modal-message{margin:0;color:#475467;font-size:15px;line-height:1.5}
+.status-modal-actions{display:flex;justify-content:flex-end;margin-top:20px}
+.status-modal-button{min-width:120px}
+.confirm-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .edit-overlay{position:fixed;inset:0;background:rgba(16,24,40,0.66);display:none;align-items:center;justify-content:center;padding:16px;z-index:2100}
 .edit-overlay.open{display:flex}
 .edit-modal{width:100%;max-width:540px;background:#fff;border-radius:14px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,0.2)}
@@ -141,6 +149,25 @@ button:hover{background:#5a6fd6}
     </div>
   </div>
 </div>
+<div id="statusModalOverlay" class="status-modal-overlay" onclick="handleStatusModalOverlayClick(event)">
+  <div class="status-modal" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
+    <h3 id="statusModalTitle" class="status-modal-title">Hinweis</h3>
+    <p id="statusModalMessage" class="status-modal-message"></p>
+    <div class="status-modal-actions">
+      <button type="button" id="statusModalButton" class="status-modal-button" onclick="closeStatusModal()">OK</button>
+    </div>
+  </div>
+</div>
+<div id="confirmModalOverlay" class="status-modal-overlay" onclick="handleConfirmModalOverlayClick(event)">
+  <div class="status-modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <h3 id="confirmModalTitle" class="status-modal-title">Bestätigung</h3>
+    <p id="confirmModalMessage" class="status-modal-message"></p>
+    <div class="confirm-modal-actions">
+      <button type="button" id="confirmModalCancelButton" class="secondary-btn" onclick="closeConfirmModal(false)">Abbrechen</button>
+      <button type="button" id="confirmModalConfirmButton" class="remove-btn" onclick="closeConfirmModal(true)">Bestätigen</button>
+    </div>
+  </div>
+</div>
 <div id="personEditOverlay" class="edit-overlay" onclick="handleEditOverlayClick(event)">
   <div class="edit-modal">
     <h3 class="edit-title">Person bearbeiten</h3>
@@ -191,7 +218,7 @@ function isLetterChar(char){return !!char&&char.toLocaleLowerCase()!==char.toLoc
 function hasTwoLetterStart(name){const chars=[...String(name||'').trim()];return chars.length>=2&&isLetterChar(chars[0])&&isLetterChar(chars[1])}
 function getDisplayNameValidationError(name){const trimmed=String(name||'').trim();if(trimmed.length<2)return'name-too-short';if(trimmed.length>MAX_DISPLAY_NAME_LENGTH)return'name-too-long';if(!hasTwoLetterStart(trimmed))return'name-invalid-start';return''}
 function isDisplayNameTooLong(name){return String(name||'').trim().length>MAX_DISPLAY_NAME_LENGTH}
-function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}else if(errorCode==='invalid-json'){alert('Die Eingabe enthält kein gültiges Pairing-Format.')}else if(errorCode==='invalid-person-id'){alert('Die Eingabe enthält keine gültige Personen-ID.')}else if(errorCode==='invalid-pairing-token'){alert('Die Eingabe enthält kein gültiges Pairing-Token.')}else if(errorCode==='pairing-required'){alert('Zum Verbinden wird ein gültiger Pairing-Code benötigt. Bitte den aktuellen QR-Code der Person scannen.')}} 
+function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){showStatusModal('Eingabe prüfen','Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){showStatusModal('Eingabe prüfen','Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){showStatusModal('Eingabe prüfen','Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}else if(errorCode==='invalid-json'){showStatusModal('Eingabe prüfen','Die Eingabe enthält kein gültiges Pairing-Format.')}else if(errorCode==='invalid-person-id'){showStatusModal('Eingabe prüfen','Die Eingabe enthält keine gültige Personen-ID.')}else if(errorCode==='invalid-pairing-token'){showStatusModal('Eingabe prüfen','Die Eingabe enthält kein gültiges Pairing-Token.')}else if(errorCode==='pairing-required'){showStatusModal('Pairing-Code erforderlich','Zum Verbinden wird ein gültiger Pairing-Code benötigt. Bitte den aktuellen QR-Code der Person scannen.')}} 
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
@@ -222,6 +249,8 @@ let scanContext = null;
 let visiblePersonsById = {};
 let activeEditPersonId = '';
 let currentPersonCount = 0;
+let dialogFocusTarget = null;
+let confirmModalResolver = null;
 let outgoingPairingPollInterval = null;
 let outgoingPairingTimeout = null;
 
@@ -238,6 +267,71 @@ function clearOutgoingPairingTimers() {
     clearTimeout(outgoingPairingTimeout);
     outgoingPairingTimeout = null;
   }
+}
+
+function showStatusModal(title, message, buttonLabel) {
+  const overlay = document.getElementById('statusModalOverlay');
+  const titleEl = document.getElementById('statusModalTitle');
+  const messageEl = document.getElementById('statusModalMessage');
+  const buttonEl = document.getElementById('statusModalButton');
+  if (!overlay || !titleEl || !messageEl || !buttonEl) return;
+  dialogFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  titleEl.textContent = title || 'Hinweis';
+  messageEl.textContent = message || '';
+  buttonEl.textContent = buttonLabel || 'OK';
+  overlay.classList.add('open');
+  buttonEl.focus();
+}
+
+function closeStatusModal() {
+  const overlay = document.getElementById('statusModalOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  restoreDialogFocus();
+}
+
+function handleStatusModalOverlayClick(event) {
+  if (event.target === event.currentTarget) closeStatusModal();
+}
+
+function showConfirmModal(title, message, confirmLabel, cancelLabel) {
+  const overlay = document.getElementById('confirmModalOverlay');
+  const titleEl = document.getElementById('confirmModalTitle');
+  const messageEl = document.getElementById('confirmModalMessage');
+  const confirmButton = document.getElementById('confirmModalConfirmButton');
+  const cancelButton = document.getElementById('confirmModalCancelButton');
+  if (!overlay || !titleEl || !messageEl || !confirmButton || !cancelButton) return Promise.resolve(false);
+  dialogFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  titleEl.textContent = title || 'Bestätigung';
+  messageEl.textContent = message || '';
+  confirmButton.textContent = confirmLabel || 'Bestätigen';
+  cancelButton.textContent = cancelLabel || 'Abbrechen';
+  overlay.classList.add('open');
+  confirmButton.focus();
+  return new Promise((resolve) => {
+    confirmModalResolver = resolve;
+  });
+}
+
+function closeConfirmModal(confirmed) {
+  const overlay = document.getElementById('confirmModalOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  const resolver = confirmModalResolver;
+  confirmModalResolver = null;
+  restoreDialogFocus();
+  if (typeof resolver === 'function') resolver(!!confirmed);
+}
+
+function handleConfirmModalOverlayClick(event) {
+  if (event.target === event.currentTarget) closeConfirmModal(false);
+}
+
+function restoreDialogFocus() {
+  if (dialogFocusTarget && typeof dialogFocusTarget.focus === 'function') {
+    dialogFocusTarget.focus();
+  }
+  dialogFocusTarget = null;
 }
 
 const WATCHER_NAME_KEY = 'ibinda_watcher_name';
@@ -538,7 +632,7 @@ function updatePersonLimitUi() {
 }
 
 function showPersonLimitAlert() {
-  alert(getPersonLimitAlertText());
+  showStatusModal('Limit erreicht', getPersonLimitAlertText());
 }
 
 async function refreshPersonCount() {
@@ -682,6 +776,16 @@ async function openQrScanner() {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  const statusOverlay = document.getElementById('statusModalOverlay');
+  if (statusOverlay && statusOverlay.classList.contains('open')) {
+    closeStatusModal();
+    return;
+  }
+  const confirmOverlay = document.getElementById('confirmModalOverlay');
+  if (confirmOverlay && confirmOverlay.classList.contains('open')) {
+    closeConfirmModal(false);
+    return;
+  }
   closeQrScanner();
   closeEditModal();
 });
@@ -723,15 +827,15 @@ async function pollOutgoingPairing(pairingToken, personId, personName) {
       }
       unhidePersonInLocalView(personId);
       await loadPersons();
-      alert('Verbindung bestätigt.');
+      showStatusModal('Verbindung bestätigt', 'Die Person hat deine Verbindungsanfrage bestätigt. Die Verbindung ist jetzt aktiv.');
       return;
     }
     if (data.status === 'rejected') {
-      alert('Die Person hat die Verbindung abgelehnt.');
+      showStatusModal('Verbindung abgelehnt', 'Die Person hat die Verbindung abgelehnt.');
       return;
     }
     if (data.status === 'expired') {
-      alert('Die Verbindungsanfrage ist abgelaufen.');
+      showStatusModal('Anfrage abgelaufen', 'Die Verbindungsanfrage ist abgelaufen.');
       return;
     }
   } catch (err) {
@@ -779,10 +883,10 @@ async function addPerson() {
     const responseData = await watchRes.json().catch(() => ({}));
     if (!watchRes.ok) throw new Error(responseData.error || ('Verbindung konnte nicht hinzugefügt werden (Status ' + watchRes.status + ')'));
     document.getElementById('personId').value = '';
-    alert('Anfrage gesendet. Die Person muss die Verbindung jetzt bestätigen.');
+    showStatusModal('Anfrage gesendet', 'Die Person muss die Verbindung jetzt bestätigen.');
     startOutgoingPairingPolling(pairingToken, personId, parsedInput.name || '');
   } catch (err) {
-    alert('Fehler: ' + err.message);
+    showStatusModal('Fehler', err && err.message ? 'Fehler: ' + err.message : 'Verbindung konnte nicht hinzugefügt werden.');
   }
 }
 
@@ -844,7 +948,7 @@ async function saveEditedPerson() {
     closeEditModal();
     await loadPersons();
   } catch (err) {
-    alert(err && err.message ? err.message : 'Intervall konnte nicht gespeichert werden.');
+    showStatusModal('Speichern fehlgeschlagen', err && err.message ? err.message : 'Intervall konnte nicht gespeichert werden.');
   } finally {
     saveButton.disabled = false;
   }
@@ -863,7 +967,7 @@ async function handleEditPhotoChange(event) {
   const file = input && input.files && input.files[0] ? input.files[0] : null;
   if (!file) return;
   if (typeof file.type === 'string' && !file.type.startsWith('image/')) {
-    alert('Bitte eine Bilddatei auswählen.');
+    showStatusModal('Ungültige Datei', 'Bitte eine Bilddatei auswählen.');
     if (input) input.value = '';
     return;
   }
@@ -874,7 +978,7 @@ async function handleEditPhotoChange(event) {
     renderEditPhotoPreview(activeEditPersonId);
     await loadPersons();
   } catch (err) {
-    alert('Foto konnte nicht gespeichert werden.');
+    showStatusModal('Foto fehlgeschlagen', 'Foto konnte nicht gespeichert werden.');
   } finally {
     if (input) input.value = '';
   }
@@ -915,7 +1019,7 @@ async function removePersonFromLocalView(personId) {
   if (!watcherId) return false;
   const personName = getPersonName(personId) || getRememberedPersonName(personId);
   const label = personName ? personName + ' (' + personId + ')' : personId;
-  const confirmed = confirm('Verbindung mit "' + label + '" entfernen?');
+  const confirmed = await showConfirmModal('Verbindung entfernen', 'Verbindung mit "' + label + '" entfernen?', 'Entfernen', 'Abbrechen');
   if (!confirmed) return false;
   try {
     const res = await fetch(API_URL + '/watch', {
@@ -925,7 +1029,7 @@ async function removePersonFromLocalView(personId) {
     });
     if (!res.ok) throw new Error('Server error ' + res.status);
   } catch (e) {
-    alert('Entfernen fehlgeschlagen. Bitte erneut versuchen.');
+    showStatusModal('Entfernen fehlgeschlagen', 'Entfernen fehlgeschlagen. Bitte erneut versuchen.');
     return false;
   }
   removePersonName(personId);

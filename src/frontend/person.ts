@@ -4,11 +4,8 @@ export const PERSON_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>iBinda - Ich bin okay</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>__QRCODE_SCRIPT__</script>
+<script>__JSQR_SCRIPT__</script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 :root {
@@ -39,7 +36,7 @@ export const PERSON_HTML = `<!DOCTYPE html>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 
 body {
-  font-family: "Nunito", -apple-system, BlinkMacSystemFont, "SF Pro Rounded", ui-rounded, "SF Pro Text", system-ui, sans-serif;
+  font-family: "SF Pro Rounded", "Avenir Next Rounded", "Nunito Sans", ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   font-weight: 300;
   background-color: var(--system-background);
   color: var(--system-label);

@@ -84,7 +84,7 @@ Status: offen
   - `X-Frame-Options: DENY`
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Strict-Transport-Security` fuer HTTPS-Requests
-  Die CSP ist auf die aktuell benoetigten externen Quellen fuer Fonts, QR-Libs und Turnstile begrenzt.
+  Die CSP ist auf die verbleibenden benoetigten Quellen begrenzt. QR-Libraries werden lokal ausgeliefert, die externe Google-Font-Abhaengigkeit wurde entfernt; bewusst extern bleibt nur Turnstile.
 
 - [ ] **14. Sensitive Daten in `localStorage`**
   person_id, watcher_id, Namen und Fotos liegen in localStorage – bei XSS sofort kompromittiert.

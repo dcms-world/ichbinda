@@ -33,6 +33,13 @@ Neue Einträge oben anfügen (neueste zuerst).
   - Portal Dev: `portal.dev.ibinda.app`
   - Aktuell läuft alles über `ibinda.johann-zehner.workers.dev`. Subdomains werden erst eingerichtet wenn Custom Domains aktiv benötigt werden.
 
+### Frontend-Runtime-Abhängigkeiten lokal ausliefern, wo möglich
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Die Web-App soll zur Laufzeit möglichst wenige Third-Party-Requests auslösen. Das reduziert externe Datenabflüsse, vereinfacht DSGVO-Bewertung und macht das Frontend robuster gegen CDN-Ausfälle. Deshalb werden QR-bezogene JavaScript-Abhängigkeiten lokal aus dem Worker ausgeliefert und die externe Google-Font-Abhängigkeit entfernt.
+- **Alternativen verworfen:** QR-Libraries und Webfonts weiter direkt von CDNs laden; Turnstile lokal spiegeln.
+- **Konsequenz:** `qrcodejs` und `jsQR` werden lokal eingebettet, die Person-Ansicht nutzt nur noch lokale/systemnahe Schriften. Turnstile bleibt als bewusst externe Sicherheitsabhängigkeit bestehen.
+
 ### Eine native App mit persistenter Geraeterolle statt zwei getrennten Apps
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent
