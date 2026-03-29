@@ -151,6 +151,18 @@ h1 {
   text-align: center;
 }
 .no-watcher-warning.visible { display: block; }
+.no-watcher-warning-text { margin-bottom: 10px; }
+.no-watcher-action {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  background: var(--system-orange);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
 
 /* Menu Button */
 .menu-btn {
@@ -270,6 +282,14 @@ h1 {
   font-weight: 600;
   cursor: pointer;
 }
+.qr-copy-status {
+  display: block;
+  min-height: 20px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--system-secondary-label);
+}
+.qr-copy-status.error { color: var(--system-red); }
 
 .settings-help {
   font-size: 13px;
@@ -383,6 +403,74 @@ h1 {
   font-weight: 600;
   cursor: pointer;
 }
+.pairing-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+}
+.pairing-modal-overlay.open { display: flex; }
+.pairing-modal {
+  width: 100%;
+  max-width: 360px;
+  background: var(--system-secondary-background);
+  color: var(--system-label);
+  border-radius: 18px;
+  padding: 24px 20px 20px;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.28);
+}
+.pairing-modal h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.pairing-modal p {
+  font-size: 15px;
+  color: var(--system-secondary-label);
+  margin-bottom: 20px;
+}
+.pairing-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.pairing-modal-actions button {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.pairing-primary-btn,
+.pairing-secondary-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pairing-primary-btn {
+  background: var(--system-blue);
+  color: #fff;
+}
+.pairing-secondary-btn {
+  background: var(--system-fill);
+  color: var(--system-label);
+}
+.pairing-danger-btn {
+  background: #FFE5E2;
+  color: var(--system-red);
+}
+@media (prefers-color-scheme: dark) {
+  .pairing-danger-btn {
+    background: rgba(255,59,48,0.18);
+  }
+}
 
 /* Cooldown */
 .cooldown-container {
@@ -438,6 +526,33 @@ h1 {
 </form>
 </div>
 
+<div class="pairing-modal-overlay" id="pairingQrModalOverlay">
+<div class="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairingQrTitle">
+<h2 id="pairingQrTitle">QR-Code anzeigen</h2>
+<p>Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</p>
+<div class="qr-container">
+  <div id="qrcode"></div>
+  <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
+  <small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
+</div>
+<div class="pairing-modal-actions">
+  <button type="button" class="pairing-secondary-btn" onclick="closePairingQrModal()">Schließen</button>
+</div>
+</div>
+</div>
+
+<div class="pairing-modal-overlay" id="pairingRequestModalOverlay">
+<div class="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairingRequestTitle">
+<h2 id="pairingRequestTitle">Verbindungsanfrage</h2>
+<p id="pairingRequestText">Mit jemandem verbinden?</p>
+<small id="pairingRequestStatus" class="qr-copy-status" aria-live="polite"></small>
+<div class="pairing-modal-actions">
+  <button type="button" class="pairing-secondary-btn pairing-danger-btn" id="pairingRejectBtn" onclick="respondToPairingRequest('reject')">Ablehnen</button>
+  <button type="button" class="pairing-primary-btn" id="pairingApproveBtn" onclick="respondToPairingRequest('approve')">Annehmen</button>
+</div>
+</div>
+</div>
+
 <button class="menu-btn" onclick="openSettings()" title="Menü" aria-label="Menü öffnen">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 </button>
@@ -458,25 +573,6 @@ h1 {
         <div class="name-display" id="personNameDisplay">-</div>
       </div>
     </div>
-  </div>
-
-  <div class="settings-section">
-    <h3>QR-Code zum Verbinden</h3>
-    <div class="qr-container" id="qrContainer">
-      <div id="qrcode"></div>
-      <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
-      <small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
-    </div>
-    <div class="settings-list" id="pairingRequestCard" style="display:none;margin-top:12px">
-      <div class="settings-item" style="display:block">
-        <div id="pairingRequestText" class="device-meta" style="margin-bottom:12px">Mit jemandem verbinden?</div>
-        <div style="display:flex;gap:10px;justify-content:flex-end">
-          <button type="button" class="device-delete-btn" id="pairingRejectBtn" onclick="respondToPairingRequest('reject')">Ablehnen</button>
-          <button type="button" class="qr-scan-btn" id="pairingApproveBtn" onclick="respondToPairingRequest('approve')">Annehmen</button>
-        </div>
-      </div>
-    </div>
-    <small class="settings-help">Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</small>
   </div>
 
   <div class="settings-section">
@@ -534,7 +630,10 @@ h1 {
 <div class="cooldown-countdown" id="cooldownCountdown">5:00</div>
 </div>
 <div class="last-checkin" id="lastCheckin"></div>
-<div id="noWatcherWarning" class="no-watcher-warning">⚠️ Keine Verbindung eingerichtet</div>
+<div id="noWatcherWarning" class="no-watcher-warning">
+  <div class="no-watcher-warning-text">⚠️ Keine Verbindung eingerichtet</div>
+  <button type="button" class="no-watcher-action" onclick="openPairingQrModal()">QR-Code anzeigen</button>
+</div>
 </div>
 
 <script>
@@ -575,22 +674,25 @@ let pairingRefreshTimeout=null;
 let currentPairingRequestName='';
 
 function clearPairingTimers(){if(pairingPollInterval){clearInterval(pairingPollInterval);pairingPollInterval=null}if(pairingRefreshTimeout){clearTimeout(pairingRefreshTimeout);pairingRefreshTimeout=null}}
-function hidePairingRequest(){const card=document.getElementById('pairingRequestCard');const text=document.getElementById('pairingRequestText');const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');currentPairingRequestName='';if(card)card.style.display='none';if(text)text.textContent='';if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}
-function showPairingRequest(name){const card=document.getElementById('pairingRequestCard');const text=document.getElementById('pairingRequestText');const displayName=(name||'Jemandem');currentPairingRequestName=displayName;if(text)text.textContent='Mit '+displayName+' verbinden?';if(card)card.style.display='block'}
-function resetPairingState(){clearPairingTimers();currentPairingToken='';hidePairingRequest()}
+function isPairingQrModalOpen(){const overlay=document.getElementById('pairingQrModalOverlay');return !!overlay&&overlay.classList.contains('open')}
+function setPairingRequestStatus(message,isError){const statusEl=document.getElementById('pairingRequestStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError)}
+function openPairingQrModal(forceRefresh){const overlay=document.getElementById('pairingQrModalOverlay');if(!overlay||!currentPersonId)return;overlay.classList.add('open');setQrCopyStatus('',false);renderQrCode(!!forceRefresh)}
+function closePairingQrModal(resetState=true){const overlay=document.getElementById('pairingQrModalOverlay');if(overlay)overlay.classList.remove('open');const qrEl=document.getElementById('qrcode');if(qrEl)qrEl.innerHTML='';setQrCopyStatus('',false);if(resetState){clearPairingTimers();currentPairingToken=''}}
+function hidePairingRequest(){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');currentPairingRequestName='';if(overlay)overlay.classList.remove('open');if(text)text.textContent='Mit jemandem verbinden?';setPairingRequestStatus('',false);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}
+function showPairingRequest(name){const overlay=document.getElementById('pairingRequestModalOverlay');const text=document.getElementById('pairingRequestText');const displayName=(name||'jemandem');closePairingQrModal(false);currentPairingRequestName=displayName;if(text)text.textContent='Mit '+displayName+' verbinden?';setPairingRequestStatus('',false);if(overlay)overlay.classList.add('open')}
 function buildQrPayload(){if(!currentPersonId||!currentPairingToken)return'';return JSON.stringify({person_id:currentPersonId,pairing_token:currentPairingToken,name:currentPersonName||getPersonName()})}
 let qrCopyStatusTimeout=null;
 function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
 async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!qrPayload){setQrCopyStatus('QR-Code wird vorbereitet',true);return}if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
 async function createPairingToken(){if(!currentPersonId)throw new Error('Keine Person ID');const res=await fetch(API_URL+'/pair/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:currentPersonId})});if(!res.ok)throw new Error('Pairing create failed: '+res.status);const data=await res.json();if(!data.pairing_token)throw new Error('Pairing token missing');return data.pairing_token}
-async function respondToPairingRequest(action){if(!currentPairingToken)return;const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');if(approveBtn)approveBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;try{const res=await fetch(API_URL+'/pair/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pairing_token:currentPairingToken,action})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Pairing confirm failed: '+res.status));hidePairingRequest();if(action==='approve'){setQrCopyStatus('Verbunden mit '+(data.watcher_name||currentPairingRequestName||'einer Person'),false);if(currentPersonId)loadWatchers(currentPersonId)}else{setQrCopyStatus('Verbindung abgelehnt',false)}currentPairingToken='';setTimeout(()=>{if(document.getElementById('settingsPanel').classList.contains('open'))renderQrCode(true)},1500)}catch(e){console.error('Pairing confirm failed',e);setQrCopyStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}}
-async function pollPairingStatus(pairingToken){if(!currentPersonId||!pairingToken)return;try{const res=await fetch(API_URL+'/pair/'+encodeURIComponent(pairingToken));if(!res.ok){if(res.status===404)return;throw new Error('Pairing poll failed: '+res.status)}const data=await res.json();if(data.status==='requested'){showPairingRequest(data.watcher_name||'jemandem');return}hidePairingRequest();if(data.status==='completed'){clearPairingTimers();currentPairingToken='';setQrCopyStatus('Verbunden mit '+(data.watcher_name||'einer Person'),false);loadWatchers(currentPersonId);setTimeout(()=>{if(document.getElementById('settingsPanel').classList.contains('open'))renderQrCode(true)},1500);return}if(data.status==='expired'){setQrCopyStatus('QR-Code wird erneuert...',false);await renderQrCode(true)}}catch(e){console.error('Pairing poll failed',e)}}
+async function respondToPairingRequest(action){if(!currentPairingToken)return;const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');if(approveBtn)approveBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;setPairingRequestStatus('',false);try{const res=await fetch(API_URL+'/pair/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pairing_token:currentPairingToken,action})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Pairing confirm failed: '+res.status));hidePairingRequest();if(action==='approve'){currentPairingToken='';clearPairingTimers();if(currentPersonId)loadWatchers(currentPersonId);return}openPairingQrModal(true)}catch(e){console.error('Pairing confirm failed',e);setPairingRequestStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}}
+async function pollPairingStatus(pairingToken){if(!currentPersonId||!pairingToken)return;try{const res=await fetch(API_URL+'/pair/'+encodeURIComponent(pairingToken));if(!res.ok){if(res.status===404)return;throw new Error('Pairing poll failed: '+res.status)}const data=await res.json();if(data.status==='requested'){showPairingRequest(data.watcher_name||'jemandem');return}hidePairingRequest();if(data.status==='completed'){clearPairingTimers();currentPairingToken='';closePairingQrModal(false);loadWatchers(currentPersonId);return}if(data.status==='expired'){setQrCopyStatus('QR-Code wird erneuert...',false);await renderQrCode(true)}}catch(e){console.error('Pairing poll failed',e)}}
 function startPairingPolling(pairingToken){clearPairingTimers();pollPairingStatus(pairingToken);pairingPollInterval=setInterval(()=>{pollPairingStatus(pairingToken)},5000);pairingRefreshTimeout=setTimeout(()=>{renderQrCode(true)},300000)}
-async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildQrPayload();if(!qrPayload)return;const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload;startPairingPolling(currentPairingToken)}
+async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildQrPayload();if(!qrPayload)return;const qrEl=document.getElementById('qrcode');if(!qrEl)return;qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload;startPairingPolling(currentPairingToken)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
-function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
+function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
 
-function closeSettings(){resetPairingState();document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
+function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
 function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const rawName=input.value;const errorCode=getDisplayNameValidationError(rawName);if(errorCode){showDisplayNameValidationError(errorCode);return}const name=normalizeDisplayName(rawName);setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 
@@ -631,7 +733,7 @@ const WATCHER_NAMES_KEY='ibinda_watcher_names';
 function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}
 function cacheWatcherNames(updates){const names=getCachedWatcherNames();Object.assign(names,updates);localStorage.setItem(WATCHER_NAMES_KEY,JSON.stringify(names))}
 function getWatcherDisplayName(id){const name=getCachedWatcherNames()[id];return name||id.slice(0,8)+'…'}
-async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el)el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div></div></div>';if(warn)warn.classList.add('visible')}else{const nameUpdates={};(data.watchers||[]).forEach(w=>{if(w.name)nameUpdates[w.id]=w.name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);const count=data.watcher_count;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=(data.watchers||[]).map(w=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(w.id))+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
+async function loadWatchers(personId){try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/watchers');if(!res.ok)return;const data=await res.json();const el=document.getElementById('watcherInfo');const warn=document.getElementById('noWatcherWarning');if(!data.watcher_count){if(el){el.innerHTML='<div class="settings-list"><div class="settings-item"><div class="device-meta">Keine Verbindung</div><button type="button" class="device-delete-btn" id="watcherQrEntryBtn">QR-Code anzeigen</button></div></div>';const qrEntryBtn=document.getElementById('watcherQrEntryBtn');if(qrEntryBtn)qrEntryBtn.onclick=()=>openPairingQrModal()}if(warn)warn.classList.add('visible')}else{const nameUpdates={};(data.watchers||[]).forEach(w=>{if(w.name)nameUpdates[w.id]=w.name});if(Object.keys(nameUpdates).length)cacheWatcherNames(nameUpdates);const count=data.watcher_count;const label=count===1?'1 Verbindung':count+' Verbindungen';const items=(data.watchers||[]).map(w=>'<div class="device-meta" style="padding:4px 0">'+escapeHtml(getWatcherDisplayName(w.id))+'</div>').join('');el.innerHTML='<div class="settings-list"><div class="settings-item" style="cursor:pointer" id="watcherToggle"><div>'+label+'</div><div style="color:var(--system-green)">✓</div></div><div id="watcherIds" style="display:none;padding:0 16px 12px">'+items+'</div></div>';document.getElementById('watcherToggle').onclick=()=>{const idsEl=document.getElementById('watcherIds');idsEl.style.display=idsEl.style.display==='none'?'block':'none'};if(warn)warn.classList.remove('visible')}}catch(e){}}
 
 async function registerCurrentDevice(personId){const deviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=deviceId;const res=await fetch(API_URL+'/person/'+encodeURIComponent(personId)+'/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(!res.ok){const text=await res.text().catch(()=>'');throw new Error('Device registration failed: '+res.status+' '+text)}}
 
