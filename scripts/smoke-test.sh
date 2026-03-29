@@ -336,6 +336,28 @@ status="$(request POST "$WORKER_URL/api/watcher/${WATCHER_ID}/announce" '{"name"
 expect_status "POST /api/watcher/:id/announce mit ungueltigem Start" "400" "$status" "$BODY_FILE"
 expect_body_contains "POST /api/watcher/:id/announce mit ungueltigem Start" "$BODY_FILE" '"error":"name must start with 2 letters"'
 
+status="$(request DELETE "$WORKER_URL/api/watch" "{\"person_id\":\"${PERSON_ID}\",\"watcher_id\":\"${WATCHER_ID}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "DELETE /api/watch" "200" "$status" "$BODY_FILE"
+expect_body_contains "DELETE /api/watch" "$BODY_FILE" '"success":true'
+
+status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/watchers" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/person/:id/watchers nach Trennung" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/:id/watchers nach Trennung" "$BODY_FILE" '"watcher_count":0'
+expect_body_contains "GET /api/person/:id/watchers nach Trennung" "$BODY_FILE" '"disconnect_events":[{"id":'
+expect_body_contains "GET /api/person/:id/watchers nach Trennung" "$BODY_FILE" "\"watcher_name\":\"Max Muster\""
+
+status="$(request POST "$WORKER_URL/api/person/${PERSON_ID}/disconnect-events/ack" '{"event_ids":[1]}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/person/:id/disconnect-events/ack" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/person/:id/disconnect-events/ack" "$BODY_FILE" '"acknowledged_count":1'
+
+status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/watchers" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/person/:id/watchers nach Bestätigung" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/:id/watchers nach Bestätigung" "$BODY_FILE" '"disconnect_events":[]'
+
+status="$(request GET "$WORKER_URL/api/person/${PERSON_ID}/has-watcher" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/person/:id/has-watcher nach Trennung" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/person/:id/has-watcher nach Trennung" "$BODY_FILE" '"has_watcher":false'
+
 status="$(request POST "$WORKER_URL/api/person" '{}' "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "POST /api/person fuer Rate-Limit-Test" "201" "$status" "$BODY_FILE"
 RATE_LIMIT_PERSON_ID="$(json_field "$BODY_FILE" id)"

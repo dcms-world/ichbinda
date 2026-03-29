@@ -204,6 +204,13 @@ Referenzen:
 
 # Erledigte Aufgaben
 
+## Free: Person bei Verbindungsabbrüchen aktiv informieren
+- **Status:** erledigt
+- **Priorität:** mittel
+- **Beschreibung:** Wenn sich eine verbundene Person abmeldet, soll die betroffene Person explizit sehen, wer nicht mehr verbunden ist, und die Meldung bestaetigen.
+- **Fortschritt:** Am 2026-03-29 umgesetzt: neue persistente Tabelle `watcher_disconnect_events` inkl. Migration `006_watcher_disconnect_events.sql`, Backend-Auslieferung offener Disconnect-Events ueber `GET /api/person/:id/watchers`, bestaetigender Ack-Endpoint `POST /api/person/:id/disconnect-events/ack` und Personen-Modal mit Text wie „Max Muster ist nicht mehr mit dir verbunden. Bitte prüfe, ob noch jemand deinen Status sehen kann.“. Der Personen-Client pollt die Verbindungen jetzt leichtgewichtig im Hintergrund und zeigt Disconnect-Hinweise nach Rueckkehr in den Vordergrund ebenfalls an. `scripts/smoke-test.sh` deckt den neuen Trenn- und Bestaetigungsfluss ab.
+- **Erledigt am:** 2026-03-29
+
 ## Security-Basismaßnahmen
 - **Status:** erledigt
 - **Priorität:** hoch

@@ -45,3 +45,12 @@ export interface OverduePersonRow {
   check_interval_minutes: number;
   push_token: string | null;
 }
+
+export interface WatcherDisconnectEventRow {
+  id: number;
+  person_id: string;
+  watcher_id: string;
+  watcher_name_snapshot: string | null;
+  created_at: string;
+  acknowledged_at: string | null;
+}

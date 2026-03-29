@@ -11,6 +11,7 @@ import {
   deviceOwnsPerson,
   ensurePairingRequestsTable,
   ensurePersonDevicesTable,
+  ensureWatcherDisconnectEventsTable,
   expirePendingPairingToken,
   lookupRequestDevice,
   rollbackRateLimit,
@@ -36,7 +37,7 @@ import {
   parseDeviceModel,
   parsePushToken,
 } from './helpers/validation';
-import type { AppEnv, PairingRequestRow, PersonDeviceRow, RateLimitRow } from './types';
+import type { AppEnv, PairingRequestRow, PersonDeviceRow, RateLimitRow, WatcherDisconnectEventRow } from './types';
 
 export function registerApiRoutes(app: Hono<AppEnv>): void {
   app.use('/api/*', async (c, next) => {
@@ -359,6 +360,8 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
+    await ensureWatcherDisconnectEventsTable(c.env.DB);
+
     const result = await c.env.DB.prepare(
       `SELECT wr.watcher_id, wna.name as watcher_name
        FROM watch_relations wr
@@ -367,15 +370,61 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     ).bind(personId).all<{ watcher_id: string; watcher_name: string | null }>();
 
     const rows = result.results ?? [];
-    const withNames = rows.filter((row) => row.watcher_name !== null);
-    if (withNames.length > 0) {
-      await c.env.DB.batch(
-        withNames.map((row) => c.env.DB.prepare('DELETE FROM watcher_name_announcements WHERE watcher_id = ?').bind(row.watcher_id)),
-      );
+    const watchers = rows.map((row) => ({ id: row.watcher_id, name: row.watcher_name ?? null }));
+    const disconnectEvents = await c.env.DB.prepare(
+      `SELECT id, person_id, watcher_id, watcher_name_snapshot, created_at, acknowledged_at
+       FROM watcher_disconnect_events
+       WHERE person_id = ?1 AND acknowledged_at IS NULL
+       ORDER BY datetime(created_at) ASC, id ASC`,
+    ).bind(personId).all<WatcherDisconnectEventRow>();
+
+    return c.json({
+      watcher_count: watchers.length,
+      watchers,
+      disconnect_events: (disconnectEvents.results ?? []).map((event) => ({
+        id: event.id,
+        watcher_id: event.watcher_id,
+        watcher_name: event.watcher_name_snapshot,
+        created_at: event.created_at,
+      })),
+    });
+  });
+
+  app.post('/api/person/:id/disconnect-events/ack', async (c) => {
+    const personId = c.req.param('id').trim();
+    if (!isValidUUID(personId)) {
+      return c.json({ error: 'Ungültige person_id' }, 400);
+    }
+    if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+      return c.json({ error: 'Forbidden' }, 403);
     }
 
-    const watchers = rows.map((row) => ({ id: row.watcher_id, name: row.watcher_name ?? null }));
-    return c.json({ watcher_count: watchers.length, watchers });
+    const body = await c.req.json<{ event_ids?: unknown }>().catch((): { event_ids?: unknown } => ({}));
+    const eventIds = Array.isArray(body.event_ids)
+      ? body.event_ids
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+      : [];
+
+    if (eventIds.length === 0) {
+      return c.json({ error: 'event_ids required' }, 400);
+    }
+
+    await ensureWatcherDisconnectEventsTable(c.env.DB);
+
+    const placeholders = eventIds.map((_, index) => `?${index + 2}`).join(', ');
+    const result = await c.env.DB.prepare(
+      `UPDATE watcher_disconnect_events
+       SET acknowledged_at = datetime('now')
+       WHERE person_id = ?1
+         AND acknowledged_at IS NULL
+         AND id IN (${placeholders})`,
+    ).bind(personId, ...eventIds).run();
+
+    return c.json({
+      success: true,
+      acknowledged_count: result.meta?.changes ?? 0,
+    });
   });
 
   app.post('/api/pair/create', async (c) => {
@@ -835,9 +884,23 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     ).bind(watcherId, deviceId).first();
     if (!owns) return c.json({ error: 'Forbidden' }, 403);
 
-    await c.env.DB.prepare(
+    await ensureWatcherDisconnectEventsTable(c.env.DB);
+
+    const removalResult = await c.env.DB.prepare(
       'UPDATE watch_relations SET removed_at = datetime(\'now\') WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL',
     ).bind(personId, watcherId).run();
+
+    if ((removalResult.meta?.changes ?? 0) > 0) {
+      const watcherName = await c.env.DB.prepare(
+        'SELECT name FROM watcher_name_announcements WHERE watcher_id = ?1',
+      ).bind(watcherId).first<{ name: string | null }>();
+
+      await c.env.DB.prepare(
+        `INSERT INTO watcher_disconnect_events (person_id, watcher_id, watcher_name_snapshot)
+         VALUES (?1, ?2, ?3)`,
+      ).bind(personId, watcherId, watcherName?.name ?? null).run();
+    }
+
     return c.json({ success: true });
   });
 

@@ -19,6 +19,12 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### Watcher-Abmeldungen als bestaetigbare Ereignisse speichern
+- **Datum:** 2026-03-29
+- **Entschieden von:** User + Agent
+- **Begründung:** Wenn eine verbundene Person sich abmeldet, reicht ein stiller Listen-Refresh nicht aus. Die Person soll explizit sehen, wer nicht mehr verbunden ist, und die Information einmalig bestaetigen. Dafuer wird die fachliche Historie in `watch_relations.removed_at` beibehalten und zusaetzlich ein persistentes Disconnect-Ereignis mit `watcher_id` und Namens-Snapshot gespeichert, bis die Person es im UI bestaetigt.
+- **Alternativen verworfen:** Nur `watch_relations` passiv auswerten und im Frontend diffen; nur einen fluechtigen Banner ohne Bestaetigung; `watcher_id` nach dem Trennen komplett verwerfen.
+
 ### Subdomain-Struktur für ibinda.app
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent
