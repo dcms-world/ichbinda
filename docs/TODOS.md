@@ -39,20 +39,21 @@ Referenzen:
 ### Phase 4: Pairing-Endpoints
 - [x] `POST /api/pair/create` — Person erstellt Pairing-Token
 - [x] `POST /api/pair/respond` — Watcher löst Token ein
+- [x] `POST /api/pair/confirm` — Person nimmt Anfrage an oder lehnt ab
 - [x] `GET /api/pair/:token` — Person pollt Status
 - [x] Cron-Cleanup abgelaufener `pairing_requests`
 
 ### Phase 5: CORS + Security + Validierung
 - [x] CORS auf erlaubte Origins begrenzen: gleicher Host, lokales Dev und Capacitor-Origins — **Security #4**
 - [ ] `createDeviceId()` Fallback fixen — **Security #5**
-- [ ] `details: String(e)` aus Error-Responses entfernen — **Security #10**
+- [x] Error-Responses ohne `details: String(e)` — **Security #10**
 - [ ] Input-Validierung: `push_token`, UUIDs, `check_interval_minutes` — **Security #11, #12**
 - [x] `POST /api/person`: bei ungültiger `id` mit `400` ablehnen statt stillschweigend neue UUID zu erzeugen
 - [ ] `check_interval_minutes` strikt auf 1–10080 begrenzen (aktuell akzeptiert API auch `0` und sehr große Werte)
 - [x] Namensfelder (`watcher_name`, lokale Person-/Watcher-Namen) auf 2–35 Zeichen begrenzen; die ersten 2 Zeichen müssen Buchstaben sein
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Pairing seit 2026-03-29 end-to-end vorhanden: `pairing_requests` in Schema + Migration `005_pairing_requests.sql`, neue Endpoints `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token`, `POST /api/pair/confirm`, Cron-Cleanup, QR-Payload `{ person_id, pairing_token }`, Polling im Personen-Frontend und explizite Personen-Bestätigung mit Annehmen/Ablehnen vor dem Erstellen der Verbindung. Der direkte Legacy-Pfad `POST /api/watch` ist serverseitig deaktiviert (`410`), damit Security #7 nicht mehr über einen manuellen API-Call offen bleibt. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #5, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Pairing seit 2026-03-29 end-to-end vorhanden: `pairing_requests` in Schema + Migration `005_pairing_requests.sql`, neue Endpoints `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token`, `POST /api/pair/confirm`, Cron-Cleanup, QR-Payload `{ person_id, pairing_token }`, Polling im Personen-Frontend und explizite Personen-Bestätigung mit Annehmen/Ablehnen vor dem Erstellen der Verbindung. Der direkte Legacy-Pfad `POST /api/watch` ist serverseitig deaktiviert (`410`), damit Security #7 nicht mehr über einen manuellen API-Call offen bleibt. Error-Responses enthalten keine `details: String(e)` mehr; `POST /api/watch` liefert nur noch einen festen `410`-Fehlertext. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #5, #11, #12, #13.
 - **Erledigt am:** -
 
 ---

@@ -114,7 +114,7 @@ Wichtige aktuell vorhandene Endpoints:
 - `POST /api/pair/confirm`
 - `GET /api/pair/:token`
 - `POST /api/watcher`
-- `POST /api/watch`
+- `POST /api/watch` (Legacy-Pfad, fuer neue Verbindungen deaktiviert)
 - `PUT /api/watch`
 - `DELETE /api/watch`
 - `GET /api/watcher/:id/persons`

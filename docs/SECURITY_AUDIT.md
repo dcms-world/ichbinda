@@ -1,7 +1,7 @@
 # Security Audit – iBinda
 
 Erstellt: 2026-03-21
-Aktualisiert: 2026-03-28
+Aktualisiert: 2026-03-29
 Status: offen
 
 ---
@@ -57,14 +57,13 @@ Status: offen
   Rate-Limiting wurde auf Device-ID-basiert umgestellt, aber ein Angreifer kann beliebig viele device_ids generieren.
   Zusätzlich IP-basiertes Rate-Limiting implementieren (z.B. Cloudflare Rate Limiting Rules).
 
-- [~] **10. Error-Details in Produktion exponiert**
-  Stack-Traces und interne Fehlermeldungen werden an den Client gesendet.
-  `POST /api/person` → `details: String(e)` wurde entfernt.
-  `POST /api/watch` → `details: String(e)` noch offen.
+- [x] **10. Error-Details in Produktion exponiert**
+  Die frueheren `details: String(e)`-Leaks wurden entfernt.
+  `POST /api/watch` erzeugt keine interne Exception-Response mehr, sondern liefert nur noch einen festen `410`-Fehlertext fuer den deaktivierten Legacy-Pfad.
 
 - [ ] **11. Input-Validierung fehlt auf mehreren Endpoints**
   - `POST /api/watcher`: `push_token` ohne Längen-/Format-Validierung
-  - `POST /api/watch`: `person_id`, `watcher_id` nicht als UUID validiert
+  - `PUT /api/watch`: `person_id`, `watcher_id` nicht als UUID validiert
   - `PUT /api/watch`: `check_interval_minutes` ohne Bounds-Check
   - `GET /api/person/:id`: `:id` nicht als UUID validiert
 
@@ -162,6 +161,8 @@ Status: offen
 | `POST /api/person` legt Ownership-Bindung an | implementiert |
 | `register-device` blockiert fremde `device_id` | implementiert |
 | `details: String(e)` aus `POST /api/person` entfernt | implementiert |
+| Pairing mit Personen-Bestaetigung (`/api/pair/*`, `POST /api/pair/confirm`) | implementiert |
+| Direkter Legacy-Pfad `POST /api/watch` deaktiviert | implementiert |
 
 ---
 
@@ -170,7 +171,7 @@ Status: offen
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
 | Kritisch    | 5      | 0             |
-| Hoch        | 7      | 4             |
+| Hoch        | 7      | 3             |
 | Mittel      | 7      | 7             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **18**        |
+| **Gesamt**  | **26** | **17**        |

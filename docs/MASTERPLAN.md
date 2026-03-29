@@ -65,13 +65,13 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 
 - `src/index.ts` – Monolithische App (Backend + Frontend)
 - `schema.sql` – Kanonisches Schema (aktualisieren)
-- `migrations/002_pairing.sql` – **Geplant**: `pairing_requests`-Tabelle
+- `migrations/005_pairing_requests.sql` – Migration fuer `pairing_requests`
 
 ---
 
 ## Phase 1: DB-Migration
 
-### `migrations/002_pairing.sql`
+### `migrations/005_pairing_requests.sql`
 
 Neue Tabelle:
 ```sql
@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS pairing_requests (
   completed_at TEXT,
   FOREIGN KEY (person_id) REFERENCES persons(id)
 );
-CREATE INDEX IF NOT EXISTS idx_pairing_created ON pairing_requests(created_at);
+CREATE INDEX IF NOT EXISTS idx_pairing_requests_person_status ON pairing_requests(person_id, status);
+CREATE INDEX IF NOT EXISTS idx_pairing_requests_created ON pairing_requests(created_at);
 ```
 
 ### `schema.sql` aktualisieren
@@ -154,7 +155,9 @@ async function deviceOwnsWatcher(db: D1Database, deviceId: string, watcherId: st
 | `GET /api/person/:id/devices` | Device besitzt Person |
 | `POST /api/person/:id/devices` | Device besitzt Person |
 | `DELETE /api/person/:id/devices` | Device besitzt Person |
-| `POST /api/watch` | Device besitzt `watcher_id` |
+| `POST /api/pair/create` | Device besitzt `person_id` |
+| `GET /api/pair/:token` | Device besitzt Pairing-Person oder ist das anfragende Watcher-Geraet |
+| `POST /api/pair/confirm` | Device besitzt `person_id` des Pairings |
 | `PUT /api/watch` | Device besitzt `watcher_id` |
 | `DELETE /api/watch` | Device besitzt `watcher_id` |
 | `GET /api/watcher/:id/persons` | Device besitzt `watcher_id` |
@@ -175,12 +178,19 @@ async function deviceOwnsWatcher(db: D1Database, deviceId: string, watcherId: st
 ### `POST /api/pair/respond` (Watcher)
 - Prüft `pairing_token` existiert, pending, < 5 Min alt
 - Speichert `watcher_name`, `watcher_device_id`
-- Erstellt automatisch Watch-Relation
-- Setzt `status = 'completed'`
+- Return: `{ status: 'requested' }`
 
-### `GET /api/pair/:token` (Person, Polling)
+### `POST /api/pair/confirm` (Person)
 - Auth: Device besitzt `person_id` des Pairings
+- `action = approve | reject`
+- Bei `approve`: legt Watch-Relation an oder reaktiviert sie
+- Bei `reject`: markiert das Pairing als abgelehnt/abgelaufen
+
+### `GET /api/pair/:token` (Person oder anfragender Watcher)
+- Auth: Device besitzt `person_id` des Pairings oder ist `watcher_device_id`
 - Return: `{ status, watcher_name? }`
+- Status-Verlauf: `pending -> requested -> completed`
+- Bei Ablehnung: `rejected`
 
 ### Cron-Cleanup:
 ```sql
@@ -289,7 +299,7 @@ erlaubte Origins:
 1. `wrangler dev` → Person registrieren → API-Key in Cookie prüfen
 2. Request ohne Auth an `/api/heartbeat` → 401
 3. IDOR: Mit Device A auf Person B's Daten → 403
-4. Pairing E2E: Person QR → Watcher scannt → Name eingeben → Watch-Relation erstellt
+4. Pairing E2E: Person QR → Watcher scannt → Name eingeben → Person bestaetigt → Watch-Relation erstellt
 5. Pairing mit Personen-Bestaetigung: Watcher sendet Anfrage → Person nimmt an → Watcher sieht die Person danach ohne manuellen Reload in seiner Personenliste; Regression "verbunden/angefragt, aber Person erscheint nicht in der Watcher-App" darf nicht mehr auftreten
 6. 5+ Min. warten → Pairing "expired"
 7. CORS: Request von fremder Origin → geblockt
