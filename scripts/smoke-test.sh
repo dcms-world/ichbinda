@@ -229,8 +229,36 @@ log "Watcher-ID: $WATCHER_ID"
 status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
 expect_status "POST /api/heartbeat mit falscher Rolle" "403" "$status" "$BODY_FILE"
 
+status="$(request POST "$WORKER_URL/api/pair/create" "{\"person_id\":\"${PERSON_ID}\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/pair/create" "201" "$status" "$BODY_FILE"
+PAIRING_TOKEN="$(json_field "$BODY_FILE" pairing_token)"
+log "Pairing-Token: $PAIRING_TOKEN"
+
+status="$(request GET "$WORKER_URL/api/pair/${PAIRING_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/pair/:token vor Antwort" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/pair/:token vor Antwort" "$BODY_FILE" '"status":"pending"'
+
 status="$(request POST "$WORKER_URL/api/watch" "{\"person_id\":\"${PERSON_ID}\",\"watcher_id\":\"${WATCHER_ID}\",\"check_interval_minutes\":60}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
-expect_status "POST /api/watch" "200" "$status" "$BODY_FILE"
+expect_status "POST /api/watch deaktiviert" "410" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/watch deaktiviert" "$BODY_FILE" 'Pairing-QR-Code'
+
+status="$(request POST "$WORKER_URL/api/pair/respond" "{\"pairing_token\":\"${PAIRING_TOKEN}\",\"watcher_name\":\"Max Muster\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${WATCHER_API_KEY}")"
+expect_status "POST /api/pair/respond" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/pair/respond" "$BODY_FILE" '"status":"requested"'
+
+status="$(request GET "$WORKER_URL/api/pair/${PAIRING_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/pair/:token nach Anfrage" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/pair/:token nach Anfrage" "$BODY_FILE" '"status":"requested"'
+expect_body_contains "GET /api/pair/:token nach Anfrage" "$BODY_FILE" '"watcher_name":"Max Muster"'
+
+status="$(request POST "$WORKER_URL/api/pair/confirm" "{\"pairing_token\":\"${PAIRING_TOKEN}\",\"action\":\"approve\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "POST /api/pair/confirm approve" "200" "$status" "$BODY_FILE"
+expect_body_contains "POST /api/pair/confirm approve" "$BODY_FILE" '"status":"completed"'
+
+status="$(request GET "$WORKER_URL/api/pair/${PAIRING_TOKEN}" "" "$BODY_FILE" -H "Authorization: Bearer ${PERSON_API_KEY}")"
+expect_status "GET /api/pair/:token nach Bestaetigung" "200" "$status" "$BODY_FILE"
+expect_body_contains "GET /api/pair/:token nach Bestaetigung" "$BODY_FILE" '"status":"completed"'
+expect_body_contains "GET /api/pair/:token nach Bestaetigung" "$BODY_FILE" '"watcher_name":"Max Muster"'
 
 status="$(request POST "$WORKER_URL/api/heartbeat" "{\"person_id\":\"${PERSON_ID}\",\"status\":\"ok\"}" "$BODY_FILE" -H 'Content-Type: application/json' -H "Authorization: Bearer ${PERSON_API_KEY}")"
 expect_status "POST /api/heartbeat mit Person-Key" "200" "$status" "$BODY_FILE"

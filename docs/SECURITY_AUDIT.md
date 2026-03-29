@@ -45,10 +45,10 @@ Status: offen
 - [x] **6. `person_id` nur auf Länge geprüft, nicht auf UUID-Format**
   UUID-Regex-Validierung wurde implementiert.
 
-- [ ] **7. Watch-Relations ohne Bestätigung der Person möglich**
-  `POST /api/watch` prüft inzwischen, ob das anfragende Gerät den `watcher_id` besitzt.
-  Offenes Rest-Risiko: Ein legitimer Watcher kann sich weiterhin an beliebige `person_id`s hängen, solange er deren ID kennt.
-  Verknüpfung nur nach Bestätigung durch die Person (Pairing-Token/Consent-Flow) oder äquivalenten Besitznachweis erlauben.
+- [x] **7. Watch-Relations ohne Bestätigung der Person möglich**
+  Pairing-Flow mit `pairing_requests`, `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token` und `POST /api/pair/confirm` wurde implementiert.
+  Der direkte Legacy-Pfad `POST /api/watch` für das Anlegen neuer Verbindungen ist serverseitig deaktiviert (`410`).
+  Neue Verbindungen entstehen nur noch über ein kurzlebiges Pairing-Token, das die Person aktiv erzeugt, plus explizite Bestätigung durch die Person.
 
 - [x] **8. Fehlende Ownership-Prüfung bei DELETE**
   `DELETE /api/person/:id/devices` prüft jetzt via `deviceOwnsPerson()` ob der Requester die Person besitzt.
@@ -170,7 +170,7 @@ Status: offen
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
 | Kritisch    | 5      | 0             |
-| Hoch        | 7      | 5             |
+| Hoch        | 7      | 4             |
 | Mittel      | 7      | 7             |
 | Niedrig     | 7      | 7             |
-| **Gesamt**  | **26** | **19**        |
+| **Gesamt**  | **26** | **18**        |

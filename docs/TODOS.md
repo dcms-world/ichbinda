@@ -17,9 +17,9 @@ Referenzen:
 - **Beschreibung:** Phasen 1 bis 5 aus `docs/MASTERPLAN.md` umsetzen, damit die Free-Web-UI sicher benutzbar ist.
 
 ### Phase 1: DB-Migration
-- [ ] `pairing_requests`-Tabelle erstellen
-- [ ] `schema.sql` aktualisieren
-- [ ] Migration `migrations/002_pairing.sql` erstellen und testen
+- [x] `pairing_requests`-Tabelle erstellen
+- [x] `schema.sql` aktualisieren
+- [x] Migration `migrations/005_pairing_requests.sql` erstellen
 
 ### Phase 2: Auth-Middleware fixen
 - [x] `lookupApiKey()` umbauen → gibt `{ device_id, role }` zurück — **Security #2**
@@ -37,10 +37,10 @@ Referenzen:
 - [x] `POST /api/watcher` bindet das anfragende Gerät direkt in `watcher_devices`
 
 ### Phase 4: Pairing-Endpoints
-- [ ] `POST /api/pair/create` — Person erstellt Pairing-Token
-- [ ] `POST /api/pair/respond` — Watcher löst Token ein
-- [ ] `GET /api/pair/:token` — Person pollt Status
-- [ ] Cron-Cleanup abgelaufener `pairing_requests`
+- [x] `POST /api/pair/create` — Person erstellt Pairing-Token
+- [x] `POST /api/pair/respond` — Watcher löst Token ein
+- [x] `GET /api/pair/:token` — Person pollt Status
+- [x] Cron-Cleanup abgelaufener `pairing_requests`
 
 ### Phase 5: CORS + Security + Validierung
 - [x] CORS auf erlaubte Origins begrenzen: gleicher Host, lokales Dev und Capacitor-Origins — **Security #4**
@@ -52,24 +52,24 @@ Referenzen:
 - [x] Namensfelder (`watcher_name`, lokale Person-/Watcher-Namen) auf 2–35 Zeichen begrenzen; die ersten 2 Zeichen müssen Buchstaben sein
 - [ ] HTTP Security Headers — **Security #13**
 
-- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Verbleibende Validierungslücken aus lokalen API-Tests: `POST /api/watch` akzeptiert aktuell `check_interval_minutes=0` und sehr große Werte. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #5, #7, #10, #11, #12, #13.
+- **Fortschritt:** Phase 2+3 vollständig am 2026-03-28 implementiert. Person- und Watcher-Ownership gesichert. Watcher-Endpoints laufen direkt über `watcher_devices`; die frueher geplante `device_keys.watcher_id`-Migration ist damit obsolet. `register-device` ist inzwischen gegen fremde `device_id`-Übernahme gehärtet: bestehende Geräte können nur noch ihr eigenes API-Key-Material rotieren. CORS akzeptiert jetzt nur noch denselben Host, lokale Dev-Origins und die späteren Capacitor-Origins `capacitor://localhost` sowie `https://localhost`; fremde Origins mit `Origin`-Header werden mit `403` blockiert. Worker live auf Cloudflare deployed; allgemeine Smoke-Tests ok. `POST /api/person` lehnt ungültige `id` jetzt mit `400` ab; das Personen-Frontend fällt bei kaputter lokaler `person_id` automatisch auf eine neue Person zurück. Namensfelder für Person/Watcher sind auf 2–35 Zeichen mit Buchstaben-Start begrenzt. Pairing seit 2026-03-29 end-to-end vorhanden: `pairing_requests` in Schema + Migration `005_pairing_requests.sql`, neue Endpoints `POST /api/pair/create`, `POST /api/pair/respond`, `GET /api/pair/:token`, `POST /api/pair/confirm`, Cron-Cleanup, QR-Payload `{ person_id, pairing_token }`, Polling im Personen-Frontend und explizite Personen-Bestätigung mit Annehmen/Ablehnen vor dem Erstellen der Verbindung. Der direkte Legacy-Pfad `POST /api/watch` ist serverseitig deaktiviert (`410`), damit Security #7 nicht mehr über einen manuellen API-Call offen bleibt. Offene Verifikation: spezieller `409`-Pfad von `register-device` wurde live noch nicht mit gültigem Turnstile-Token durchgespielt. Offene Kernpunkte: Security #5, #10, #11, #12, #13.
 - **Erledigt am:** -
 
 ---
 
 ## Free: QR-Pairing im Frontend umstellen
-- **Status:** offen
+- **Status:** erledigt
 - **Priorität:** hoch
 - **Beschreibung:** Phase 6 aus `docs/MASTERPLAN.md` umsetzen.
 
-- [ ] Person-Seite: `POST /api/pair/create` → QR mit `{ person_id, pairing_token }`
-- [ ] Person-Seite: Polling alle 5 Sek., Timeout 5 Min., QR regenerieren
-- [ ] Watcher-Seite: `parsePersonInput()` auf neues Format umstellen
-- [ ] Watcher-Seite: Watcher-Name-Eingabe + `POST /api/pair/respond`
-- [ ] Legacy-Format `{ id, name }` entfernen
+- [x] Person-Seite: `POST /api/pair/create` → QR mit `{ person_id, pairing_token }`
+- [x] Person-Seite: Polling alle 5 Sek., Timeout 5 Min., QR regenerieren
+- [x] Watcher-Seite: `parsePersonInput()` auf neues Format umstellen
+- [x] Watcher-Seite: Watcher-Name-Eingabe + `POST /api/pair/respond`
+- [x] Legacy-Format `{ id, name }` entfernen
 
-- **Fortschritt:** Wartet auf Backend-Pairing-Endpoints.
-- **Erledigt am:** -
+- **Fortschritt:** Frontend seit 2026-03-29 vollständig auf Pairing umgestellt. Personen erzeugen beim Öffnen der Einstellungen einen kurzlebigen QR-Code mit `pairing_token`; die Watcher-Seite akzeptiert nur noch Pairing-Daten und sendet damit eine Verbindungsanfrage über `POST /api/pair/respond`. Die Person sieht danach im offenen QR-Sheet eine explizite Abfrage mit Annehmen/Ablehnen; erst `POST /api/pair/confirm` legt die Verbindung tatsächlich an. Der direkte Legacy-Flow über reine `person_id` ist aus der UI entfernt.
+- **Erledigt am:** 2026-03-29
 
 ---
 
@@ -95,7 +95,7 @@ Referenzen:
 - **Beschreibung:** `src/index.ts` in saubere Module aufteilen und E2E-Tests ergänzen.
 
 - [ ] Monolith aufteilen (2400+ Zeilen → Module)
-- [ ] E2E-Tests im Browser (Person + Watcher Flow komplett)
+- [ ] E2E-Tests im Browser (Person + Watcher Flow komplett, inklusive Regression: nach Personen-Bestaetigung erscheint die Verbindung beim Watcher sofort in der Liste und nicht nur als Statusmeldung)
 
 - **Fortschritt:** Bewusst nach dem Security-Kern eingeordnet.
 - **Erledigt am:** -

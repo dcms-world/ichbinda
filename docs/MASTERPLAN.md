@@ -290,10 +290,11 @@ erlaubte Origins:
 2. Request ohne Auth an `/api/heartbeat` → 401
 3. IDOR: Mit Device A auf Person B's Daten → 403
 4. Pairing E2E: Person QR → Watcher scannt → Name eingeben → Watch-Relation erstellt
-5. 5+ Min. warten → Pairing "expired"
-6. CORS: Request von fremder Origin → geblockt
-7. `check_interval_minutes = -1` → 400
-8. Error-Response enthält keine Stack-Traces
+5. Pairing mit Personen-Bestaetigung: Watcher sendet Anfrage → Person nimmt an → Watcher sieht die Person danach ohne manuellen Reload in seiner Personenliste; Regression "verbunden/angefragt, aber Person erscheint nicht in der Watcher-App" darf nicht mehr auftreten
+6. 5+ Min. warten → Pairing "expired"
+7. CORS: Request von fremder Origin → geblockt
+8. `check_interval_minutes = -1` → 400
+9. Error-Response enthält keine Stack-Traces
 
 ---
 ---

@@ -10,8 +10,8 @@
     "db:schema": "npx wrangler d1 execute dev-ibinda-db --file=./schema.sql",
     "db:schema:local": "npx wrangler d1 execute dev-ibinda-db --file=./schema.sql --local",
 
-    "db:migrate": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql",
-    "db:migrate:local": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql --local",
+    "db:migrate": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql && npx wrangler d1 execute dev-ibinda-db --file=./migrations/002_watcher_devices.sql && npx wrangler d1 execute dev-ibinda-db --file=./migrations/003_watcher_name_announcements.sql && npx wrangler d1 execute dev-ibinda-db --file=./migrations/004_watcher_max_persons.sql && npx wrangler d1 execute dev-ibinda-db --file=./migrations/005_pairing_requests.sql",
+    "db:migrate:local": "npx wrangler d1 execute dev-ibinda-db --file=./migrations/001_watch_relations_soft_delete.sql --local && npx wrangler d1 execute dev-ibinda-db --file=./migrations/002_watcher_devices.sql --local && npx wrangler d1 execute dev-ibinda-db --file=./migrations/003_watcher_name_announcements.sql --local && npx wrangler d1 execute dev-ibinda-db --file=./migrations/004_watcher_max_persons.sql --local && npx wrangler d1 execute dev-ibinda-db --file=./migrations/005_pairing_requests.sql --local",
 
     "db:setup": "npm run db:create && npm run db:schema",
     "db:setup:local": "npm run db:schema:local"

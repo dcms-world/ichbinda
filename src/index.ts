@@ -467,6 +467,15 @@ h1 {
       <button type="button" class="qr-copy-btn" onclick="copyQrPayload(event)">QR kopieren</button>
       <small id="qrCopyStatus" class="qr-copy-status" aria-live="polite"></small>
     </div>
+    <div class="settings-list" id="pairingRequestCard" style="display:none;margin-top:12px">
+      <div class="settings-item" style="display:block">
+        <div id="pairingRequestText" class="device-meta" style="margin-bottom:12px">Mit jemandem verbinden?</div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="device-delete-btn" id="pairingRejectBtn" onclick="respondToPairingRequest('reject')">Ablehnen</button>
+          <button type="button" class="qr-scan-btn" id="pairingApproveBtn" onclick="respondToPairingRequest('approve')">Annehmen</button>
+        </div>
+      </div>
+    </div>
     <small class="settings-help">Jemand kann diesen Code scannen, um sich mit dir zu verbinden.</small>
   </div>
 
@@ -560,15 +569,28 @@ function isDisplayNameTooLong(name){return String(name||'').trim().length>MAX_DI
 
 async function createPerson(existingPersonId){const options={method:'POST'};if(existingPersonId){options.headers={'Content-Type':'application/json'};options.body=JSON.stringify({id:existingPersonId})}const res=await fetch(API_URL+'/person',options);if(!res.ok)throw new Error('Person init failed: '+res.status);const data=await res.json();localStorage.setItem('ibinda_person_id',data.id);return data.id}
 
-function buildQrPayload(){return JSON.stringify({id:currentPersonId,name:currentPersonName||getPersonName()})}
+let currentPairingToken='';
+let pairingPollInterval=null;
+let pairingRefreshTimeout=null;
+let currentPairingRequestName='';
+
+function clearPairingTimers(){if(pairingPollInterval){clearInterval(pairingPollInterval);pairingPollInterval=null}if(pairingRefreshTimeout){clearTimeout(pairingRefreshTimeout);pairingRefreshTimeout=null}}
+function hidePairingRequest(){const card=document.getElementById('pairingRequestCard');const text=document.getElementById('pairingRequestText');const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');currentPairingRequestName='';if(card)card.style.display='none';if(text)text.textContent='';if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}
+function showPairingRequest(name){const card=document.getElementById('pairingRequestCard');const text=document.getElementById('pairingRequestText');const displayName=(name||'Jemandem');currentPairingRequestName=displayName;if(text)text.textContent='Mit '+displayName+' verbinden?';if(card)card.style.display='block'}
+function resetPairingState(){clearPairingTimers();currentPairingToken='';hidePairingRequest()}
+function buildQrPayload(){if(!currentPersonId||!currentPairingToken)return'';return JSON.stringify({person_id:currentPersonId,pairing_token:currentPairingToken,name:currentPersonName||getPersonName()})}
 let qrCopyStatusTimeout=null;
 function setQrCopyStatus(message,isError){const statusEl=document.getElementById('qrCopyStatus');if(!statusEl)return;statusEl.textContent=message||'';statusEl.classList.toggle('error',!!isError);if(qrCopyStatusTimeout){clearTimeout(qrCopyStatusTimeout);qrCopyStatusTimeout=null}if(message){qrCopyStatusTimeout=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('error');qrCopyStatusTimeout=null},1600)}}
-async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
-function renderQrCode(){if(!currentPersonId)return;const qrPayload=buildQrPayload();const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload}
+async function copyQrPayload(event){if(event&&typeof event.stopPropagation==='function')event.stopPropagation();if(!currentPersonId)return;const qrPayload=buildQrPayload();if(!qrPayload){setQrCopyStatus('QR-Code wird vorbereitet',true);return}if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){setQrCopyStatus('Kopieren nicht verfügbar',true);return}try{await navigator.clipboard.writeText(qrPayload);setQrCopyStatus('Kopiert!',false)}catch(e){console.error('QR payload copy failed',e);setQrCopyStatus('Kopieren fehlgeschlagen',true)}}
+async function createPairingToken(){if(!currentPersonId)throw new Error('Keine Person ID');const res=await fetch(API_URL+'/pair/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person_id:currentPersonId})});if(!res.ok)throw new Error('Pairing create failed: '+res.status);const data=await res.json();if(!data.pairing_token)throw new Error('Pairing token missing');return data.pairing_token}
+async function respondToPairingRequest(action){if(!currentPairingToken)return;const approveBtn=document.getElementById('pairingApproveBtn');const rejectBtn=document.getElementById('pairingRejectBtn');if(approveBtn)approveBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;try{const res=await fetch(API_URL+'/pair/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pairing_token:currentPairingToken,action})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||('Pairing confirm failed: '+res.status));hidePairingRequest();if(action==='approve'){setQrCopyStatus('Verbunden mit '+(data.watcher_name||currentPairingRequestName||'einer Person'),false);if(currentPersonId)loadWatchers(currentPersonId)}else{setQrCopyStatus('Verbindung abgelehnt',false)}currentPairingToken='';setTimeout(()=>{if(document.getElementById('settingsPanel').classList.contains('open'))renderQrCode(true)},1500)}catch(e){console.error('Pairing confirm failed',e);setQrCopyStatus(e&&e.message?e.message:'Bestätigung fehlgeschlagen',true);if(approveBtn)approveBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false}}
+async function pollPairingStatus(pairingToken){if(!currentPersonId||!pairingToken)return;try{const res=await fetch(API_URL+'/pair/'+encodeURIComponent(pairingToken));if(!res.ok){if(res.status===404)return;throw new Error('Pairing poll failed: '+res.status)}const data=await res.json();if(data.status==='requested'){showPairingRequest(data.watcher_name||'jemandem');return}hidePairingRequest();if(data.status==='completed'){clearPairingTimers();currentPairingToken='';setQrCopyStatus('Verbunden mit '+(data.watcher_name||'einer Person'),false);loadWatchers(currentPersonId);setTimeout(()=>{if(document.getElementById('settingsPanel').classList.contains('open'))renderQrCode(true)},1500);return}if(data.status==='expired'){setQrCopyStatus('QR-Code wird erneuert...',false);await renderQrCode(true)}}catch(e){console.error('Pairing poll failed',e)}}
+function startPairingPolling(pairingToken){clearPairingTimers();pollPairingStatus(pairingToken);pairingPollInterval=setInterval(()=>{pollPairingStatus(pairingToken)},5000);pairingRefreshTimeout=setTimeout(()=>{renderQrCode(true)},300000)}
+async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildQrPayload();if(!qrPayload)return;const qrEl=document.getElementById('qrcode');qrEl.innerHTML='';new QRCode(qrEl,{text:qrPayload,width:180,height:180});qrEl.onclick=copyQrPayload;startPairingPolling(currentPairingToken)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
 function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();renderQrCode();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
 
-function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
+function closeSettings(){resetPairingState();document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open')}
 
 function askForPersonName(){return new Promise((resolve)=>{const overlay=document.getElementById('nameModalOverlay');const form=document.getElementById('nameModalForm');const input=document.getElementById('personNameInput');overlay.classList.add('open');input.focus();const onSubmit=(event)=>{event.preventDefault();const rawName=input.value;const errorCode=getDisplayNameValidationError(rawName);if(errorCode){showDisplayNameValidationError(errorCode);return}const name=normalizeDisplayName(rawName);setPersonName(name);overlay.classList.remove('open');resolve(name)};form.addEventListener('submit',onSubmit,{once:true})})}
 
@@ -891,12 +913,12 @@ button:hover{background:#5a6fd6}
 <span id="personCounter" class="person-counter">0/- Personen</span>
 </div>
 <div id="addPersonControls" class="add-person">
-<input type="text" id="personId" placeholder="Person ID oder QR-Daten">
+<input type="text" id="personId" placeholder="QR-Code oder Pairing-Daten">
 <button id="addPersonBtn" onclick="addPerson()">Verbindung hinzufügen</button>
 <button type="button" id="openQrScannerBtn" onclick="openQrScanner()">QR scannen</button>
 </div>
 <div id="personLimitMessage" class="limit-message">Maximal 2 Personen möglich.</div>
-<small id="addPersonScanHint" class="scan-hint">QR-Code live mit der Kamera scannen oder JSON direkt einfügen.</small>
+<small id="addPersonScanHint" class="scan-hint">QR-Code live mit der Kamera scannen oder die Pairing-Daten einfügen.</small>
 </div>
 <div class="card">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px">
@@ -969,7 +991,7 @@ function isLetterChar(char){return !!char&&char.toLocaleLowerCase()!==char.toLoc
 function hasTwoLetterStart(name){const chars=[...String(name||'').trim()];return chars.length>=2&&isLetterChar(chars[0])&&isLetterChar(chars[1])}
 function getDisplayNameValidationError(name){const trimmed=String(name||'').trim();if(trimmed.length<2)return'name-too-short';if(trimmed.length>MAX_DISPLAY_NAME_LENGTH)return'name-too-long';if(!hasTwoLetterStart(trimmed))return'name-invalid-start';return''}
 function isDisplayNameTooLong(name){return String(name||'').trim().length>MAX_DISPLAY_NAME_LENGTH}
-function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}else if(errorCode==='invalid-json'){alert('Die Eingabe enthält kein gültiges Personenformat.')}else if(errorCode==='invalid-person-id'){alert('Die Eingabe enthält keine gültige Personen-ID.')}} 
+function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}else if(errorCode==='invalid-json'){alert('Die Eingabe enthält kein gültiges Pairing-Format.')}else if(errorCode==='invalid-person-id'){alert('Die Eingabe enthält keine gültige Personen-ID.')}else if(errorCode==='invalid-pairing-token'){alert('Die Eingabe enthält kein gültiges Pairing-Token.')}else if(errorCode==='pairing-required'){alert('Zum Verbinden wird ein gültiger Pairing-Code benötigt. Bitte den aktuellen QR-Code der Person scannen.')}} 
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
@@ -999,9 +1021,22 @@ let scanContext = null;
 let visiblePersonsById = {};
 let activeEditPersonId = '';
 let currentPersonCount = 0;
+let outgoingPairingPollInterval = null;
+let outgoingPairingTimeout = null;
 
 function getWatcherId() {
   return localStorage.getItem('ibinda_watcher_id');
+}
+
+function clearOutgoingPairingTimers() {
+  if (outgoingPairingPollInterval) {
+    clearInterval(outgoingPairingPollInterval);
+    outgoingPairingPollInterval = null;
+  }
+  if (outgoingPairingTimeout) {
+    clearTimeout(outgoingPairingTimeout);
+    outgoingPairingTimeout = null;
+  }
 }
 
 const WATCHER_NAME_KEY = 'ibinda_watcher_name';
@@ -1013,6 +1048,7 @@ async function ensureWatcherName(){const savedName=getWatcherName();if(savedName
 async function announceWatcherName(){const watcherId=getWatcherId();const name=getWatcherName();if(!watcherId||!name)return;try{await fetch(API_URL+'/watcher/'+watcherId+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})}catch(e){console.error('Name announce failed',e)}}
 const PERSON_ID_REGEX=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidFrontendPersonId(value){return PERSON_ID_REGEX.test(String(value||'').trim())}
+function isValidFrontendPairingToken(value){return PERSON_ID_REGEX.test(String(value||'').trim())}
 
 function getStoredList(key) {
   try {
@@ -1226,28 +1262,34 @@ function parsePersonInput(rawValue) {
     const parsed = JSON.parse(value);
     if (parsed && typeof parsed === 'object') {
       const personId = String(parsed.id || parsed.person_id || '').trim();
+      const pairingToken = String(parsed.pairing_token || '').trim();
       const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
       if (name) {
         const nameError = getDisplayNameValidationError(name);
-        if (nameError) return { personId, name: '', error: nameError };
+        if (nameError) return { personId, pairingToken: '', name: '', error: nameError };
       }
-      if (!personId) return { personId: '', name: '', error: 'invalid-json' };
-      if (!isValidFrontendPersonId(personId)) return { personId, name: '', error: 'invalid-person-id' };
-      if (personId) return { personId, name };
+      if (!personId) return { personId: '', pairingToken: '', name: '', error: 'invalid-json' };
+      if (!pairingToken) return { personId, pairingToken: '', name: '', error: 'pairing-required' };
+      if (!isValidFrontendPersonId(personId)) return { personId, pairingToken, name: '', error: 'invalid-person-id' };
+      if (!isValidFrontendPairingToken(pairingToken)) return { personId, pairingToken, name: '', error: 'invalid-pairing-token' };
+      if (personId) return { personId, pairingToken, name };
     }
   } catch (err) {
-    if (looksLikeJson) return { personId: '', name: '', error: 'invalid-json' };
+    if (looksLikeJson) return { personId: '', pairingToken: '', name: '', error: 'invalid-json' };
   }
 
   try {
     const parsedUrl = new URL(value);
-    const personIdFromUrl = (parsedUrl.searchParams.get('id') || parsedUrl.searchParams.get('person_id') || '').trim();
-    if (personIdFromUrl && !isValidFrontendPersonId(personIdFromUrl)) return { personId: '', name: '', error: 'invalid-person-id' };
-    if (personIdFromUrl) return { personId: personIdFromUrl, name: '' };
+      const personIdFromUrl = (parsedUrl.searchParams.get('id') || parsedUrl.searchParams.get('person_id') || '').trim();
+    const pairingTokenFromUrl = (parsedUrl.searchParams.get('pairing_token') || '').trim();
+    if (personIdFromUrl && !isValidFrontendPersonId(personIdFromUrl)) return { personId: '', pairingToken: '', name: '', error: 'invalid-person-id' };
+    if (pairingTokenFromUrl && !isValidFrontendPairingToken(pairingTokenFromUrl)) return { personId: personIdFromUrl, pairingToken: pairingTokenFromUrl, name: '', error: 'invalid-pairing-token' };
+    if (personIdFromUrl && !pairingTokenFromUrl) return { personId: personIdFromUrl, pairingToken: '', name: '', error: 'pairing-required' };
+    if (personIdFromUrl) return { personId: personIdFromUrl, pairingToken: pairingTokenFromUrl, name: '' };
   } catch (err) {}
 
-  if (!isValidFrontendPersonId(value)) return { personId: '', name: '', error: 'invalid-person-id' };
-  return { personId: value, name: '' };
+  if (!isValidFrontendPersonId(value)) return { personId: '', pairingToken: '', name: '', error: 'invalid-person-id' };
+  return { personId: value, pairingToken: '', name: '', error: 'pairing-required' };
 }
 
 function applyPersonCount(count) {
@@ -1464,6 +1506,50 @@ async function init() {
   loadPersons();
 }
 
+async function pollOutgoingPairing(pairingToken, personId, personName) {
+  try {
+    const response = await fetch(API_URL + '/pair/' + encodeURIComponent(pairingToken));
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || ('Pairing status failed: ' + response.status));
+    if (data.status === 'requested' || data.status === 'pending') return;
+    clearOutgoingPairingTimers();
+    if (data.status === 'completed') {
+      if (personName) {
+        storePersonName(personId, personName);
+      } else {
+        const rememberedName = getRememberedPersonName(personId);
+        if (rememberedName) storePersonName(personId, rememberedName);
+      }
+      unhidePersonInLocalView(personId);
+      await loadPersons();
+      alert('Verbindung bestätigt.');
+      return;
+    }
+    if (data.status === 'rejected') {
+      alert('Die Person hat die Verbindung abgelehnt.');
+      return;
+    }
+    if (data.status === 'expired') {
+      alert('Die Verbindungsanfrage ist abgelaufen.');
+      return;
+    }
+  } catch (err) {
+    console.error('Outgoing pairing poll failed', err);
+    clearOutgoingPairingTimers();
+  }
+}
+
+function startOutgoingPairingPolling(pairingToken, personId, personName) {
+  clearOutgoingPairingTimers();
+  pollOutgoingPairing(pairingToken, personId, personName);
+  outgoingPairingPollInterval = setInterval(() => {
+    pollOutgoingPairing(pairingToken, personId, personName);
+  }, 3000);
+  outgoingPairingTimeout = setTimeout(() => {
+    clearOutgoingPairingTimers();
+  }, 300000);
+}
+
 async function addPerson() {
   const canAdd = await ensureCanAddPerson();
   if (!canAdd) return;
@@ -1476,24 +1562,24 @@ async function addPerson() {
   }
   if (!parsedInput) return;
   const personId = parsedInput.personId;
+  const pairingToken = parsedInput.pairingToken;
   if (!personId) return;
-  if (parsedInput.name) {
-    storePersonName(personId, parsedInput.name);
-  } else {
-    const rememberedName = getRememberedPersonName(personId);
-    if (rememberedName) storePersonName(personId, rememberedName);
+  if (!pairingToken) {
+    showDisplayNameValidationError('pairing-required');
+    return;
   }
   
   try {
-    const watchRes = await fetch(API_URL + '/watch', {
+    const watchRes = await fetch(API_URL + '/pair/respond', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ person_id: personId, watcher_id: getWatcherId(), check_interval_minutes: 1440 })
+      body: JSON.stringify({ pairing_token: pairingToken, watcher_name: getWatcherName() })
     });
-    if (!watchRes.ok) throw new Error('Verbindung konnte nicht hinzugefügt werden (Status ' + watchRes.status + ')');
-    unhidePersonInLocalView(personId);
+    const responseData = await watchRes.json().catch(() => ({}));
+    if (!watchRes.ok) throw new Error(responseData.error || ('Verbindung konnte nicht hinzugefügt werden (Status ' + watchRes.status + ')'));
     document.getElementById('personId').value = '';
-    await loadPersons();
+    alert('Anfrage gesendet. Die Person muss die Verbindung jetzt bestätigen.');
+    startOutgoingPairingPolling(pairingToken, personId, parsedInput.name || '');
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
@@ -1695,6 +1781,7 @@ setInterval(loadPersons, 30000);
 
 // Types
 interface AppBindings {
+  [key: string]: unknown;
   DB: D1Database;
   EXPO_ACCESS_TOKEN?: string;
   TURNSTILE_SITE_KEY: string;
@@ -1704,7 +1791,11 @@ interface AppBindings {
 
 type AppEnv = {
   Bindings: AppBindings;
-  Variables: { deviceId: string; role: string };
+  Variables: {
+    [key: string]: unknown;
+    deviceId: string;
+    role: string;
+  };
 };
 
 interface RateLimitRow {
@@ -1719,8 +1810,28 @@ interface PersonDeviceRow {
   last_seen: string;
 }
 
+interface PairingRequestRow {
+  pairing_token: string;
+  person_id: string;
+  watcher_name: string | null;
+  watcher_device_id: string | null;
+  status: 'pending' | 'completed' | 'expired';
+  created_at: string;
+  completed_at: string | null;
+}
+
+interface OverduePersonRow {
+  person_id: string;
+  last_heartbeat: string | null;
+  watcher_id: string;
+  check_interval_minutes: number;
+  push_token: string | null;
+}
+
 const RATE_LIMIT_WINDOW_MS = 2 * 1000; // 2 seconds (for testing)
 const MAX_DISPLAY_NAME_LENGTH = 35;
+const PAIRING_TOKEN_TTL_MINUTES = 5;
+const PAIRING_CLEANUP_AFTER_MINUTES = 10;
 const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
 const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
 const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
@@ -2016,6 +2127,37 @@ async function ensurePersonDevicesTable(db: D1Database): Promise<void> {
   ).run();
 }
 
+async function ensurePairingRequestsTable(db: D1Database): Promise<void> {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS pairing_requests (
+      pairing_token TEXT PRIMARY KEY,
+      person_id TEXT NOT NULL,
+      watcher_name TEXT,
+      watcher_device_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'expired')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      FOREIGN KEY (person_id) REFERENCES persons(id)
+    )`
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_pairing_requests_person_status ON pairing_requests(person_id, status)'
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_pairing_requests_created ON pairing_requests(created_at)'
+  ).run();
+}
+
+async function expirePendingPairingToken(db: D1Database, pairingToken: string): Promise<void> {
+  await db.prepare(
+    `UPDATE pairing_requests
+     SET status = 'expired'
+     WHERE pairing_token = ?1
+       AND status = 'pending'
+       AND created_at < datetime('now', ?2)`
+  ).bind(pairingToken, `-${PAIRING_TOKEN_TTL_MINUTES} minutes`).run();
+}
+
 async function upsertPersonDevice(
   db: D1Database,
   personId: string,
@@ -2232,7 +2374,10 @@ app.use('/api/*', async (c, next) => {
     c.set('role', device.role);
   };
 
-  const isWatcherRoute = c.req.path.startsWith('/api/watcher') || c.req.path.startsWith('/api/watch');
+  const isWatcherRoute =
+    c.req.path.startsWith('/api/watcher') ||
+    c.req.path.startsWith('/api/watch') ||
+    c.req.path === '/api/pair/respond';
   const device = await lookupRequestDevice(
     c.env.DB,
     c.req.header('Cookie'),
@@ -2539,6 +2684,268 @@ app.get('/api/person/:id/watchers', async (c) => {
   return c.json({ watcher_count: watchers.length, watchers });
 });
 
+app.post('/api/pair/create', async (c) => {
+  const body = await c.req.json<{ person_id?: string }>().catch((): { person_id?: string } => ({}));
+  const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
+
+  if (!personId || !isValidUUID(personId)) {
+    return c.json({ error: 'Ungültige person_id' }, 400);
+  }
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  await ensurePairingRequestsTable(c.env.DB);
+  await c.env.DB.prepare(
+    `UPDATE pairing_requests
+     SET status = 'expired'
+     WHERE person_id = ?1 AND status = 'pending'`
+  ).bind(personId).run();
+
+  const pairingToken = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO pairing_requests (pairing_token, person_id, status)
+     VALUES (?1, ?2, 'pending')`
+  ).bind(pairingToken, personId).run();
+
+  return c.json({
+    pairing_token: pairingToken,
+    expires_in_seconds: PAIRING_TOKEN_TTL_MINUTES * 60,
+  }, 201);
+});
+
+app.get('/api/pair/:token', async (c) => {
+  const pairingToken = c.req.param('token').trim();
+  if (!pairingToken || !isValidUUID(pairingToken)) {
+    return c.json({ error: 'Ungültiger pairing_token' }, 400);
+  }
+
+  await ensurePairingRequestsTable(c.env.DB);
+  await expirePendingPairingToken(c.env.DB, pairingToken);
+
+  const pairing = await c.env.DB.prepare(
+    `SELECT pairing_token, person_id, watcher_name, watcher_device_id, status, created_at, completed_at
+     FROM pairing_requests
+     WHERE pairing_token = ?1`
+  ).bind(pairingToken).first<PairingRequestRow>();
+
+  if (!pairing) {
+    return c.json({ error: 'Pairing nicht gefunden' }, 404);
+  }
+  const requesterDeviceId = c.get('deviceId');
+  const isPersonOwner = await deviceOwnsPerson(c.env.DB, requesterDeviceId, pairing.person_id);
+  const isRequestingWatcher = pairing.watcher_device_id === requesterDeviceId;
+  if (!isPersonOwner && !isRequestingWatcher) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  let status: 'pending' | 'requested' | 'completed' | 'expired' | 'rejected' = pairing.status;
+  if (pairing.status === 'pending' && pairing.watcher_device_id) {
+    status = 'requested';
+  } else if (pairing.status === 'expired' && pairing.watcher_device_id && pairing.completed_at) {
+    status = 'rejected';
+  }
+  return c.json({
+    status,
+    watcher_name: pairing.watcher_name,
+  });
+});
+
+app.post('/api/pair/respond', async (c) => {
+  const body = await c.req
+    .json<{ pairing_token?: string; watcher_name?: string }>()
+    .catch((): { pairing_token?: string; watcher_name?: string } => ({}));
+  const pairingToken = typeof body.pairing_token === 'string' ? body.pairing_token.trim() : '';
+  const watcherName = typeof body.watcher_name === 'string' ? body.watcher_name : '';
+
+  if (!pairingToken || !isValidUUID(pairingToken)) {
+    return c.json({ error: 'Ungültiger pairing_token' }, 400);
+  }
+  const nameError = getDisplayNameValidationError(watcherName);
+  if (nameError === 'name-too-short') {
+    return c.json({ error: 'watcher_name too short' }, 400);
+  }
+  if (nameError === 'name-too-long') {
+    return c.json({ error: 'watcher_name too long' }, 400);
+  }
+  if (nameError === 'name-invalid-start') {
+    return c.json({ error: 'watcher_name must start with 2 letters' }, 400);
+  }
+  const safeName = normalizeDisplayName(watcherName);
+
+  await ensurePairingRequestsTable(c.env.DB);
+  await expirePendingPairingToken(c.env.DB, pairingToken);
+
+  const pairing = await c.env.DB.prepare(
+    `SELECT pairing_token, person_id, watcher_name, watcher_device_id, status, created_at, completed_at
+     FROM pairing_requests
+     WHERE pairing_token = ?1`
+  ).bind(pairingToken).first<PairingRequestRow>();
+
+  if (!pairing) {
+    return c.json({ error: 'Pairing nicht gefunden' }, 404);
+  }
+  if (pairing.status === 'expired') {
+    return c.json({ error: 'Pairing abgelaufen' }, 410);
+  }
+  if (pairing.status === 'completed') {
+    return c.json({ error: 'Pairing bereits abgeschlossen' }, 409);
+  }
+
+  const deviceId = c.get('deviceId');
+  const watcher = await c.env.DB.prepare(
+    'SELECT watcher_id FROM watcher_devices WHERE device_id = ?1'
+  ).bind(deviceId).first<{ watcher_id: string }>();
+  if (!watcher?.watcher_id) {
+    return c.json({ error: 'Watcher nicht registriert' }, 404);
+  }
+
+  if (pairing.watcher_device_id) {
+    if (pairing.watcher_device_id === deviceId) {
+      return c.json({
+        success: true,
+        status: 'requested',
+        person_id: pairing.person_id,
+        watcher_id: watcher.watcher_id,
+        watcher_name: pairing.watcher_name ?? safeName,
+      });
+    }
+    return c.json({ error: 'Pairing bereits angefragt' }, 409);
+  }
+
+  const claimResult = await c.env.DB.prepare(
+    `UPDATE pairing_requests
+     SET watcher_name = ?2,
+         watcher_device_id = ?3,
+         completed_at = NULL
+     WHERE pairing_token = ?1
+       AND status = 'pending'
+       AND watcher_device_id IS NULL`
+  ).bind(pairingToken, safeName, deviceId).run();
+
+  if ((claimResult.meta?.changes ?? 0) === 0) {
+    const currentState = await c.env.DB.prepare(
+      'SELECT status, watcher_device_id FROM pairing_requests WHERE pairing_token = ?1'
+    ).bind(pairingToken).first<{ status: PairingRequestRow['status']; watcher_device_id: string | null }>();
+    if (currentState?.status === 'expired') {
+      return c.json({ error: 'Pairing abgelaufen' }, 410);
+    }
+    if (currentState?.watcher_device_id) {
+      return c.json({ error: 'Pairing bereits angefragt' }, 409);
+    }
+    return c.json({ error: 'Pairing bereits abgeschlossen' }, 409);
+  }
+
+  return c.json({
+    success: true,
+    status: 'requested',
+    person_id: pairing.person_id,
+    watcher_id: watcher.watcher_id,
+    watcher_name: safeName,
+  });
+});
+
+app.post('/api/pair/confirm', async (c) => {
+  const body = await c.req
+    .json<{ pairing_token?: string; action?: string }>()
+    .catch((): { pairing_token?: string; action?: string } => ({}));
+  const pairingToken = typeof body.pairing_token === 'string' ? body.pairing_token.trim() : '';
+  const action = body.action === 'approve' || body.action === 'reject' ? body.action : '';
+
+  if (!pairingToken || !isValidUUID(pairingToken)) {
+    return c.json({ error: 'Ungültiger pairing_token' }, 400);
+  }
+  if (!action) {
+    return c.json({ error: 'Ungültige Aktion' }, 400);
+  }
+
+  await ensurePairingRequestsTable(c.env.DB);
+  await expirePendingPairingToken(c.env.DB, pairingToken);
+
+  const pairing = await c.env.DB.prepare(
+    `SELECT pairing_token, person_id, watcher_name, watcher_device_id, status, created_at, completed_at
+     FROM pairing_requests
+     WHERE pairing_token = ?1`
+  ).bind(pairingToken).first<PairingRequestRow>();
+
+  if (!pairing) {
+    return c.json({ error: 'Pairing nicht gefunden' }, 404);
+  }
+  if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), pairing.person_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  if (pairing.status === 'expired') {
+    return c.json({ error: 'Pairing abgelaufen' }, 410);
+  }
+  if (pairing.status === 'completed') {
+    return c.json({ error: 'Pairing bereits abgeschlossen' }, 409);
+  }
+  if (!pairing.watcher_device_id || !pairing.watcher_name) {
+    return c.json({ error: 'Keine ausstehende Verbindungsanfrage' }, 409);
+  }
+
+  if (action === 'reject') {
+    await c.env.DB.prepare(
+      `UPDATE pairing_requests
+       SET status = 'expired',
+           completed_at = datetime('now')
+       WHERE pairing_token = ?1`
+    ).bind(pairingToken).run();
+    return c.json({ success: true, status: 'rejected' });
+  }
+
+  const watcher = await c.env.DB.prepare(
+    'SELECT watcher_id FROM watcher_devices WHERE device_id = ?1'
+  ).bind(pairing.watcher_device_id).first<{ watcher_id: string }>();
+  if (!watcher?.watcher_id) {
+    return c.json({ error: 'Watcher nicht registriert' }, 404);
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE pairing_requests
+     SET status = 'completed',
+         completed_at = datetime('now')
+     WHERE pairing_token = ?1 AND status = 'pending'`
+  ).bind(pairingToken).run();
+
+  const existingRelation = await c.env.DB.prepare(
+    `SELECT id, removed_at
+     FROM watch_relations
+     WHERE person_id = ?1 AND watcher_id = ?2
+     ORDER BY id DESC
+     LIMIT 1`
+  ).bind(pairing.person_id, watcher.watcher_id).first<{ id: number; removed_at: string | null }>();
+
+  if (!existingRelation) {
+    await c.env.DB.prepare(
+      `INSERT INTO watch_relations (person_id, watcher_id, check_interval_minutes)
+       VALUES (?1, ?2, ?3)`
+    ).bind(pairing.person_id, watcher.watcher_id, 1440).run();
+  } else if (existingRelation.removed_at) {
+    await c.env.DB.prepare(
+      `UPDATE watch_relations
+       SET removed_at = NULL,
+           added_at = datetime('now'),
+           last_notified_at = NULL,
+           check_interval_minutes = ?2
+       WHERE id = ?1`
+    ).bind(existingRelation.id, 1440).run();
+  }
+
+  await c.env.DB.prepare(
+    `INSERT OR REPLACE INTO watcher_name_announcements (watcher_id, name, created_at)
+     VALUES (?1, ?2, datetime('now'))`
+  ).bind(watcher.watcher_id, pairing.watcher_name).run();
+
+  return c.json({
+    success: true,
+    status: 'completed',
+    person_id: pairing.person_id,
+    watcher_id: watcher.watcher_id,
+    watcher_name: pairing.watcher_name,
+  });
+});
+
 // API: Watcher kündigt seinen Namen an (einmal-lesbar für Person)
 app.post('/api/watcher/:id/announce', async (c) => {
   const watcherId = c.req.param('id');
@@ -2671,27 +3078,7 @@ app.post('/api/watcher', async (c) => {
 
 // API: Person überwachen (Intervall in Minuten)
 app.post('/api/watch', async (c) => {
-  try {
-    const { person_id, watcher_id, check_interval_minutes = 1440 } = await c.req.json();
-    if (!person_id || !watcher_id) return c.json({ error: 'person_id and watcher_id required' }, 400);
-    const deviceId = c.get('deviceId');
-    const owns = await c.env.DB.prepare(
-      'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?'
-    ).bind(watcher_id, deviceId).first();
-    if (!owns) return c.json({ error: 'Forbidden' }, 403);
-    const existing = await c.env.DB.prepare(
-      'SELECT id FROM watch_relations WHERE person_id = ? AND watcher_id = ? AND removed_at IS NULL'
-    ).bind(person_id, watcher_id).first();
-    if (!existing) {
-      await c.env.DB.prepare(
-        `INSERT INTO watch_relations (person_id, watcher_id, check_interval_minutes) VALUES (?, ?, ?)`
-      ).bind(person_id, watcher_id, check_interval_minutes).run();
-    }
-    return c.json({ success: true, person_id, watcher_id, check_interval_minutes });
-  } catch (e) {
-    console.error('Error in watch:', e);
-    return c.json({ error: 'Failed to create watch relation', details: String(e) }, 500);
-  }
+  return c.json({ error: 'Direktes Verbinden ist deaktiviert. Bitte den Pairing-QR-Code verwenden.' }, 410);
 });
 
 // API: Intervall für überwachte Person aktualisieren (in Minuten)
@@ -2777,7 +3164,7 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
      WHERE wr.removed_at IS NULL
      AND (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
      AND (wr.last_notified_at IS NULL OR wr.last_notified_at < datetime('now', '-1 hour'))`
-  ).all();
+  ).all<OverduePersonRow>();
 
   for (const item of overdue.results || []) {
     if (expoToken && item.push_token) {
@@ -2799,12 +3186,24 @@ async function checkOverduePersons(db: D1Database, expoToken?: string) {
   return { checked: overdue.results?.length || 0 };
 }
 
+async function cleanupPairingRequests(db: D1Database): Promise<{ deleted: number }> {
+  await ensurePairingRequestsTable(db);
+  const result = await db.prepare(
+    `DELETE FROM pairing_requests
+     WHERE created_at < datetime('now', ?1)`
+  ).bind(`-${PAIRING_CLEANUP_AFTER_MINUTES} minutes`).run();
+  return { deleted: result.meta?.changes ?? 0 };
+}
+
 // Worker Handler
 export default {
   async fetch(request: Request, env: AppBindings, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: ScheduledEvent, env: AppBindings, ctx: ExecutionContext) {
-    ctx.waitUntil(checkOverduePersons(env.DB, env.EXPO_ACCESS_TOKEN));
+    ctx.waitUntil(Promise.all([
+      checkOverduePersons(env.DB, env.EXPO_ACCESS_TOKEN),
+      cleanupPairingRequests(env.DB),
+    ]));
   },
 };

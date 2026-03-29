@@ -80,7 +80,7 @@ npm run dev
 npm run test:smoke
 ```
 
-Testet den lokalen Worker-Flow fuer Startseiten, Auth, Person, Watcher, Watch-Relation und Heartbeat-Rate-Limit.
+Testet den lokalen Worker-Flow fuer Startseiten, Auth, Person, Watcher, Pairing, deaktivierten Legacy-`POST /api/watch`-Pfad und Heartbeat-Rate-Limit.
 
 ### 6. Deploy
 
@@ -109,6 +109,10 @@ Wichtige aktuell vorhandene Endpoints:
 - `GET /api/person/:id/devices`
 - `POST /api/person/:id/devices`
 - `DELETE /api/person/:id/devices`
+- `POST /api/pair/create`
+- `POST /api/pair/respond`
+- `POST /api/pair/confirm`
+- `GET /api/pair/:token`
 - `POST /api/watcher`
 - `POST /api/watch`
 - `PUT /api/watch`
@@ -125,5 +129,5 @@ Wichtige aktuell vorhandene Endpoints:
 
 ## Hinweise
 
-- `db:migrate` fuehrt aktuell nur die vorhandene Incremental-Migration `001_watch_relations_soft_delete.sql` aus
-- Die geplante Pairing-Migration ist noch nicht umgesetzt
+- `db:migrate` und `db:migrate:local` fuehren die vorhandenen Incremental-Migrationen `001` bis `005` in Reihenfolge aus
+- Neue Verbindungen laufen ueber den Pairing-Flow mit expliziter Personen-Bestätigung; `POST /api/watch` ist nur noch fuer bestehende Bearbeitungs-/Loeschpfade relevant und nimmt keine neuen Verbindungen mehr an
