@@ -172,6 +172,9 @@ Referenzen:
 - **Fortschritt:** Wartet auf native App.
 - **Erledigt am:** -
 
+### CI/CD für Store-Deployments (Notiz)
+Wenn es soweit ist: **Codemagic** für iOS/Android-Builds (hat nativen Capacitor-Support, eigene macOS-Runner, günstiger als GitHub Actions macOS). Triggert via Branch-Push aus GitHub. Für reine JS-Änderungen **Capawesome Live Update** evaluieren — spart Store-Wartezeiten da kein Review nötig. Native Shell-Änderungen weiter über Store.
+
 ---
 
 ## Beta mit echten Usern

@@ -161,6 +161,19 @@ h1 {
 .no-watcher-warning.visible { display: block; }
 .no-watcher-warning-text { margin-bottom: 0; }
 
+.send-error-card {
+  display: none;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--system-secondary-background);
+  border: 1px solid var(--system-red);
+  border-radius: 12px;
+  color: var(--system-red);
+  font-size: 15px;
+  text-align: center;
+}
+.send-error-card.visible { display: block; }
+
 /* Menu Button */
 .menu-btn {
   position: absolute;
