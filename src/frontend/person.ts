@@ -519,10 +519,47 @@ h1 {
 .auth-modal h2 { font-size: 22px; font-weight: 700; color: var(--system-label); margin-bottom: 8px; }
 .auth-modal p { color: var(--system-secondary-label); font-size: 15px; margin-bottom: 24px; }
 
-/* QR Scanner */
-.qr-scanner-container { margin-top: 10px; display: none; text-align: center; }
-.qr-video { width: 100%; border-radius: 12px; background: #000; margin-bottom: 10px; }
-.qr-scan-cancel { padding: 8px 16px; background: var(--system-fill); color: var(--system-red); border: none; border-radius: 8px; font-weight: 600; }
+/* QR Scanner Modal */
+.device-scan-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+}
+.device-scan-overlay.open { display: flex; }
+.device-scan-modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--system-secondary-background);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.32);
+}
+.device-scan-modal h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--system-label);
+  margin: 0 0 14px;
+  text-align: center;
+}
+.qr-video { width: 100%; border-radius: 12px; background: #000; display: block; max-height: 66vh; object-fit: cover; }
+.device-scan-cancel {
+  margin-top: 14px;
+  width: 100%;
+  padding: 12px;
+  background: var(--system-fill);
+  color: var(--system-red);
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 </style>
 </head>
@@ -654,9 +691,17 @@ h1 {
   <div class="settings-section" id="deviceActionSection">
     <h3 id="deviceActionTitle">Auf anderes Gerät wechseln</h3>
     <button type="button" class="qr-scan-btn" id="deviceActionButton" onclick="startDeviceQrScan()">QR-Code scannen</button>
-    <div id="deviceQrScanner" class="qr-scanner-container"></div>
     <small class="settings-help" id="deviceActionHelp">Scanne den QR-Code eines neuen Geräts. Der ursprünglich vergebene Name bleibt unverändert.</small>
   </div>
+</div>
+</div>
+
+<div id="deviceScanModalOverlay" class="device-scan-overlay" onclick="handleDeviceScanOverlayClick(event)">
+<div class="device-scan-modal" role="dialog" aria-modal="true" aria-labelledby="deviceScanModalTitle">
+  <h2 id="deviceScanModalTitle">Geräte-QR scannen</h2>
+  <video id="deviceQrVideo" class="qr-video" autoplay playsinline muted></video>
+  <canvas id="deviceQrCanvas" style="display:none;"></canvas>
+  <button type="button" class="device-scan-cancel" onclick="stopDeviceQrScanner()">Abbrechen</button>
 </div>
 </div>
 
@@ -860,7 +905,7 @@ async function registerCurrentDevice(personId,mode){const deviceId=currentDevice
 
 async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed=confirm('Gerät wirklich entfernen?');if(!confirmed)return;try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(res.ok){await loadDevices();return}const data=await res.json().catch(()=>({}));if(res.status===409){alert(data.error||'Das letzte Gerät kann nicht gelöscht werden.');return}throw new Error(data.error||'Löschen fehlgeschlagen')}catch(e){console.error('Delete device failed',e);alert('Gerät konnte nicht gelöscht werden. Bitte erneut versuchen.')}}
 
-function updateDeviceActionSection(meta){const section=document.getElementById('deviceActionSection');const title=document.getElementById('deviceActionTitle');const button=document.getElementById('deviceActionButton');const help=document.getElementById('deviceActionHelp');if(!section||!title||!button||!help)return;currentPersonMaxDevices=Number(meta&&meta.max_devices)||1;currentPersonDeviceCount=Number(meta&&meta.device_count)||0;const action=meta&&typeof meta.device_action==='string'?meta.device_action:'';currentPersonDeviceAction=action==='add'||action==='full'?action:'switch';button.style.display='inline-flex';button.disabled=false;if(hasActiveWatcherConnection){stopDeviceQrScanner();if(currentPersonDeviceAction==='switch'){title.textContent='Auf anderes Gerät wechseln';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('switch');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Erst nach deiner Bestätigung auf diesem Gerät wird gewechselt und dieses Gerät zurückgesetzt. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}if(currentPersonDeviceAction==='add'){title.textContent='Neues Gerät hinzufügen';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('add');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}title.textContent='Weitere Geräte';help.textContent='Gerätelimit erreicht. Solange alle Plätze belegt sind, kann kein weiteres Gerät hinzugefügt werden.';button.style.display='none';section.style.display='block';return}title.textContent='Bestehende Person übernehmen';button.textContent='QR-Code scannen';button.onclick=()=>startDeviceQrScan();help.textContent='Wenn dieses neue Gerät eine bestehende Person ersetzen oder ergänzen soll, scanne hier den Geräte-QR vom bisherigen Person-Gerät. Beim Wechsel muss das alte Gerät danach noch bestätigen. Das geht nur, solange dieses Gerät noch keinen Watcher hat.';section.style.display='block'}
+function updateDeviceActionSection(meta){const section=document.getElementById('deviceActionSection');const title=document.getElementById('deviceActionTitle');const button=document.getElementById('deviceActionButton');const help=document.getElementById('deviceActionHelp');if(!section||!title||!button||!help)return;currentPersonMaxDevices=Number(meta&&meta.max_devices)||1;currentPersonDeviceCount=Number(meta&&meta.device_count)||0;const action=meta&&typeof meta.device_action==='string'?meta.device_action:'';currentPersonDeviceAction=action==='add'||action==='full'?action:'switch';button.style.display='inline-flex';button.disabled=false;if(hasActiveWatcherConnection){stopDeviceQrScanner();if(currentPersonDeviceAction==='switch'){title.textContent='Auf anderes Gerät wechseln';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('switch');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Erst nach deiner Bestätigung auf diesem Gerät wird gewechselt und dieses Gerät zurückgesetzt. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}if(currentPersonDeviceAction==='add'){title.textContent='Neues Gerät hinzufügen';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('add');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}title.textContent='Weitere Geräte';help.textContent='Gerätelimit erreicht. Solange alle Plätze belegt sind, kann kein weiteres Gerät hinzugefügt werden.';button.style.display='none';section.style.display='block';return}title.textContent='Mit bestehendem Konto verbinden';button.textContent='QR scannen';button.onclick=()=>startDeviceQrScan();help.textContent='Scanne den QR-Code eines bestehenden Gerätes um das andere Gerät durch dieses zu ersetzen.';section.style.display='block'}
 
 function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}const activeDeviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=activeDeviceId;const hideDeleteForSingleDevice=devices.length<=1;listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===activeDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));const showDeleteButton=!hideDeleteForSingleDevice&&!isCurrent;return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div>'+(showDeleteButton?'<button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'">Löschen</button>':'')+'</div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
 
@@ -890,11 +935,14 @@ function stopDeviceQrScanner() {
     deviceCameraStream.getTracks().forEach((track) => track.stop());
     deviceCameraStream = null;
   }
-  const container = document.getElementById('deviceQrScanner');
-  if (container) {
-    container.style.display = 'none';
-    container.innerHTML = '';
-  }
+  const overlay = document.getElementById('deviceScanModalOverlay');
+  if (overlay) overlay.classList.remove('open');
+  const video = document.getElementById('deviceQrVideo');
+  if (video) { video.srcObject = null; }
+}
+
+function handleDeviceScanOverlayClick(event) {
+  if (event.target === event.currentTarget) stopDeviceQrScanner();
 }
 
 function decodeQrFromVideoFrame(video, canvas, variants) {
@@ -968,27 +1016,25 @@ async function scanDeviceQrFrame() {
 }
 
 async function startDeviceQrScan() {
-  const container = document.getElementById('deviceQrScanner');
-  if (!container) return;
-  
   if (deviceCameraStream) {
     stopDeviceQrScanner();
     return;
   }
-  
+
   if (typeof window.jsQR !== 'function') {
     alert('QR-Scanner nicht verfügbar. Bitte Seite neu laden.');
     return;
   }
-  
-  container.innerHTML = '<video id="deviceQrVideo" class="qr-video" autoplay playsinline muted></video><canvas id="deviceQrCanvas" class="qr-canvas" style="display:none;"></canvas><button type="button" class="qr-scan-cancel" onclick="stopDeviceQrScanner()">Abbrechen</button>';
-  container.style.display = 'block';
-  
+
+  const overlay = document.getElementById('deviceScanModalOverlay');
+  if (overlay) overlay.classList.add('open');
+
   try {
     deviceCameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' }
     });
     const video = document.getElementById('deviceQrVideo');
+    if (!video) { stopDeviceQrScanner(); return; }
     video.srcObject = deviceCameraStream;
     video.onloadedmetadata = () => {
       video.play();
