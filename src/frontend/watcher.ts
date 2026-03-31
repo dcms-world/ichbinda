@@ -90,17 +90,18 @@ body {
 .fab svg { width: 24px; height: 24px; }
 
 /* Cards & List */
-.person-list { list-style: none; display: flex; flex-direction: column; gap: 16px; }
 .person-card {
   background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
 }
-.person-card:active { transform: scale(0.99); }
+.person-card:hover { box-shadow: var(--shadow-lg); }
+.person-card:active { transform: scale(0.98); }
 .person-card-header { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
 .avatar-container { position: relative; flex-shrink: 0; }
 .person-avatar { width: 64px; height: 64px; border-radius: 32px; object-fit: cover; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: var(--text-muted); }
@@ -124,7 +125,7 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
 }
 
-.person-info { flex: 1; min-width: 0; }
+.person-info { flex: 1; min-width: 0; padding-right: 40px; }
 .person-name { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .person-id-label { font-size: 12px; font-family: monospace; color: var(--text-muted); }
 
@@ -134,8 +135,8 @@ body {
 
 .card-actions {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 14px;
+  right: 14px;
 }
 .icon-btn {
   background: none;
@@ -148,6 +149,30 @@ body {
 }
 .icon-btn:hover { background: rgba(0,0,0,0.05); }
 .icon-btn svg { width: 20px; height: 20px; }
+
+/* Avatar Edit Overlay */
+.avatar-edit-wrapper {
+  position: relative;
+  cursor: pointer;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+}
+.avatar-edit-wrapper:hover .avatar-edit-overlay { opacity: 1; }
+.avatar-edit-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.avatar-edit-overlay svg { width: 32px; height: 32px; }
+.person-avatar-large { width: 120px; height: 120px; border-radius: 60px; font-size: 48px; }
 
 /* Add Person Section (Modal-like) */
 .add-person-overlay {
@@ -203,11 +228,14 @@ input[type="text"]:focus, select:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  white-space: nowrap;
 }
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:active { background: var(--primary-hover); transform: scale(0.98); }
 .btn-secondary { background: #f1f5f9; color: var(--text-main); }
 .btn-secondary:active { background: #e2e8f0; transform: scale(0.98); }
+.btn-danger { background: #fee2e2; color: #ef4444; }
+.btn-danger:active { background: #fecaca; transform: scale(0.98); }
 
 /* Modals */
 .modal-overlay {
@@ -271,6 +299,8 @@ input[type="text"]:focus, select:focus {
 @media (max-width: 480px) {
   .container { padding: 16px; }
   .modal-content { padding: 24px; }
+  .button-row { flex-direction: column; }
+  .btn { width: 100%; }
 }
 </style>
 </head>
@@ -322,9 +352,9 @@ input[type="text"]:focus, select:focus {
       </button>
     </div>
 
-    <div class="button-row">
-      <button class="btn btn-secondary" onclick="toggleAddPerson(false)">Abbrechen</button>
+    <div class="button-row" style="flex-direction:row-reverse">
       <button class="btn btn-primary" id="addPersonBtn" onclick="addPerson()">Verbinden</button>
+      <button class="btn btn-secondary" onclick="toggleAddPerson(false)">Abbrechen</button>
     </div>
   </div>
 </div>
@@ -368,9 +398,22 @@ input[type="text"]:focus, select:focus {
     <div class="modal-icon">⚠️</div>
     <h3 id="confirmModalTitle" class="modal-title">Bestätigung</h3>
     <p id="confirmModalMessage" class="modal-message"></p>
-    <div class="button-row">
-      <button type="button" class="btn btn-secondary" onclick="closeConfirmModal(false)">Abbrechen</button>
+    <div class="button-row" style="flex-direction:row-reverse">
       <button type="button" class="btn btn-primary" style="background:var(--status-overdue)" onclick="closeConfirmModal(true)">Entfernen</button>
+      <button type="button" class="btn btn-secondary" onclick="closeConfirmModal(false)">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Person Detail Overlay -->
+<div class="modal-overlay" id="personDetailOverlay" onclick="handleOverlayClick(event, 'personDetailOverlay')">
+  <div class="modal-content" style="text-align:center">
+    <div id="detailPhotoPreview" style="margin:0 auto 16px"></div>
+    <div id="detailPersonName" style="font-weight:800; font-size:22px; margin-bottom:4px"></div>
+    <div id="detailPersonId" class="person-id-label" style="margin-bottom:24px"></div>
+    <div class="button-row" style="gap:12px">
+      <button type="button" class="btn btn-secondary" onclick="closeDetailModal()">Schließen</button>
+      <button type="button" class="btn btn-primary" onclick="openEditFromDetail()">Bearbeiten</button>
     </div>
   </div>
 </div>
@@ -378,19 +421,20 @@ input[type="text"]:focus, select:focus {
 <!-- Edit Person Overlay -->
 <div class="add-person-overlay" id="personEditOverlay" onclick="handleOverlayClick(event, 'personEditOverlay')">
   <div class="add-card" style="max-width:500px">
-    <h3 class="modal-title" style="text-align:left">Person bearbeiten</h3>
+    <h3 class="modal-title" style="text-align:left; margin-bottom:24px">Person bearbeiten</h3>
     
-    <div style="display:flex; gap:20px; align-items:center; margin-bottom:24px; padding:16px; background:#f1f5f9; border-radius:var(--radius-md);">
-      <div id="editPhotoPreview"></div>
-      <div style="flex:1">
-        <div id="editPersonName" style="font-weight:800; font-size:18px;"></div>
+    <div style="text-align:center; margin-bottom:24px">
+      <div class="avatar-edit-wrapper" onclick="document.getElementById('editPhotoInput').click()">
+        <div id="editPhotoPreview"></div>
+        <div class="avatar-edit-overlay">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        </div>
+      </div>
+      <input type="file" id="editPhotoInput" accept="image/*" onchange="handleEditPhotoChange(event)" style="display:none">
+      <div style="margin-top:12px">
+        <div id="editPersonName" style="font-weight:800; font-size:20px;"></div>
         <div id="editPersonId" class="person-id-label"></div>
       </div>
-    </div>
-
-    <div class="input-group">
-      <label class="edit-label" style="display:block;margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text-muted)">Foto ändern</label>
-      <input type="file" id="editPhotoInput" accept="image/*" onchange="handleEditPhotoChange(event)" style="font-size:14px">
     </div>
 
     <div class="input-group">
@@ -406,12 +450,13 @@ input[type="text"]:focus, select:focus {
       </select>
     </div>
 
-    <div id="editPersonLocation" style="margin-bottom:24px; font-size:14px;"></div>
 
-    <div class="button-row">
-      <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Schließen</button>
-      <button type="button" class="btn btn-primary" style="background:var(--status-overdue)" onclick="removePersonFromModal()">Entfernen</button>
-      <button type="button" id="editSaveBtn" class="btn btn-primary" onclick="saveEditedPerson()">Speichern</button>
+    <div class="button-row" style="flex-direction:column-reverse; gap:16px">
+      <button type="button" class="btn btn-danger" onclick="removePersonFromModal()">Person entfernen</button>
+      <div class="button-row" style="gap:12px">
+        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Abbrechen</button>
+        <button type="button" id="editSaveBtn" class="btn btn-primary" onclick="saveEditedPerson()">Speichern</button>
+      </div>
     </div>
   </div>
 </div>
@@ -490,7 +535,7 @@ async function ensureRegistered(){
   return new Promise(resolve => { resolveRegistered = resolve; });
 }
 
-function handleOverlayClick(e, id) { if (e.target === e.currentTarget) { if(id==='addPersonOverlay') toggleAddPerson(false); else if(id==='statusModalOverlay') closeStatusModal(); else if(id==='confirmModalOverlay') closeConfirmModal(false); else if(id==='personEditOverlay') closeEditModal(); } }
+function handleOverlayClick(e, id) { if (e.target === e.currentTarget) { if(id==='addPersonOverlay') toggleAddPerson(false); else if(id==='statusModalOverlay') closeStatusModal(); else if(id==='confirmModalOverlay') closeConfirmModal(false); else if(id==='personDetailOverlay') closeDetailModal(); else if(id==='personEditOverlay') closeEditModal(); } }
 
 function toggleAddPerson(show) {
   const overlay = document.getElementById('addPersonOverlay');
@@ -654,7 +699,7 @@ function escapeHtml(v) { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;'
 
 function buildMapsLink(lat, lng) {
   const url = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  return '<a href="' + url + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">' + ICONS.map + ' Standort</a>';
+  return '<a href="' + url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">' + ICONS.map + ' Standort</a>';
 }
 
 function parsePersonInput(rawValue) {
@@ -758,7 +803,7 @@ async function init() {
 
 async function pollOutgoingPairing(pairingToken, personId, personName) {
   try {
-    const res = await fetch(API_URL + '/pair/' + pairingToken);
+    const res = await fetch(API_URL + '/pair/' + pairingToken, { credentials: 'include' });
     const data = await res.json();
     if (data.status === 'completed') {
       clearOutgoingPairingTimers();
@@ -801,7 +846,7 @@ function buildPersonRow(p) {
   const lat = p.last_location_lat; const lng = p.last_location_lng;
   const locationHtml = (lat && lng) ? '<div class="meta-item">' + buildMapsLink(lat, lng) + '</div>' : '';
 
-  return '<li class="person-card status-' + p.status + '">' +
+  return '<li class="person-card status-' + p.status + '" onclick="openDetailModal(\\\'' + p.id + '\\\')">' +
     '<div class="person-card-header">' +
       '<div class="avatar-container">' +
         buildPersonAvatarMarkup(p.id) +
@@ -818,7 +863,7 @@ function buildPersonRow(p) {
       locationHtml +
     '</div>' +
     '<div class="card-actions">' +
-      '<button class="icon-btn" onclick="openEditModal(\\\'' + p.id + '\\\')">' + ICONS.edit + '</button>' +
+      '<button type="button" class="icon-btn" onclick="event.stopPropagation();openEditModal(\\\'' + p.id + '\\\')">' + ICONS.edit + '</button>' +
     '</div>' +
   '</li>';
 }
@@ -852,13 +897,22 @@ function openEditModal(id) {
   const preview = document.getElementById('editPhotoPreview');
   preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-large');
   
-  const loc = (p.last_location_lat && p.last_location_lng) ? buildMapsLink(p.last_location_lat, p.last_location_lng) : 'Kein Standort bekannt';
-  document.getElementById('editPersonLocation').innerHTML = loc;
-  
   document.getElementById('personEditOverlay').classList.add('open');
 }
 
 function closeEditModal() { document.getElementById('personEditOverlay').classList.remove('open'); activeEditPersonId = ''; }
+
+function openDetailModal(id) {
+  const p = visiblePersonsById[id]; if(!p) return;
+  activeEditPersonId = id;
+  document.getElementById('detailPersonId').textContent = 'ID: ' + id.slice(0,8) + '...';
+  document.getElementById('detailPersonName').textContent = getPersonName(id) || 'Unbekannt';
+  const preview = document.getElementById('detailPhotoPreview');
+  preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-large');
+  document.getElementById('personDetailOverlay').classList.add('open');
+}
+function closeDetailModal() { document.getElementById('personDetailOverlay').classList.remove('open'); activeEditPersonId = ''; }
+function openEditFromDetail() { const id = activeEditPersonId; closeDetailModal(); openEditModal(id); }
 
 async function saveEditedPerson() {
   const id = activeEditPersonId; if(!id) return;
