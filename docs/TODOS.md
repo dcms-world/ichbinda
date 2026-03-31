@@ -145,6 +145,40 @@ Referenzen:
 
 # Nächste Produktphasen
 
+## Gamification: Check-in-Motivation für Persons
+- **Status:** offen
+- **Priorität:** niedrig
+- **Beschreibung:** Die Person bekommt selbst keinen direkten Nutzen aus dem Check-in — sie tut es rein für ihre Watcher. Gamification schließt diese Motivationslücke durch kleine persönliche Belohnungen und soziale Anerkennung.
+
+### Streak-System
+- [ ] Streak-Zähler serverseitig tracken (aufeinanderfolgende Tage mit Heartbeat)
+- [ ] Nach dem Check-in Streak anzeigen: „Alles gut! Tag 37 in Folge."
+- [ ] Milestone-Animationen bei runden Zahlen (7, 30, 100, 365 Tage)
+- [ ] Streak für Watcher sichtbar machen: „Oma checkt seit 37 Tagen täglich ein" — erzeugt soziale Motivation auf Seiten der Person
+- [ ] Push-Notification an Watcher bei großen Milestones (optional, opt-in)
+
+### Belohnungsmoment nach dem Check-in (Variable Reward)
+- [ ] Nach erfolgreichem Check-in optionale Belohnung anbieten: „Danke fürs Bescheid geben — möchtest den Witz des Tages?"
+- [ ] Ja/Nein-Auswahl — kein Zwang, kein Autoplay
+- [ ] Inhalts-Pool rotierend, z. B.:
+  - Tageswitz (extern via API oder lokale Sammlung)
+  - Mini-Sudoku
+  - Kurzes Rätsel / Trivia-Frage
+  - Motivierender Spruch
+- [ ] Inhaltstyp variiert täglich → hält den Moment frisch (Variable-Reward-Effekt)
+- [ ] Technisch: n8n (oder ähnlicher Workflow-Automatisierer) sammelt täglich Inhalte aus externen Quellen und schreibt sie in eine D1-Tabelle (`daily_rewards` o.ä.); Worker liefert den Tagesinhalt direkt aus D1 — keine Abhängigkeit von externen APIs zur Laufzeit, kein Ausfall-Risiko beim Check-in
+
+### Designprinzipien
+- Belohnung ist immer optional — nie aufdringlich
+- Kein Streak-Druck: kein „Streak verloren!"-Guilt-Screen, kein Push-Reminder nur wegen Streak
+- Ton: warm und persönlich, nicht spielerisch-kindisch
+- Watcher-sichtbarer Streak als stärkste Mechanic — soziale Motivation schlägt Punkte
+
+- **Fortschritt:** Nicht gestartet. Sinnvoll nach nativer App angehen, wenn echte Nutzer da sind und der Check-in-Flow stabil läuft.
+- **Erledigt am:** -
+
+---
+
 ## Native App (Capacitor)
 - **Status:** offen
 - **Priorität:** mittel
