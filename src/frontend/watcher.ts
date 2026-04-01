@@ -749,20 +749,49 @@ function stopQrScanner() {
 
 function closeQrScanner() { stopQrScanner(); document.getElementById('cameraOverlay').classList.remove('open'); }
 
+const QR_SCAN_VARIANTS = [
+  { cropRatio: 1, maxSide: 600 },
+  { cropRatio: 0.6, maxSide: 400 },
+  { cropRatio: 1, maxSide: 300 },
+];
+
+function decodeQrFromVideoFrame(video, canvas) {
+  if (typeof window.jsQR !== 'function') return '';
+  const videoWidth = Number(video.videoWidth || 0);
+  const videoHeight = Number(video.videoHeight || 0);
+  if (videoWidth <= 0 || videoHeight <= 0) return '';
+  for (const variant of QR_SCAN_VARIANTS) {
+    const cropRatio = Math.max(0.2, Math.min(1, Number(variant.cropRatio) || 1));
+    const maxSide = Math.max(180, Math.round(Number(variant.maxSide) || Math.max(videoWidth, videoHeight)));
+    const sourceWidth = Math.max(1, Math.round(videoWidth * cropRatio));
+    const sourceHeight = Math.max(1, Math.round(videoHeight * cropRatio));
+    const sourceX = Math.max(0, Math.round((videoWidth - sourceWidth) / 2));
+    const sourceY = Math.max(0, Math.round((videoHeight - sourceHeight) / 2));
+    const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+    canvas.width = targetWidth; canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) continue;
+    ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+    const qrText = result && typeof result.data === 'string' ? result.data.trim() : '';
+    if (qrText) return qrText;
+  }
+  return '';
+}
+
 function scanQrFrame() {
   if (!cameraStream) return;
   const video = document.getElementById('cameraVideo');
   const canvas = document.getElementById('cameraCanvas');
-  if (video.readyState >= 2) {
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = window.jsQR(imageData.data, imageData.width, imageData.height);
-    if (result) {
-      const parsed = parsePersonInput(result.data);
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    const qrText = decodeQrFromVideoFrame(video, canvas);
+    if (qrText) {
+      const parsed = parsePersonInput(qrText);
       if (parsed?.error) { showDisplayNameValidationError(parsed.error); closeQrScanner(); return; }
-      document.getElementById('personId').value = result.data;
+      document.getElementById('personId').value = qrText;
       closeQrScanner();
       addPerson();
       return;
