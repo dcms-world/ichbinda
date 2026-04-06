@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS persons (
   id TEXT PRIMARY KEY,
   max_devices INTEGER NOT NULL DEFAULT 1,
   last_heartbeat DATETIME,
-  created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+  created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+  deleted_at DATETIME
 );
 
 -- Betreuer (Watcher) - Identität
@@ -12,7 +13,8 @@ CREATE TABLE IF NOT EXISTS watchers (
   id TEXT PRIMARY KEY,
   max_persons INTEGER NOT NULL DEFAULT 2,
   last_seen DATETIME,
-  created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+  created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+  deleted_at DATETIME
 );
 
 -- Geräte pro Watcher (Multi-Device Support)

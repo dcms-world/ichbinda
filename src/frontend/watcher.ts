@@ -382,6 +382,17 @@ input[type="text"]:focus, select:focus {
   </form>
 </div>
 
+<!-- Watcher Profile Modal -->
+<div class="modal-overlay" id="watcherProfileOverlay" onclick="handleOverlayClick(event, 'watcherProfileOverlay')">
+  <div class="modal-content">
+    <div class="modal-icon">👤</div>
+    <h3 id="watcherProfileName" class="modal-title"></h3>
+    <p id="watcherProfileInfo" class="modal-message" style="word-break:break-all"></p>
+    <button type="button" class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="closeWatcherProfile()">Schließen</button>
+    <button type="button" class="btn btn-secondary" style="width:100%;border-color:#ef4444;color:#ef4444" onclick="closeWatcherProfile();deleteWatcherAccount()">Konto löschen</button>
+  </div>
+</div>
+
 <!-- Status Modal -->
 <div class="modal-overlay" id="statusModalOverlay" onclick="handleOverlayClick(event, 'statusModalOverlay')">
   <div class="modal-content">
@@ -399,7 +410,7 @@ input[type="text"]:focus, select:focus {
     <h3 id="confirmModalTitle" class="modal-title">Bestätigung</h3>
     <p id="confirmModalMessage" class="modal-message"></p>
     <div class="button-row" style="flex-direction:row-reverse">
-      <button type="button" class="btn btn-primary" style="background:var(--status-overdue)" onclick="closeConfirmModal(true)">Entfernen</button>
+      <button type="button" id="confirmModalConfirmBtn" class="btn btn-primary" style="background:var(--status-overdue)" onclick="closeConfirmModal(true)">Entfernen</button>
       <button type="button" class="btn btn-secondary" onclick="closeConfirmModal(false)">Abbrechen</button>
     </div>
   </div>
@@ -534,7 +545,7 @@ async function ensureRegistered(){
   return new Promise(resolve => { resolveRegistered = resolve; });
 }
 
-function handleOverlayClick(e, id) { if (e.target === e.currentTarget) { if(id==='addPersonOverlay') toggleAddPerson(false); else if(id==='statusModalOverlay') closeStatusModal(); else if(id==='confirmModalOverlay') closeConfirmModal(false); else if(id==='personDetailOverlay') closeDetailModal(); else if(id==='personEditOverlay') closeEditModal(); } }
+function handleOverlayClick(e, id) { if (e.target === e.currentTarget) { if(id==='addPersonOverlay') toggleAddPerson(false); else if(id==='statusModalOverlay') closeStatusModal(); else if(id==='confirmModalOverlay') closeConfirmModal(false); else if(id==='personDetailOverlay') closeDetailModal(); else if(id==='personEditOverlay') closeEditModal(); else if(id==='watcherProfileOverlay') closeWatcherProfile(); } }
 
 function toggleAddPerson(show) {
   const overlay = document.getElementById('addPersonOverlay');
@@ -586,10 +597,11 @@ function closeStatusModal() {
   if(dialogFocusTarget) dialogFocusTarget.focus();
 }
 
-function showConfirmModal(title, message) {
+function showConfirmModal(title, message, confirmLabel) {
   const overlay = document.getElementById('confirmModalOverlay');
   document.getElementById('confirmModalTitle').textContent = title || 'Bestätigung';
   document.getElementById('confirmModalMessage').textContent = message || '';
+  document.getElementById('confirmModalConfirmBtn').textContent = confirmLabel || 'Entfernen';
   overlay.classList.add('open');
   return new Promise((resolve) => { confirmModalResolver = resolve; });
 }
@@ -610,9 +622,22 @@ function showProfileInfo(){
   const id = getWatcherId() || '–';
   const raw = localStorage.getItem('ibinda_watcher_created_at');
   const created = raw ? new Date(raw).toLocaleString('de-DE') : '–';
-  const msgEl = document.getElementById('statusModalMessage');
-  if (msgEl) { msgEl.style.whiteSpace = 'pre-wrap'; msgEl.style.wordBreak = 'break-all'; }
-  showStatusModal(getWatcherName() || 'Mein Profil', 'ID: ' + id + '  |  Erstellt: ' + created, 'ℹ️');
+  document.getElementById('watcherProfileName').textContent = getWatcherName() || 'Mein Profil';
+  document.getElementById('watcherProfileInfo').textContent = 'ID: ' + id + '   Erstellt: ' + created;
+  document.getElementById('watcherProfileOverlay').classList.add('open');
+}
+function closeWatcherProfile(){ document.getElementById('watcherProfileOverlay').classList.remove('open'); }
+async function deleteWatcherAccount(){
+  const confirmed = await showConfirmModal('Konto löschen', 'Alle Verbindungen werden getrennt und dein Konto dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.', 'Endgültig löschen');
+  if (!confirmed) return;
+  const watcherId = getWatcherId();
+  if (!watcherId) return;
+  try {
+    const res = await fetch(API_URL + '/watcher/' + watcherId, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Fehler ' + res.status);
+    ['ibinda_registered_watcher','ibinda_watcher_id','ibinda_watcher_name','ibinda_watcher_device','ibinda_watcher_created_at','ibinda_person_names','ibinda_person_name_history','ibinda_person_photos','ibinda_watched_person_ids','ibinda_hidden_person_ids'].forEach(k => localStorage.removeItem(k));
+    window.location.reload();
+  } catch(e) { showStatusModal('Fehler', 'Konto konnte nicht gelöscht werden.', '❌'); }
 }
 
 function askForWatcherName(){
@@ -869,10 +894,28 @@ async function addPerson() {
 }
 
 function buildPersonRow(p) {
-  const lastSeen = p.last_heartbeat ? new Date(p.last_heartbeat).toLocaleString('de-DE', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' }) : 'Nie';
   const name = getPersonName(p.id) || 'Unbekannt';
+
+  if (p.deleted) {
+    return '<li class="person-card status-overdue" style="opacity:0.45;pointer-events:none">' +
+      '<div class="person-card-header">' +
+        '<div class="avatar-container">' + buildPersonAvatarMarkup(p.id) + '</div>' +
+        '<div class="person-info">' +
+          '<div class="person-name" style="text-decoration:line-through">' + escapeHtml(name) + '</div>' +
+          '<div class="person-id-label">Konto gelöscht</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-actions" style="pointer-events:auto">' +
+        '<button type="button" class="icon-btn" style="color:#ef4444" onclick="removeDeletedPerson(\\\'' + p.id + '\\\')" title="Entfernen">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg>' +
+        '</button>' +
+      '</div>' +
+    '</li>';
+  }
+
+  const lastSeen = p.last_heartbeat ? new Date(p.last_heartbeat).toLocaleString('de-DE', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' }) : 'Nie';
   const interval = INTERVALS.find(i => i.min === p.check_interval_minutes)?.label || p.check_interval_minutes + ' Min';
-  
+
   return '<li class="person-card status-' + p.status + '" onclick="openDetailModal(\\\'' + p.id + '\\\')">' +
     '<div class="person-card-header">' +
       '<div class="avatar-container">' +
@@ -892,6 +935,20 @@ function buildPersonRow(p) {
       '<button type="button" class="icon-btn" onclick="event.stopPropagation();openEditModal(\\\'' + p.id + '\\\')">' + ICONS.edit + '</button>' +
     '</div>' +
   '</li>';
+}
+
+async function removeDeletedPerson(personId) {
+  const watcherId = getWatcherId();
+  if (!watcherId) return;
+  try {
+    await fetch(API_URL + '/watch', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ person_id: personId, watcher_id: watcherId }),
+    });
+    removePersonName(personId);
+    hidePersonFromLocalView(personId);
+    loadPersons();
+  } catch(e) { showStatusModal('Fehler', 'Entfernen fehlgeschlagen.', '❌'); }
 }
 
 async function loadPersons() {

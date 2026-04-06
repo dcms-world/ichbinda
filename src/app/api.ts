@@ -456,6 +456,18 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     return c.json(person);
   });
 
+  app.delete('/api/person/:id', async (c) => {
+    const personId = c.req.param('id').trim();
+    if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
+    if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+    await c.env.DB.prepare(
+      `UPDATE persons SET deleted_at = datetime('now') WHERE id = ?1 AND deleted_at IS NULL`,
+    ).bind(personId).run();
+    return c.json({ success: true });
+  });
+
   app.get('/api/person/:id/has-watcher', async (c) => {
     const personId = c.req.param('id').trim();
     if (!isValidUUID(personId)) return c.json({ error: 'Ungültige person_id' }, 400);
@@ -1326,6 +1338,39 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     return c.json(watcher);
   });
 
+  app.delete('/api/watcher/:id', async (c) => {
+    const watcherId = c.req.param('id').trim();
+    if (!isValidUUID(watcherId)) return c.json({ error: 'Ungültige watcher_id' }, 400);
+
+    const deviceId = c.get('deviceId');
+    const owns = await c.env.DB.prepare(
+      'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?',
+    ).bind(watcherId, deviceId).first();
+    if (!owns) return c.json({ error: 'Forbidden' }, 403);
+
+    await ensureWatcherDisconnectEventsTable(c.env.DB);
+
+    const persons = await c.env.DB.prepare(
+      'SELECT person_id FROM watch_relations WHERE watcher_id = ?1 AND removed_at IS NULL',
+    ).bind(watcherId).all<{ person_id: string }>();
+
+    const stmts = [
+      c.env.DB.prepare(
+        `UPDATE watchers SET deleted_at = datetime('now') WHERE id = ?1 AND deleted_at IS NULL`,
+      ).bind(watcherId),
+      c.env.DB.prepare(
+        `UPDATE watch_relations SET removed_at = datetime('now') WHERE watcher_id = ?1 AND removed_at IS NULL`,
+      ).bind(watcherId),
+      ...(persons.results ?? []).map((p) =>
+        c.env.DB.prepare(
+          `INSERT INTO watcher_disconnect_events (person_id, watcher_id) VALUES (?1, ?2)`,
+        ).bind(p.person_id, watcherId),
+      ),
+    ];
+    await c.env.DB.batch(stmts);
+    return c.json({ success: true });
+  });
+
   app.get('/api/watcher/:id/persons', async (c) => {
     const watcherId = c.req.param('id').trim();
     if (!isValidUUID(watcherId)) {
@@ -1348,11 +1393,13 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
         p.last_heartbeat,
         wr.check_interval_minutes,
         CASE
+          WHEN p.deleted_at IS NOT NULL THEN 'deleted'
           WHEN p.last_heartbeat IS NULL THEN 'never'
           WHEN datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now')
           THEN 'overdue'
           ELSE 'ok'
-        END as status
+        END as status,
+        CASE WHEN p.deleted_at IS NOT NULL THEN 1 ELSE 0 END as deleted
        FROM persons p
        JOIN watch_relations wr ON p.id = wr.person_id
        WHERE wr.watcher_id = ? AND wr.removed_at IS NULL`,

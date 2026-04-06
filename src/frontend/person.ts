@@ -548,6 +548,15 @@ h1 {
 </div>
 </div>
 
+<div class="pairing-modal-overlay" id="deleteAccountOverlay">
+<div class="pairing-modal" role="dialog" aria-modal="true">
+<h2>Konto löschen?</h2>
+<p style="font-size:14px;color:var(--text-muted,#888);margin-bottom:20px">Alle Verbindungen werden getrennt und dein Konto dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.</p>
+<button type="button" onclick="confirmDeletePersonAccount()" style="width:100%;background:#ef4444;border:none;color:#fff;padding:12px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;margin-bottom:8px">Endgültig löschen</button>
+<button type="button" onclick="document.getElementById('deleteAccountOverlay').classList.remove('open')" style="width:100%;background:transparent;border:none;color:var(--text-muted,#888);padding:10px;cursor:pointer;font-size:14px">Abbrechen</button>
+</div>
+</div>
+
 <div class="pairing-modal-overlay" id="pairingQrModalOverlay">
 <div class="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairingQrTitle">
 <h2 id="pairingQrTitle">QR-Code anzeigen</h2>
@@ -648,6 +657,11 @@ h1 {
       <div class="settings-item"><div class="device-empty">Wird geladen...</div></div>
     </div>
     <small class="settings-help">Verknüpfte Geräte für diese Person.</small>
+  </div>
+
+  <div class="settings-section" style="margin-top:8px;padding-top:16px;border-top:1px solid rgba(148,163,184,0.15)">
+    <button type="button" onclick="deletePersonAccount()" style="width:100%;background:transparent;border:1.5px solid #ef4444;color:#ef4444;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">Konto löschen</button>
+    <small class="settings-help">Alle Verbindungen werden getrennt. Nicht rückgängig zu machen.</small>
   </div>
 
   <div class="settings-section" id="deviceActionSection">
@@ -825,7 +839,9 @@ function startWatcherRefresh(){if(watcherRefreshInterval)return;watcherRefreshIn
 function isPersonSessionLostStatus(status){return status===401||status===403}
 async function isRealSessionLoss(res){if(res.status===401)return true;if(res.status!==403)return false;try{const data=await res.clone().json();return data.error!=='Origin not allowed'}catch{return true}}
 function isLostOwnershipError(error){return !!error&&typeof error.message==='string'&&(error.message.includes(' 401')||error.message.includes(' 403')||error.message.includes(': 401')||error.message.includes(': 403'))}
-function clearPersonLocalState(){localStorage.removeItem('ibinda_registered_person');localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(DEVICE_ID_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_reg');clearCookie('ibinda_pid');clearCookie('ibinda_pname');clearCookie('ibinda_did')}
+function clearPersonLocalState(){localStorage.removeItem('ibinda_registered_person');localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(DEVICE_ID_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);localStorage.removeItem('ibinda_person_created_at');clearCookie('ibinda_reg');clearCookie('ibinda_pid');clearCookie('ibinda_pname');clearCookie('ibinda_did')}
+function deletePersonAccount(){if(!currentPersonId)return;document.getElementById('deleteAccountOverlay').classList.add('open')}
+async function confirmDeletePersonAccount(){document.getElementById('deleteAccountOverlay').classList.remove('open');try{const res=await fetch(API_URL+'/person/'+currentPersonId,{method:'DELETE'});if(!res.ok)throw new Error('Fehler '+res.status);clearPersonLocalState();window.location.reload()}catch(e){alert('Konto konnte nicht gelöscht werden: '+e.message)}}
 function clearPersonDataOnly(){localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_pid');clearCookie('ibinda_pname')}
 function resetPersonApp(reason){if(isResettingPersonApp)return;isResettingPersonApp=true;console.warn('Resetting person app state',reason);if(watcherRefreshInterval){clearInterval(watcherRefreshInterval);watcherRefreshInterval=null}clearPairingTimers();clearDeviceLinkPolling();clearPendingDeviceSwitchPolling();hideDeviceSwitchRequest(false);hidePendingDeviceSwitchModal();stopDeviceQrScanner();if(reason==='device-switch-approved'){clearPersonDataOnly()}else{clearPersonLocalState()}currentPersonId=null;currentPersonName='';currentDeviceId='';hasActiveWatcherConnection=false;pendingDisconnectEvents=[];setTimeout(()=>{window.location.replace('/person.html')},50)}
 
