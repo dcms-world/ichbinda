@@ -37,7 +37,6 @@ import {
   normalizeDisplayName,
   parseCheckIntervalMinutes,
   parseDeviceModel,
-  parsePushToken,
 } from './helpers/validation';
 import type {
   AppEnv,
@@ -1215,9 +1214,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/watcher', async (c) => {
     const body = await c.req.json<{ push_token?: unknown; device_model?: unknown }>().catch((): { push_token?: unknown; device_model?: unknown } => ({}));
-    const pushToken = parsePushToken(body.push_token);
-    if (!pushToken) return c.json({ error: 'push_token invalid' }, 400);
-
+    const pushToken = typeof body.push_token === 'string' ? body.push_token.trim() : '';
     const deviceModel = parseDeviceModel(body.device_model);
     if (deviceModel === null) {
       return c.json({ error: `device_model too long` }, 400);
@@ -1226,7 +1223,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     const deviceId = c.get('deviceId');
     const watcherId = crypto.randomUUID();
     await c.env.DB.batch([
-      c.env.DB.prepare('INSERT INTO watchers (id, push_token) VALUES (?, \'\')').bind(watcherId),
+      c.env.DB.prepare(`INSERT INTO watchers (id, last_seen) VALUES (?, datetime('now'))`).bind(watcherId),
       c.env.DB.prepare(
         `INSERT OR REPLACE INTO watcher_devices (watcher_id, device_id, push_token, device_model, last_seen)
          VALUES (?, ?, ?, ?, datetime('now'))`,
@@ -1339,6 +1336,10 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?',
     ).bind(watcherId, deviceId).first();
     if (!owns) return c.json({ error: 'Forbidden' }, 403);
+
+    await c.env.DB.prepare(
+      `UPDATE watchers SET last_seen = datetime('now') WHERE id = ?`,
+    ).bind(watcherId).run();
 
     const persons = await c.env.DB.prepare(
       `SELECT

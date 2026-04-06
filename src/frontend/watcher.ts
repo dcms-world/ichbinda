@@ -809,7 +809,7 @@ async function init() {
   if (!getWatcherId()) {
     const res = await fetch(API_URL + '/watcher', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ push_token: 'web-' + crypto.randomUUID() })
+      body: JSON.stringify({})
     });
     const data = await res.json();
     localStorage.setItem('ibinda_watcher_id', data.id);
