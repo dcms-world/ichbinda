@@ -25,6 +25,7 @@ export interface PersonDeviceRow {
   person_id: string;
   device_id: string;
   device_model: string;
+  push_token: string | null;
   last_seen: string;
 }
 

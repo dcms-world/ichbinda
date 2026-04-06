@@ -368,11 +368,12 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/heartbeat', async (c) => {
     const body = await c.req
-      .json<{ person_id?: string; status?: string; device_id?: string }>()
-      .catch((): { person_id?: string; status?: string; device_id?: string } => ({}));
+      .json<{ person_id?: string; status?: string; device_id?: string; push_token?: string }>()
+      .catch((): { person_id?: string; status?: string; device_id?: string; push_token?: string } => ({}));
     const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
     const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
     const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
+    const pushToken = typeof body.push_token === 'string' ? body.push_token.trim() : null;
 
     if (!personId || !isValidUUID(personId)) {
       return c.json({ error: 'Ungültige person_id' }, 400);
@@ -399,8 +400,10 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
     try {
       await c.env.DB.prepare(
-        `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
-         ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`,
+        `INSERT INTO persons (id, last_heartbeat, created_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           last_heartbeat = excluded.last_heartbeat,
+           created_at = COALESCE(persons.created_at, excluded.created_at)`,
       ).bind(personId, nowIso).run();
 
       if (deviceId) {
@@ -411,6 +414,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
           deviceId,
           detectDeviceModel(c.req.header('user-agent') ?? ''),
           nowIso,
+          pushToken,
         );
       }
 
@@ -1220,7 +1224,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     const deviceId = c.get('deviceId');
     const watcherId = crypto.randomUUID();
     await c.env.DB.batch([
-      c.env.DB.prepare(`INSERT INTO watchers (id, last_seen) VALUES (?, datetime('now'))`).bind(watcherId),
+      c.env.DB.prepare(`INSERT INTO watchers (id, last_seen, created_at) VALUES (?, datetime('now'), datetime('now'))`).bind(watcherId),
       c.env.DB.prepare(
         `INSERT OR REPLACE INTO watcher_devices (watcher_id, device_id, push_token, device_model, last_seen)
          VALUES (?, ?, ?, ?, datetime('now'))`,

@@ -117,6 +117,7 @@ export async function ensurePersonDevicesTable(db: D1Database): Promise<void> {
       person_id TEXT NOT NULL,
       device_id TEXT NOT NULL UNIQUE,
       device_model TEXT NOT NULL,
+      push_token TEXT,
       last_seen DATETIME NOT NULL,
       FOREIGN KEY (person_id) REFERENCES persons(id)
     )`,
@@ -244,16 +245,18 @@ export async function upsertPersonDevice(
   deviceId: string,
   deviceModel: string,
   lastSeenIso: string,
+  pushToken?: string | null,
 ): Promise<void> {
   if (!deviceId) return;
   await db.prepare(
-    `INSERT INTO person_devices (person_id, device_id, device_model, last_seen)
-     VALUES (?1, ?2, ?3, ?4)
+    `INSERT INTO person_devices (person_id, device_id, device_model, push_token, last_seen)
+     VALUES (?1, ?2, ?3, ?4, ?5)
      ON CONFLICT(device_id) DO UPDATE SET
        person_id = excluded.person_id,
        device_model = excluded.device_model,
+       push_token = COALESCE(excluded.push_token, person_devices.push_token),
        last_seen = excluded.last_seen`,
-  ).bind(personId, deviceId, deviceModel, lastSeenIso).run();
+  ).bind(personId, deviceId, deviceModel, pushToken ?? null, lastSeenIso).run();
 }
 
 export async function checkOverduePersons(db: D1Database, expoToken?: string): Promise<{ checked: number }> {
