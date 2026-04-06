@@ -2,9 +2,7 @@
 CREATE TABLE IF NOT EXISTS persons (
   id TEXT PRIMARY KEY,
   max_devices INTEGER NOT NULL DEFAULT 1,
-  last_heartbeat DATETIME,
-  last_location_lat REAL,
-  last_location_lng REAL
+  last_heartbeat DATETIME
 );
 
 -- Betreuer (Watcher) - Identität

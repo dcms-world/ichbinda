@@ -307,40 +307,6 @@ h1 {
   margin: 8px 32px 0;
 }
 
-/* Location Toggle */
-.location-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-.location-toggle-label { font-size: 17px; }
-
-.toggle-switch {
-  width: 51px;
-  height: 31px;
-  background: #E9E9EA;
-  border-radius: 16px;
-  position: relative;
-  transition: background 0.2s;
-  cursor: pointer;
-}
-@media (prefers-color-scheme: dark) { .toggle-switch { background: #39393D; } }
-.toggle-switch.active { background: var(--system-green); }
-.toggle-switch::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 27px;
-  height: 27px;
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
-  transition: transform 0.2s;
-}
-.toggle-switch.active::after { transform: translateX(20px); }
-
 /* Device List */
 .device-row {
   display: flex;
@@ -663,19 +629,6 @@ h1 {
   </div>
 
   <div class="settings-section">
-    <h3>Standort</h3>
-    <div class="settings-list">
-      <div class="settings-item">
-        <div class="location-toggle">
-          <div class="location-toggle-label">Standort mitteilen</div>
-          <div class="toggle-switch" id="locationToggle" onclick="toggleLocation()"></div>
-        </div>
-      </div>
-    </div>
-    <small class="settings-help">Bei jedem OK senden wir deinen Standort mit.</small>
-  </div>
-
-  <div class="settings-section">
     <h3>Verbindungen</h3>
     <div id="watcherInfo"></div>
   </div>
@@ -854,29 +807,16 @@ function askForPersonName(){return new Promise((resolve)=>{const overlay=documen
 
 async function ensurePersonName(){const savedName=getPersonName();if(savedName)return savedName;return askForPersonName()}
 
-const LOCATION_ENABLED_KEY='ibinda_location_enabled';
-const LOCATION_CLEAR_PENDING_KEY='ibinda_location_clear_pending';
-
-function isLocationEnabled(){return localStorage.getItem(LOCATION_ENABLED_KEY)==='true'}
-function isLocationClearPending(){return localStorage.getItem(LOCATION_CLEAR_PENDING_KEY)==='true'}
-function setLocationClearPending(pending){localStorage.setItem(LOCATION_CLEAR_PENDING_KEY,pending?'true':'false')}
-function setLocationEnabled(enabled){localStorage.setItem(LOCATION_ENABLED_KEY,enabled?'true':'false');if(enabled){setLocationClearPending(false)}updateLocationToggleUi()}
-
-function updateLocationToggleUi(){const toggle=document.getElementById('locationToggle');if(!toggle)return;toggle.classList.toggle('active',isLocationEnabled())}
-
-async function toggleLocation(){const currentlyEnabled=isLocationEnabled();if(!currentlyEnabled){const confirmed=confirm('Möchtest du deinen Standort bei jedem "Okay" mitteilen? Deine verbundenen Personen sehen dann, wo du dich befindest.');if(!confirmed)return;try{await getCurrentPosition();setLocationEnabled(true)}catch(e){console.log('Location permission denied',e);setLocationEnabled(false);alert('Standort nicht verfügbar. Bitte Standortzugriff im Browser erlauben.')}}else{setLocationEnabled(false);setLocationClearPending(true)}}
-
-function getCurrentPosition(){return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('Geolocation not supported'));return}navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>reject(err),{enableHighAccuracy:true,timeout:10000,maximumAge:60000})})}
 
 function startWatcherRefresh(){if(watcherRefreshInterval)return;watcherRefreshInterval=setInterval(()=>{if(currentPersonId&&document.visibilityState==='visible'&&!isAwaitingPendingDeviceSwitch())loadWatchers(currentPersonId)},WATCHER_REFRESH_INTERVAL_MS)}
 function isPersonSessionLostStatus(status){return status===401||status===403}
 async function isRealSessionLoss(res){if(res.status===401)return true;if(res.status!==403)return false;try{const data=await res.clone().json();return data.error!=='Origin not allowed'}catch{return true}}
 function isLostOwnershipError(error){return !!error&&typeof error.message==='string'&&(error.message.includes(' 401')||error.message.includes(' 403')||error.message.includes(': 401')||error.message.includes(': 403'))}
-function clearPersonLocalState(){localStorage.removeItem('ibinda_registered_person');localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(DEVICE_ID_KEY);localStorage.removeItem(LOCATION_ENABLED_KEY);localStorage.removeItem(LOCATION_CLEAR_PENDING_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_reg');clearCookie('ibinda_pid');clearCookie('ibinda_pname');clearCookie('ibinda_did')}
-function clearPersonDataOnly(){localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(LOCATION_ENABLED_KEY);localStorage.removeItem(LOCATION_CLEAR_PENDING_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_pid');clearCookie('ibinda_pname')}
+function clearPersonLocalState(){localStorage.removeItem('ibinda_registered_person');localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(DEVICE_ID_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_reg');clearCookie('ibinda_pid');clearCookie('ibinda_pname');clearCookie('ibinda_did')}
+function clearPersonDataOnly(){localStorage.removeItem('ibinda_person_id');localStorage.removeItem(PERSON_NAME_KEY);localStorage.removeItem(WATCHER_NAMES_KEY);clearCookie('ibinda_pid');clearCookie('ibinda_pname')}
 function resetPersonApp(reason){if(isResettingPersonApp)return;isResettingPersonApp=true;console.warn('Resetting person app state',reason);if(watcherRefreshInterval){clearInterval(watcherRefreshInterval);watcherRefreshInterval=null}clearPairingTimers();clearDeviceLinkPolling();clearPendingDeviceSwitchPolling();hideDeviceSwitchRequest(false);hidePendingDeviceSwitchModal();stopDeviceQrScanner();if(reason==='device-switch-approved'){clearPersonDataOnly()}else{clearPersonLocalState()}currentPersonId=null;currentPersonName='';currentDeviceId='';hasActiveWatcherConnection=false;pendingDisconnectEvents=[];setTimeout(()=>{window.location.replace('/person.html')},50)}
 
-async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID init failed',error);if(isLostOwnershipError(error)){resetPersonApp('init-lost-ownership-existing');return}throw error}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error);if(isLostOwnershipError(error))resetPersonApp('init-register-lost-ownership')});renderPersonName();updateLocationToggleUi();updatePrimaryActionButton();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);if(isLostOwnershipError(e)){resetPersonApp('init-lost-ownership');return}setButtonError('Fehler<span class="btn-sub">Neu laden</span>','App konnte nicht geladen werden.<div class="error-sub">Bitte Seite neu laden. Wenn der Fehler bleibt, kurz später erneut versuchen.</div>');const status=document.getElementById('status');if(status){status.textContent='Fehler beim Laden. Bitte Seite neu laden.';status.className='status error'}}}
+async function init(){try{currentPersonName=await ensurePersonName();await ensureRegistered();let personId=getPersonId();if(!personId){personId=await createPerson()}else{try{personId=await createPerson(personId)}catch(error){console.error('Stored person ID init failed',error);if(isLostOwnershipError(error)){resetPersonApp('init-lost-ownership-existing');return}throw error}}currentPersonId=personId;currentDeviceId=getOrCreateDeviceId();await registerCurrentDevice(personId).catch((error)=>{console.error('Initial device registration failed',error);if(isLostOwnershipError(error))resetPersonApp('init-register-lost-ownership')});renderPersonName();updatePrimaryActionButton();const url=new URL(window.location);url.searchParams.set('id',personId);window.history.replaceState({},'',url);loadStatus(personId);loadWatchers(personId);startWatcherRefresh()}catch(e){console.error('Init error:',e);if(isLostOwnershipError(e)){resetPersonApp('init-lost-ownership');return}setButtonError('Fehler<span class="btn-sub">Neu laden</span>','App konnte nicht geladen werden.<div class="error-sub">Bitte Seite neu laden. Wenn der Fehler bleibt, kurz später erneut versuchen.</div>');const status=document.getElementById('status');if(status){status.textContent='Fehler beim Laden. Bitte Seite neu laden.';status.className='status error'}}}
 
 let cooldownInterval=null;let cooldownEndTime=null;
 
@@ -892,7 +832,7 @@ function clearButtonError(){const card=document.getElementById('sendErrorCard');
 
 function startCooldown(seconds){const btn=document.getElementById('btnOkay');const status=document.getElementById('status');if(cooldownInterval)return;cooldownEndTime=Date.now()+seconds*1000;btn.disabled=true;status.className='status rate-limit';status.textContent='ℹ️ Bereits gemeldet. Noch '+seconds+' Sekunden warten.';cooldownInterval=setInterval(()=>{const remaining=Math.ceil((cooldownEndTime-Date.now())/1000);if(remaining<=0){clearInterval(cooldownInterval);cooldownInterval=null;btn.disabled=false;setTimeout(resetStatus,2000);return}status.textContent='ℹ️ Bereits gemeldet. Noch '+remaining+' Sekunden warten.'},1000)}
 
-async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId(),loc:isLocationEnabled()};if(isLocationEnabled()){try{const pos=await getCurrentPosition();const lat=Number(pos.lat);const lng=Number(pos.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))throw new Error('Invalid coordinates');payload.lat=lat;payload.lng=lng;console.log('Location added',pos)}catch(e){console.log('Could not get location',e);status.className='status error';status.textContent='❌ Standort nicht verfügbar. Bitte Standortzugriff erlauben.';setTimeout(resetStatus,5000);return}}try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else if(await isRealSessionLoss(res)){resetPersonApp('heartbeat-lost-ownership');return}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
+async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId()};try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else if(await isRealSessionLoss(res)){resetPersonApp('heartbeat-lost-ownership');return}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
 
 async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(await isRealSessionLoss(res)){if(isAwaitingPendingDeviceSwitch())return;resetPersonApp('status-lost-ownership');return}if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
 

@@ -36,7 +36,6 @@ import {
   isValidUUID,
   normalizeDisplayName,
   parseCheckIntervalMinutes,
-  parseCoordinate,
   parseDeviceModel,
   parsePushToken,
 } from './helpers/validation';
@@ -370,17 +369,11 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/heartbeat', async (c) => {
     const body = await c.req
-      .json<{ person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean; device_id?: string }>()
-      .catch((): { person_id?: string; status?: string; lat?: unknown; lng?: unknown; loc?: boolean; device_id?: string } => ({}));
+      .json<{ person_id?: string; status?: string; device_id?: string }>()
+      .catch((): { person_id?: string; status?: string; device_id?: string } => ({}));
     const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
     const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
     const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
-    const locEnabled = body.loc === true;
-    const hasLat = Object.prototype.hasOwnProperty.call(body, 'lat');
-    const hasLng = Object.prototype.hasOwnProperty.call(body, 'lng');
-    const lat = hasLat ? parseCoordinate(body.lat) : null;
-    const lng = hasLng ? parseCoordinate(body.lng) : null;
-    const clearLocationRequested = body.loc === false;
 
     if (!personId || !isValidUUID(personId)) {
       return c.json({ error: 'Ungültige person_id' }, 400);
@@ -392,21 +385,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     const authDeviceId = c.get('deviceId');
     if (!await deviceOwnsPerson(c.env.DB, authDeviceId, personId)) {
       return c.json({ error: 'Forbidden' }, 403);
-    }
-
-    if (locEnabled) {
-      if (hasLat !== hasLng) {
-        return c.json({ error: 'lat and lng must be provided together' }, 400);
-      }
-      if ((hasLat && lat === null) || (hasLng && lng === null)) {
-        return c.json({ error: 'Invalid coordinates' }, 400);
-      }
-      if (lat !== null && (lat < -90 || lat > 90)) {
-        return c.json({ error: 'Invalid latitude' }, 400);
-      }
-      if (lng !== null && (lng < -180 || lng > 180)) {
-        return c.json({ error: 'Invalid longitude' }, 400);
-      }
     }
 
     const now = new Date();
@@ -421,28 +399,10 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     }
 
     try {
-      if (clearLocationRequested) {
-        await c.env.DB.prepare(
-          `INSERT INTO persons (id, last_heartbeat, last_location_lat, last_location_lng) VALUES (?, ?, NULL, NULL)
-           ON CONFLICT(id) DO UPDATE SET
-           last_heartbeat = excluded.last_heartbeat,
-           last_location_lat = NULL,
-           last_location_lng = NULL`,
-        ).bind(personId, nowIso).run();
-      } else if (lat !== null && lng !== null) {
-        await c.env.DB.prepare(
-          `INSERT INTO persons (id, last_heartbeat, last_location_lat, last_location_lng) VALUES (?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-           last_heartbeat = excluded.last_heartbeat,
-           last_location_lat = excluded.last_location_lat,
-           last_location_lng = excluded.last_location_lng`,
-        ).bind(personId, nowIso, lat, lng).run();
-      } else {
-        await c.env.DB.prepare(
-          `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
-           ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`,
-        ).bind(personId, nowIso).run();
-      }
+      await c.env.DB.prepare(
+        `INSERT INTO persons (id, last_heartbeat) VALUES (?, ?)
+         ON CONFLICT(id) DO UPDATE SET last_heartbeat = excluded.last_heartbeat`,
+      ).bind(personId, nowIso).run();
 
       if (deviceId) {
         await ensurePersonDevicesTable(c.env.DB);
@@ -461,8 +421,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
         device_id: deviceId || null,
         status,
         timestamp: nowIso,
-        location: lat !== null && lng !== null ? { lat, lng } : null,
-        location_cleared: clearLocationRequested,
       });
     } catch (error) {
       const previousRateLimit = await c.env.DB.prepare(
@@ -1386,8 +1344,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       `SELECT
         p.id,
         p.last_heartbeat,
-        p.last_location_lat,
-        p.last_location_lng,
         wr.check_interval_minutes,
         CASE
           WHEN p.last_heartbeat IS NULL THEN 'never'

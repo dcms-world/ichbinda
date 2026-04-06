@@ -484,7 +484,6 @@ const MAX_DISPLAY_NAME_LENGTH = 35;
 // Icons for dynamic injection
 const ICONS = {
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
-  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>',
   wifi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'
 };
@@ -692,10 +691,6 @@ function unhidePersonInLocalView(personId) { removeFromStoredList(HIDDEN_PERSON_
 
 function escapeHtml(v) { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function buildMapsLink(lat, lng) {
-  const url = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-  return '<a href="' + url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">' + ICONS.map + ' Standort</a>';
-}
 
 function parsePersonInput(rawValue) {
   const v = rawValue.trim(); if (!v) return null;
@@ -866,9 +861,6 @@ function buildPersonRow(p) {
   const name = getPersonName(p.id) || 'Unbekannt';
   const interval = INTERVALS.find(i => i.min === p.check_interval_minutes)?.label || p.check_interval_minutes + ' Min';
   
-  const lat = p.last_location_lat; const lng = p.last_location_lng;
-  const locationHtml = (lat && lng) ? '<div class="meta-item">' + buildMapsLink(lat, lng) + '</div>' : '';
-
   return '<li class="person-card status-' + p.status + '" onclick="openDetailModal(\\\'' + p.id + '\\\')">' +
     '<div class="person-card-header">' +
       '<div class="avatar-container">' +
@@ -883,7 +875,6 @@ function buildPersonRow(p) {
     '<div class="person-meta">' +
       '<div class="meta-item">' + ICONS.wifi + ' Letzter Kontakt: ' + lastSeen + '</div>' +
       '<div class="meta-item">' + ICONS.clock + ' Alarm nach: ' + interval + '</div>' +
-      locationHtml +
     '</div>' +
     '<div class="card-actions">' +
       '<button type="button" class="icon-btn" onclick="event.stopPropagation();openEditModal(\\\'' + p.id + '\\\')">' + ICONS.edit + '</button>' +
