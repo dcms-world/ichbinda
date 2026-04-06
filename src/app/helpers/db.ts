@@ -207,7 +207,6 @@ export async function ensureWatcherDisconnectEventsTable(db: D1Database): Promis
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       person_id TEXT NOT NULL,
       watcher_id TEXT NOT NULL,
-      watcher_name_snapshot TEXT,
       created_at DATETIME NOT NULL DEFAULT (datetime('now')),
       acknowledged_at DATETIME,
       FOREIGN KEY (person_id) REFERENCES persons(id),

@@ -624,7 +624,6 @@ function askForWatcherName(){
       setWatcherName(name);
       overlay.classList.remove('open');
       renderWatcherName();
-      announceWatcherName();
       resolve(name);
     };
     form.onsubmit=onSubmit;
@@ -633,10 +632,6 @@ function askForWatcherName(){
 
 async function ensureWatcherName(){const savedName=getWatcherName(); if(savedName) return savedName; return askForWatcherName();}
 
-async function announceWatcherName(){
-  const watcherId=getWatcherId(); const name=getWatcherName(); if(!watcherId||!name)return;
-  try{await fetch(API_URL+'/watcher/'+watcherId+'/announce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})}catch(e){}
-}
 
 const PERSON_ID_REGEX=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isValidFrontendPersonId(value){return PERSON_ID_REGEX.test(String(value||'').trim())}
@@ -824,7 +819,6 @@ async function init() {
     const data = await res.json();
     localStorage.setItem('ibinda_watcher_id', data.id);
   }
-  await announceWatcherName();
   const meta = await fetch(API_URL + '/watcher/' + getWatcherId()).then(r => r.json()).catch(() => ({}));
   if (meta.max_persons) MAX_WATCHED_PERSONS = meta.max_persons;
   loadPersons();

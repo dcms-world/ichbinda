@@ -523,16 +523,13 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     await ensureWatcherDisconnectEventsTable(c.env.DB);
 
     const result = await c.env.DB.prepare(
-      `SELECT wr.watcher_id, wna.name as watcher_name
-       FROM watch_relations wr
-       LEFT JOIN watcher_name_announcements wna ON wr.watcher_id = wna.watcher_id
-       WHERE wr.person_id = ?1 AND wr.removed_at IS NULL`,
-    ).bind(personId).all<{ watcher_id: string; watcher_name: string | null }>();
+      `SELECT watcher_id FROM watch_relations WHERE person_id = ?1 AND removed_at IS NULL`,
+    ).bind(personId).all<{ watcher_id: string }>();
 
     const rows = result.results ?? [];
-    const watchers = rows.map((row) => ({ id: row.watcher_id, name: row.watcher_name ?? null }));
+    const watchers = rows.map((row) => ({ id: row.watcher_id }));
     const disconnectEvents = await c.env.DB.prepare(
-      `SELECT id, person_id, watcher_id, watcher_name_snapshot, created_at, acknowledged_at
+      `SELECT id, person_id, watcher_id, created_at, acknowledged_at
        FROM watcher_disconnect_events
        WHERE person_id = ?1 AND acknowledged_at IS NULL
        ORDER BY datetime(created_at) ASC, id ASC`,
@@ -544,7 +541,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       disconnect_events: (disconnectEvents.results ?? []).map((event) => ({
         id: event.id,
         watcher_id: event.watcher_id,
-        watcher_name: event.watcher_name_snapshot,
         created_at: event.created_at,
       })),
     });
@@ -1116,11 +1112,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       ).bind(existingRelation.id, 1440).run();
     }
 
-    await c.env.DB.prepare(
-      `INSERT OR REPLACE INTO watcher_name_announcements (watcher_id, name, created_at)
-       VALUES (?1, ?2, datetime('now'))`,
-    ).bind(watcher.watcher_id, pairing.watcher_name).run();
-
     return c.json({
       success: true,
       status: 'completed',
@@ -1128,33 +1119,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       watcher_id: watcher.watcher_id,
       watcher_name: pairing.watcher_name,
     });
-  });
-
-  app.post('/api/watcher/:id/announce', async (c) => {
-    const watcherId = c.req.param('id').trim();
-    if (!isValidUUID(watcherId)) {
-      return c.json({ error: 'Ungültige watcher_id' }, 400);
-    }
-
-    const body = await c.req.json<{ name?: unknown }>().catch((): { name?: unknown } => ({}));
-    const name = typeof body.name === 'string' ? body.name : '';
-    const nameError = getDisplayNameValidationError(name);
-    if (nameError === 'name-too-short') return c.json({ error: 'name too short' }, 400);
-    if (nameError === 'name-too-long') return c.json({ error: 'name too long' }, 400);
-    if (nameError === 'name-invalid-start') return c.json({ error: 'name must start with 2 letters' }, 400);
-    const safeName = normalizeDisplayName(name);
-
-    const deviceId = c.get('deviceId');
-    const owns = await c.env.DB.prepare(
-      'SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?',
-    ).bind(watcherId, deviceId).first();
-    if (!owns) return c.json({ error: 'Forbidden' }, 403);
-
-    await c.env.DB.prepare(
-      'INSERT OR REPLACE INTO watcher_name_announcements (watcher_id, name, created_at) VALUES (?, ?, datetime(\'now\'))',
-    ).bind(watcherId, safeName).run();
-
-    return c.json({ ok: true });
   });
 
   app.get('/api/person/:id/devices', async (c) => {
@@ -1379,14 +1343,9 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     ).bind(personId, watcherId).run();
 
     if ((removalResult.meta?.changes ?? 0) > 0) {
-      const watcherName = await c.env.DB.prepare(
-        'SELECT name FROM watcher_name_announcements WHERE watcher_id = ?1',
-      ).bind(watcherId).first<{ name: string | null }>();
-
       await c.env.DB.prepare(
-        `INSERT INTO watcher_disconnect_events (person_id, watcher_id, watcher_name_snapshot)
-         VALUES (?1, ?2, ?3)`,
-      ).bind(personId, watcherId, watcherName?.name ?? null).run();
+        `INSERT INTO watcher_disconnect_events (person_id, watcher_id) VALUES (?1, ?2)`,
+      ).bind(personId, watcherId).run();
     }
 
     return c.json({ success: true });
