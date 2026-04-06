@@ -1,7 +1,7 @@
 # Security Audit – iBinda
 
 Erstellt: 2026-03-21
-Aktualisiert: 2026-03-30
+Aktualisiert: 2026-04-06
 Status: offen
 
 ---
@@ -26,6 +26,12 @@ Status: offen
 - [x] **3. Keine Autorisierung / IDOR auf allen Endpoints**
   **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
   **Watcher-Endpoints: behoben (2026-03-28).** Direkter `watcher_devices`-Check auf allen betroffenen Endpoints (kein `device_keys.watcher_id` nötig). `POST/PUT/DELETE /api/watch` und `GET /api/watcher/:id/persons` prüfen via `SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?` und geben 403 bei fehlendem Ownership.
+
+- [ ] **27. Heartbeat `device_id` aus Request-Body — IDOR + Rate-Limit-Bypass**
+  `POST /api/heartbeat` liest `device_id` aus dem Request-Body statt aus der Auth-Middleware.
+  **Rate-Limit-Bypass:** `rateLimitKey = deviceId || personId` (Zeile 392) — Angreifer kann beliebige `device_id`-Strings senden und das Device-Rate-Limit umgehen.
+  **IDOR / Account-Takeover:** `upsertPersonDevice()` (Zeile 411) führt `ON CONFLICT(device_id) DO UPDATE SET person_id = excluded.person_id` aus. Ein Angreifer kann die `device_id` eines Opfers im Body senden. Da der Ownership-Check nur den authentifizierten Device gegen die eigene Person prüft, wird der `person_devices`-Eintrag des Opfers überschrieben — das Opfer verliert den Zugriff auf seine eigene Person (403).
+  **Fix:** `device_id` im Heartbeat-Body ignorieren und ausschließlich den authentifizierten `authDeviceId` aus der Middleware verwenden (für Rate-Limiting und `upsertPersonDevice`).
 
 - [x] **4. CORS `origin: '*'`**
   API akzeptiert jetzt nur noch erlaubte Origins:
@@ -52,6 +58,17 @@ Status: offen
 
 - [x] **8. Fehlende Ownership-Prüfung bei DELETE**
   `DELETE /api/person/:id/devices` prüft jetzt via `deviceOwnsPerson()` ob der Requester die Person besitzt.
+
+- [ ] **28. `watchers.max_persons` wird serverseitig nicht durchgesetzt**
+  `POST /api/pair/confirm` prüft nicht, ob der Watcher sein `max_persons`-Limit (Default: 2) bereits erreicht hat.
+  Nur das Frontend limitiert via `MAX_WATCHED_PERSONS`. Ein Watcher kann durch direkte API-Calls beliebig viele Personen überwachen.
+  **Fix:** Vor dem Anlegen einer `watch_relation` in `POST /api/pair/confirm` die aktive Watcher-Relation-Anzahl gegen `watchers.max_persons` prüfen.
+
+- [ ] **29. `POST /api/watcher` — push_token nicht validiert**
+  Die `parsePushToken()`-Funktion existiert, wird in `POST /api/watcher` aber nicht aufgerufen.
+  Push-Token wird ohne Längen-/Zeichenvalidierung direkt in `watcher_devices` geschrieben.
+  Security-Audit #11 markiert push_token-Validierung als erledigt, aber dieser Endpoint ist ausgenommen.
+  **Fix:** `parsePushToken()` in `POST /api/watcher` aufrufen und bei ungültigem Token 400 zurückgeben.
 
 - [ ] **9. Rate-Limiting nur per Device/Person, nicht per IP**
   Rate-Limiting wurde auf Device-ID-basiert umgestellt, aber ein Angreifer kann beliebig viele device_ids generieren.
@@ -93,6 +110,23 @@ Status: offen
 - [x] **15. Unbegrenzte Geräte pro Person (Resource Exhaustion)**
   `persons.max_devices` wurde eingeführt (Default `1`) und wird serverseitig in `POST /api/person/:id/devices` erzwungen.
   `mode = add` liefert ohne freien Slot einen `409`, `mode = switch` ersetzt bei Ein-Gerät-Setups die alte Person-Gerätebindung kontrolliert.
+
+- [ ] **30. Soft-Delete Person unvollständig**
+  `DELETE /api/person/:id` setzt nur `deleted_at` auf `persons`. Danach bleiben aktiv:
+  `device_keys` (Device authentifiziert sich weiter), `person_devices` (Ownership bestehen), `watch_relations` (Watcher bekommen weiter Notifications), `device_rate_limits`, `pairing_requests`, `device_link_requests`.
+  Die Person ist "gelöscht", aber funktional passiert nichts.
+  **Fix:** Beim Soft-Delete auch `device_keys` löschen (oder invalidieren), `person_devices` aufräumen und `watch_relations` soft-deleten. Alternativ: Hard-Delete mit kaskadiertem Cleanup.
+
+- [ ] **31. XSS über localStorage-Photo in `buildPersonAvatarMarkup`**
+  `src/frontend/watcher.ts:704`: `'<img src="' + photo + '" ...>'` — `photo` aus localStorage wird nicht escaped.
+  Bei Zugriff auf localStorage (z.B. über andere XSS-Lücke, Shared Device, DevTools) kann eine bösartige Photo-URL eingeschleust werden (`" onerror="alert(1)`).
+  Steht im Zusammenhang mit #14 (Sensitive Daten in localStorage) und #18 (innerHTML).
+  **Fix:** `photo` durch `escapeHtml()` laufen lassen oder `img.src` via DOM-API setzen.
+
+- [ ] **32. Race Condition bei Pairing-Confirm — doppelte watch_relations**
+  `POST /api/pair/confirm`: Zwei gleichzeitige Requests können beide `status = 'pending'` sehen, beide die Prüfung passieren und doppelte `watch_relations`-Einträge erzeugen (kein UNIQUE-Constraint auf `person_id + watcher_id`).
+  Niedrigeres Risiko (kurze Zeitfenster, aktive User-Interaktion nötig).
+  **Fix:** UNIQUE-Index auf `watch_relations(person_id, watcher_id) WHERE removed_at IS NULL` oder atomares INSERT mit Conflict-Handling.
 
 - [ ] **16. Kein Key-Rotation / Kein Key-Revocation**
   API-Keys sind 1 Jahr gültig (Cookie Max-Age), es gibt keinen Endpoint zum Invalidieren oder Rotieren.
@@ -182,8 +216,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 5      | 0             |
-| Hoch        | 7      | 1             |
-| Mittel      | 7      | 4             |
+| Kritisch    | 6      | 1             |
+| Hoch        | 9      | 3             |
+| Mittel      | 10     | 7             |
 | Niedrig     | 8      | 8             |
-| **Gesamt**  | **27** | **13**        |
+| **Gesamt**  | **33** | **19**        |
