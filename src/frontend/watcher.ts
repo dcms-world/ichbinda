@@ -308,7 +308,7 @@ input[type="text"]:focus, select:focus {
 
 <header class="app-header">
   <div class="app-logo">iBinda</div>
-  <div class="watcher-profile" onclick="askForWatcherName()">
+  <div class="watcher-profile" onclick="showProfileInfo()" style="cursor:pointer">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
     <span id="watcherNameDisplay" class="watcher-name">-</span>
   </div>
@@ -606,6 +606,15 @@ function getWatcherName(){return(localStorage.getItem(WATCHER_NAME_KEY)||'').tri
 function setWatcherName(name){localStorage.setItem(WATCHER_NAME_KEY,normalizeDisplayName(name))}
 function renderWatcherName(){const el=document.getElementById('watcherNameDisplay');if(el)el.textContent=getWatcherName()||'Name wählen'}
 
+function showProfileInfo(){
+  const id = getWatcherId() || '–';
+  const raw = localStorage.getItem('ibinda_watcher_created_at');
+  const created = raw ? new Date(raw).toLocaleString('de-DE') : '–';
+  const msgEl = document.getElementById('statusModalMessage');
+  if (msgEl) { msgEl.style.whiteSpace = 'pre-wrap'; msgEl.style.wordBreak = 'break-all'; }
+  showStatusModal(getWatcherName() || 'Mein Profil', 'ID: ' + id + '  |  Erstellt: ' + created, 'ℹ️');
+}
+
 function askForWatcherName(){
   return new Promise((resolve)=>{
     const overlay=document.getElementById('nameModalOverlay');
@@ -816,6 +825,7 @@ async function init() {
   }
   const meta = await fetch(API_URL + '/watcher/' + getWatcherId()).then(r => r.json()).catch(() => ({}));
   if (meta.max_persons) MAX_WATCHED_PERSONS = meta.max_persons;
+  if (meta.created_at) localStorage.setItem('ibinda_watcher_created_at', meta.created_at);
   loadPersons();
 }
 
@@ -841,11 +851,13 @@ async function addPerson() {
   const input = document.getElementById('personId').value;
   const parsed = parsePersonInput(input);
   if (parsed?.error) { showDisplayNameValidationError(parsed.error); return; }
-  
+
+  const watcherName = await ensureWatcherName();
+
   try {
     const res = await fetch(API_URL + '/pair/respond', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pairing_token: parsed.pairingToken, watcher_name: getWatcherName() })
+      body: JSON.stringify({ pairing_token: parsed.pairingToken, watcher_name: watcherName })
     });
     if (!res.ok) throw new Error('Fehler ' + res.status);
     document.getElementById('personId').value = '';

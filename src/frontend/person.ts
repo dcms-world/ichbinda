@@ -539,6 +539,15 @@ h1 {
 </form>
 </div>
 
+<div class="pairing-modal-overlay" id="profileInfoOverlay" onclick="if(event.target===this)closeProfileInfo()">
+<div class="pairing-modal" role="dialog" aria-modal="true">
+<h2 id="profileInfoName">Mein Profil</h2>
+<p id="profileInfoId" style="font-size:13px;word-break:break-all;color:var(--text-muted,#888)"></p>
+<p id="profileInfoCreated" style="font-size:13px;color:var(--text-muted,#888)"></p>
+<button type="button" onclick="closeProfileInfo()" style="margin-top:16px;width:100%">OK</button>
+</div>
+</div>
+
 <div class="pairing-modal-overlay" id="pairingQrModalOverlay">
 <div class="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairingQrTitle">
 <h2 id="pairingQrTitle">QR-Code anzeigen</h2>
@@ -617,7 +626,7 @@ h1 {
     <span class="name-label">Dein Name</span>
     <div class="settings-list">
       <div class="settings-item">
-        <div class="name-display" id="personNameDisplay">-</div>
+        <div class="name-display" id="personNameDisplay" onclick="showProfileInfo()" style="cursor:pointer">-</div>
       </div>
     </div>
   </div>
@@ -693,6 +702,7 @@ let currentPersonName='';
 let currentDeviceId='';
 let currentPersonMaxDevices=1;
 let currentPersonDeviceCount=0;
+let currentPersonCreatedAt=localStorage.getItem('ibinda_person_created_at')||'';
 let currentPersonDeviceAction='switch';
 
 const COOKIE_MAX_AGE=60*60*24*365;
@@ -799,6 +809,9 @@ function renderQrCodeInto(id,qrPayload){const qrEl=document.getElementById(id);i
 async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildPairingQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startPairingPolling(currentPairingToken)}
 async function renderCurrentQrCode(forceRefresh){if(currentQrModalMode==='device-link'){clearPairingTimers();hidePairingRequest();hideDeviceSwitchRequest(false);clearDeviceLinkPolling();if(forceRefresh||!currentDeviceLinkToken){try{currentDeviceLinkToken=await createDeviceLinkToken(currentDeviceLinkMode)}catch(e){console.error('Device link QR render failed',e);setQrCopyStatus('Geräte-QR konnte nicht erstellt werden',true);return}}const qrPayload=buildDeviceLinkQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startDeviceLinkPolling(currentDeviceLinkToken);return}await renderQrCode(forceRefresh)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
+function showProfileInfo(){const id=currentPersonId||'–';const created=currentPersonCreatedAt?new Date(currentPersonCreatedAt).toLocaleString('de-DE'):'–';const name=currentPersonName||getPersonName()||'Mein Profil';const nameEl=document.getElementById('profileInfoName');const idEl=document.getElementById('profileInfoId');const createdEl=document.getElementById('profileInfoCreated');if(nameEl)nameEl.textContent=name;if(idEl)idEl.textContent='ID: '+id;if(createdEl)createdEl.textContent='Erstellt: '+created;document.getElementById('profileInfoOverlay').classList.add('open')}
+function closeProfileInfo(){document.getElementById('profileInfoOverlay').classList.remove('open')}
+
 function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
 
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open');if(!isPairingQrModalOpen()&&!isPairingRequestModalOpen()&&!isDeviceSwitchModalOpen()){clearPairingTimers();clearDeviceLinkPolling();currentPairingToken='';clearQrCodeElement('qrcode');setQrCopyStatus('',false)}}
@@ -834,7 +847,7 @@ function startCooldown(seconds){const btn=document.getElementById('btnOkay');con
 
 async function sendHeartbeat(){console.log('sendHeartbeat called');const btn=document.getElementById('btnOkay');const status=document.getElementById('status');const personId=getPersonId();if(!hasActiveWatcherConnection){openPairingQrModal();return}if(!personId){console.error('No person ID');status.className='status error';status.textContent='❌ Fehler: Keine Person ID';return}if(cooldownInterval){console.log('Cooldown active');return}status.className='status';status.textContent='Wird gesendet...';const payload={person_id:personId,device_id:currentDeviceId||getOrCreateDeviceId()};try{console.log('Sending payload',payload);const res=await fetch(API_URL+'/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});console.log('Response',res.status);if(res.ok){if(cooldownInterval){clearInterval(cooldownInterval);cooldownInterval=null}btn.disabled=false;clearButtonError();const data=await res.json();status.className='status success';status.textContent='✅ Gemeldet!';document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.timestamp).toLocaleString('de-DE');if(currentPersonId)loadWatchers(currentPersonId);setTimeout(resetStatus,3000)}else if(res.status===429){const data=await res.json().catch(()=>({}));const retrySeconds=data.retry_after_seconds||20;startCooldown(retrySeconds)}else if(await isRealSessionLoss(res)){resetPersonApp('heartbeat-lost-ownership');return}else{const text=await res.text();console.error('Server error',res.status,text);throw new Error('Server error: '+res.status)}}catch(err){console.error('sendHeartbeat error',err);if(!cooldownInterval){setButtonError();status.className='status';status.textContent='';btn.disabled=false}}}
 
-async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(await isRealSessionLoss(res)){if(isAwaitingPendingDeviceSwitch())return;resetPersonApp('status-lost-ownership');return}if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}}}catch(e){}}
+async function loadStatus(personId){try{const res=await fetch(API_URL+'/person/'+personId);if(await isRealSessionLoss(res)){if(isAwaitingPendingDeviceSwitch())return;resetPersonApp('status-lost-ownership');return}if(res.ok){const data=await res.json();if(data.last_heartbeat){document.getElementById('lastCheckin').textContent='Letzte Meldung: '+new Date(data.last_heartbeat).toLocaleString('de-DE')}if(data.created_at){currentPersonCreatedAt=data.created_at;localStorage.setItem('ibinda_person_created_at',data.created_at)}}}catch(e){}}
 
 const WATCHER_NAMES_KEY='ibinda_watcher_names';
 function getCachedWatcherNames(){try{return JSON.parse(localStorage.getItem(WATCHER_NAMES_KEY)||'{}')}catch{return{}}}

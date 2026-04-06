@@ -1320,8 +1320,8 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     if (!owns) return c.json({ error: 'Forbidden' }, 403);
 
     const watcher = await c.env.DB.prepare(
-      'SELECT id, max_persons FROM watchers WHERE id = ?',
-    ).bind(watcherId).first<{ id: string; max_persons: number }>();
+      'SELECT id, max_persons, created_at FROM watchers WHERE id = ?',
+    ).bind(watcherId).first<{ id: string; max_persons: number; created_at: string | null }>();
     if (!watcher) return c.json({ error: 'Not found' }, 404);
     return c.json(watcher);
   });
