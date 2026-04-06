@@ -1213,12 +1213,9 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
   });
 
   app.post('/api/watcher', async (c) => {
-    const body = await c.req.json<{ push_token?: unknown; device_model?: unknown }>().catch((): { push_token?: unknown; device_model?: unknown } => ({}));
+    const body = await c.req.json<{ push_token?: unknown }>().catch((): { push_token?: unknown } => ({}));
     const pushToken = typeof body.push_token === 'string' ? body.push_token.trim() : '';
-    const deviceModel = parseDeviceModel(body.device_model);
-    if (deviceModel === null) {
-      return c.json({ error: `device_model too long` }, 400);
-    }
+    const deviceModel = detectDeviceModel(c.req.header('user-agent') ?? '');
 
     const deviceId = c.get('deviceId');
     const watcherId = crypto.randomUUID();
@@ -1227,7 +1224,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       c.env.DB.prepare(
         `INSERT OR REPLACE INTO watcher_devices (watcher_id, device_id, push_token, device_model, last_seen)
          VALUES (?, ?, ?, ?, datetime('now'))`,
-      ).bind(watcherId, deviceId, pushToken, deviceModel || 'unknown'),
+      ).bind(watcherId, deviceId, pushToken, deviceModel),
     ]);
     return c.json({ id: watcherId }, 201);
   });
