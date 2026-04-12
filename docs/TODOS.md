@@ -179,20 +179,48 @@ Referenzen:
 
 ---
 
-## Native App (Capacitor)
+## Native App (Flutter)
 - **Status:** offen
 - **Priorität:** mittel
-- **Beschreibung:** Web-UI als Capacitor-App verpacken, Push auf APNs/FCM umstellen, Deep Links, echte Gerätetests.
+- **Beschreibung:** Flutter-App für iOS und Android bauen. Beide Modi (Person + Watcher) in einer App, persistente Rollenwahl, dieselbe Worker-API als Backend. Entscheidung Flutter statt Capacitor: `docs/DECISIONS.md`.
 
-- [ ] Capacitor-Projekt aufsetzen
-- [ ] Push Notifications: Capacitor Push Plugin (APNs + FCM)
-- [ ] Backend: Expo-Abhängigkeiten entfernen und Push auf APNs/FCM umstellen (`src/app/helpers/db.ts` `checkOverduePersons`, `src/app/types.ts` `EXPO_ACCESS_TOKEN`, `wrangler.toml`, `README.md`, `scripts/smoke-test.sh` Expo-Push-Token-Format)
-- [ ] Cookie-/Storage-Auth in WebViews prüfen
-- [ ] Splash Screen + App Icon
-- [ ] Deep Links (QR → App)
-- [ ] Testen auf echten Geräten
+### Phase A: Projekt-Setup
+- [ ] Flutter-Projekt unter `mobile/` anlegen (Monorepo)
+- [ ] Ordnerstruktur: `lib/api/`, `lib/features/person/`, `lib/features/watcher/`, `lib/shared/`
+- [ ] Pakete: `flutter_secure_storage`, `http`, `go_router`, `riverpod`, `qr_flutter`, `mobile_scanner`, `firebase_messaging`, `flutter_local_notifications`
 
-- **Fortschritt:** Nicht gestartet.
+### Phase B: Core-Infrastruktur
+- [ ] API-Client (alle bestehenden Endpoints abbilden)
+- [ ] Secure Storage: API-Key, Device-ID, Modus (person/watcher)
+- [ ] Rollenauswahl beim ersten Start (einmalig, persistent)
+- [ ] Basis-Navigation mit `go_router`
+
+### Phase C: Person-Modus
+- [ ] Registrierung + Heartbeat-Button
+- [ ] QR-Code anzeigen (Pairing)
+- [ ] Pairing-Flow: Polling, Annehmen/Ablehnen
+- [ ] Watcher-Liste + Disconnect-Events
+- [ ] Gerätewechsel-Flow
+
+### Phase D: Watcher-Modus
+- [ ] Registrierung
+- [ ] QR-Code scannen (Pairing-Request senden)
+- [ ] Personen-Liste + Status
+- [ ] Überfälligkeits-Anzeige
+
+### Phase E: Push Notifications
+- [ ] Firebase-Projekt anlegen (FCM für Android + APNs für iOS)
+- [ ] `firebase_messaging` integrieren, Push-Token bei Registrierung an Backend senden
+- [ ] Backend: Expo-Abhängigkeiten entfernen, Push auf FCM/APNs direkt umstellen (`src/app/helpers/db.ts`, `src/app/types.ts`, `wrangler.toml`)
+- [ ] Foreground + Background Notification Handling
+
+### Phase F: Store-Vorbereitung
+- [ ] App Icon + Splash Screen
+- [ ] Deep Links: QR-Code öffnet direkt App
+- [ ] Testen auf echten Geräten (Android + iOS)
+- [ ] Codemagic CI/CD aufsetzen (automatische Builds bei Branch-Push)
+
+- **Fortschritt:** Nicht gestartet. Entscheidung Flutter statt Capacitor am 2026-04-12.
 - **Erledigt am:** -
 
 ---
