@@ -71,22 +71,24 @@ body {
   position: fixed;
   bottom: 30px;
   right: 24px;
-  width: 56px;
   height: 56px;
+  padding: 0 24px;
   background: var(--primary);
   color: white;
   border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   box-shadow: var(--shadow-lg);
   cursor: pointer;
   z-index: 500;
   border: none;
   transition: transform 0.2s ease, background 0.2s ease;
 }
-.fab:active { transform: scale(0.9); }
+.fab:active { transform: scale(0.95); }
 .fab svg { width: 24px; height: 24px; }
+.fab span { font-size: 16px; font-weight: 700; }
 
 /* Cards & List */
 .person-card {
@@ -314,7 +316,7 @@ input[type="text"]:focus, select:focus {
 </header>
 
 <div class="container">
-  <div class="section-title">
+  <div class="section-title" id="personListHeader" style="display:none">
     <span>Verbunden</span>
     <button onclick="loadPersons()" class="icon-btn" title="Aktualisieren">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -322,16 +324,17 @@ input[type="text"]:focus, select:focus {
   </div>
   
   <ul class="person-list" id="personList">
-    <li class="empty-state">
+    <li class="empty-state" id="emptyPersonState">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
       <h3>Noch niemand verbunden</h3>
-      <p>Klicke auf das Plus-Icon unten, um die erste Person zu überwachen.</p>
+      <p>Klicke auf „Gerät verbinden" unten, um die erste Person zu überwachen.</p>
     </li>
   </ul>
 </div>
 
 <button class="fab" onclick="toggleAddPerson(true)" id="fabAdd">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+  <span>Gerät verbinden</span>
 </button>
 
 <!-- Add Person Overlay -->
@@ -851,6 +854,9 @@ async function addPerson() {
   const parsed = parsePersonInput(input);
   if (parsed?.error) { showDisplayNameValidationError(parsed.error); return; }
 
+  // Name sofort lokal merken, falls im QR/Input vorhanden
+  if (parsed.name) storePersonName(parsed.personId, parsed.name);
+
   const watcherName = await ensureWatcherName();
 
   try {
@@ -936,11 +942,14 @@ async function loadPersons() {
   visiblePersonsById = {}; visible.forEach(p => visiblePersonsById[p.id] = p);
   
   const list = document.getElementById('personList');
+  const header = document.getElementById('personListHeader');
   if (visible.length === 0) {
-    list.innerHTML = '<li class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><h3>Noch niemand verbunden</h3><p>Klicke auf das Plus-Icon unten, um die erste Person zu überwachen.</p></li>';
+    if (header) header.style.display = 'none';
+    list.innerHTML = EMPTY_PERSON_STATE_HTML;
     return;
   }
-  
+
+  if (header) header.style.display = '';
   list.innerHTML = visible.sort((a,b) => (a.status === 'overdue' ? -1 : 1)).map(buildPersonRow).join('');
 }
 
@@ -1009,6 +1018,7 @@ async function removePersonFromModal() {
   }
 }
 
+const EMPTY_PERSON_STATE_HTML = document.getElementById('emptyPersonState').outerHTML;
 init();
 setInterval(loadPersons, 30000);
 </script>
