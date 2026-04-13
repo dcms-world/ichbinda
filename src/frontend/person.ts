@@ -253,11 +253,13 @@ h1 {
 }
 
 .settings-section h3, .name-label, .settings-group-title {
-  font-size: 13px;
-  color: var(--system-secondary-label);
+  font-size: 14px;
+  color: var(--system-label);
+  opacity: 0.8;
   text-transform: uppercase;
   margin: 0 32px 8px;
-  font-weight: 400;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .settings-list {
@@ -301,9 +303,11 @@ h1 {
 .qr-copy-status.error { color: var(--system-red); }
 
 .settings-help {
-  font-size: 13px;
-  color: var(--system-secondary-label);
+  font-size: 14px;
+  color: var(--system-label);
+  opacity: 0.75;
   margin: 8px 32px 0;
+  line-height: 1.4;
 }
 
 /* Device List */
@@ -516,12 +520,13 @@ h1 {
 </div>
 
 <div class="pairing-modal-overlay" id="profileInfoOverlay" onclick="if(event.target===this)closeProfileInfo()">
-<div class="pairing-modal" role="dialog" aria-modal="true">
-<h2 id="profileInfoName">Mein Profil</h2>
-<p id="profileInfoId" style="font-size:13px;word-break:break-all;color:var(--text-muted,#888)"></p>
-<p id="profileInfoCreated" style="font-size:13px;color:var(--text-muted,#888)"></p>
-<button type="button" onclick="closeProfileInfo()" style="margin-top:16px;width:100%">OK</button>
-</div>
+  <div class="pairing-modal" role="dialog" aria-modal="true" style="text-align:center;padding:32px;border-radius:24px;">
+    <div id="profileAvatar" style="width:100px;height:100px;background:#e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:700;color:var(--system-gray);margin:0 auto 16px;">?</div>
+    <div id="profileInfoName" style="font-weight:800; font-size:24px; margin-bottom:4px; color:var(--system-label);"></div>
+    <div id="profileInfoId" style="font-size:12px; font-family:monospace; color:var(--system-secondary-label); margin-bottom:24px; opacity:0.8;"></div>
+    <div id="profileInfoCreated" style="font-size:14px; color:var(--system-secondary-label); margin-bottom:28px;"></div>
+    <button type="button" class="qr-scan-btn" onclick="closeProfileInfo()" style="width:100%;margin:0;background:var(--system-blue);color:#fff;font-weight:600;padding:14px;border-radius:12px;">Schließen</button>
+  </div>
 </div>
 
 <div class="pairing-modal-overlay" id="deleteAccountOverlay">
@@ -608,18 +613,14 @@ h1 {
 
 <div class="settings-content">
   <div class="settings-section">
-    <span class="name-label">Dein Name</span>
-    <div class="settings-list">
-      <div class="settings-item">
-        <div class="name-display" id="personNameDisplay" onclick="showProfileInfo()" style="cursor:pointer">-</div>
-      </div>
-    </div>
+    <span class="name-label">Name</span>
+    <div class="name-static" id="personNameDisplay" onclick="showProfileInfo()" style="cursor:pointer;margin:0 32px 16px;font-size:24px;font-weight:700;color:var(--system-label);">-</div>
   </div>
 
   <div class="settings-section">
     <h3>QR-Code zum Verbinden</h3>
     <button type="button" class="qr-scan-btn" onclick="openPairingQrModal()">QR-Code anzeigen</button>
-    <small class="settings-help">Weitere Watcher können sich über dieses Fenster direkt mit dir verbinden.</small>
+    <small class="settings-help" style="display:block;">Andere Personen können sich über diesen Fenster direkt mit dir verbinden.</small>
   </div>
 
   <div class="settings-section">
@@ -630,20 +631,22 @@ h1 {
   <div class="settings-section">
     <h3>Geräte</h3>
     <div class="settings-list" id="deviceList">
-      <div class="settings-item"><div class="device-empty">Wird geladen...</div></div>
+      <div class="settings-item"><div class="device-empty">Geräte werden geladen...</div></div>
     </div>
-    <small class="settings-help">Verknüpfte Geräte für diese Person.</small>
   </div>
 
-  <div class="settings-section" style="margin-top:8px;padding-top:16px;border-top:1px solid rgba(148,163,184,0.15)">
-    <button type="button" onclick="deletePersonAccount()" style="width:100%;background:transparent;border:1.5px solid #ef4444;color:#ef4444;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">Konto löschen</button>
-    <small class="settings-help">Alle Verbindungen werden getrennt. Nicht rückgängig zu machen.</small>
+  <div class="settings-section" id="deviceActionSection" style="margin-top:8px;padding-top:16px;border-top:1px solid rgba(148,163,184,0.15)">
+    <h3 id="deviceActionTitle" style="margin-bottom:8px;">Auf anderes Gerät wechseln</h3>
+    <button type="button" class="qr-scan-btn" id="deviceActionButton" onclick="startDeviceQrScan()" style="width:calc(100% - 32px);margin:0 16px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;font-size:15px;font-weight:600;">QR-Code scannen</button>
+    <small class="settings-help" id="deviceActionHelp" style="display:block;margin-top:12px;">Scanne den QR-Code eines neuen Geräts um zu wechseln.</small>
   </div>
 
-  <div class="settings-section" id="deviceActionSection">
-    <h3 id="deviceActionTitle">Auf anderes Gerät wechseln</h3>
-    <button type="button" class="qr-scan-btn" id="deviceActionButton" onclick="startDeviceQrScan()">QR-Code scannen</button>
-    <small class="settings-help" id="deviceActionHelp">Scanne den QR-Code eines neuen Geräts. Der ursprünglich vergebene Name bleibt unverändert.</small>
+  <div class="settings-section" style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(239,68,68,0.2)">
+    <h3 style="color:#ef4444;margin-bottom:12px;">Gefahrenzone</h3>
+    <button type="button" onclick="deletePersonAccount()" style="width:calc(100% - 32px);margin:0 16px;box-sizing:border-box;background:rgba(239,68,68,0.05);border:1.5px solid rgba(239,68,68,0.4);color:#ef4444;padding:12px 16px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:600;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:8px;" onmouseover="this.style.background='#ef4444';this.style.color='#fff'" onmouseout="this.style.background='rgba(239,68,68,0.05)';this.style.color='#ef4444';">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
+      Konto endgültig löschen
+    </button>
   </div>
 </div>
 </div>
@@ -788,7 +791,7 @@ function renderQrCodeInto(id,qrPayload){const qrEl=document.getElementById(id);i
 async function renderQrCode(forceRefresh){if(!currentPersonId)return;clearPairingTimers();hidePairingRequest();if(forceRefresh||!currentPairingToken){try{currentPairingToken=await createPairingToken()}catch(e){console.error('QR render failed',e);setQrCopyStatus('QR-Code konnte nicht erstellt werden',true);return}}const qrPayload=buildPairingQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startPairingPolling(currentPairingToken)}
 async function renderCurrentQrCode(forceRefresh){if(currentQrModalMode==='device-link'){clearPairingTimers();hidePairingRequest();hideDeviceSwitchRequest(false);clearDeviceLinkPolling();if(forceRefresh||!currentDeviceLinkToken){try{currentDeviceLinkToken=await createDeviceLinkToken(currentDeviceLinkMode)}catch(e){console.error('Device link QR render failed',e);setQrCopyStatus('Geräte-QR konnte nicht erstellt werden',true);return}}const qrPayload=buildDeviceLinkQrPayload();if(!qrPayload)return;renderQrCodeInto('qrcode',qrPayload);startDeviceLinkPolling(currentDeviceLinkToken);return}await renderQrCode(forceRefresh)}
 function renderPersonName(){document.getElementById('personNameDisplay').textContent=currentPersonName||getPersonName()||'-'}
-function showProfileInfo(){const id=currentPersonId||'–';const created=currentPersonCreatedAt?new Date(currentPersonCreatedAt).toLocaleString('de-DE'):'–';const name=currentPersonName||getPersonName()||'Mein Profil';const nameEl=document.getElementById('profileInfoName');const idEl=document.getElementById('profileInfoId');const createdEl=document.getElementById('profileInfoCreated');if(nameEl)nameEl.textContent=name;if(idEl)idEl.textContent='ID: '+id;if(createdEl)createdEl.textContent='Erstellt: '+created;document.getElementById('profileInfoOverlay').classList.add('open')}
+function showProfileInfo(){const id=currentPersonId||'–';let created='–';if(currentPersonCreatedAt){try{let isoStr=currentPersonCreatedAt;if(isoStr.includes(' ')&&!isoStr.includes('T')){isoStr=isoStr.replace(' ','T')+'Z'}const d=new Date(isoStr);if(!isNaN(d.getTime())){created=d.toLocaleDateString('de-DE')}}catch(e){console.error('Date parsing failed',e)}}const name=currentPersonName||getPersonName()||'Profil';const nameEl=document.getElementById('profileInfoName');const idEl=document.getElementById('profileInfoId');const createdEl=document.getElementById('profileInfoCreated');const avatarEl=document.getElementById('profileAvatar');if(nameEl)nameEl.textContent=name;if(idEl)idEl.textContent='ID: '+id;if(createdEl)createdEl.textContent='Mitglied seit '+created;if(avatarEl)avatarEl.textContent=name.charAt(0).toUpperCase();document.getElementById('profileInfoOverlay').classList.add('open')}
 function closeProfileInfo(){document.getElementById('profileInfoOverlay').classList.remove('open')}
 
 function openSettings(){console.log('openSettings called');document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');renderPersonName();loadDevices();if(currentPersonId)loadWatchers(currentPersonId);const doneBtn=document.querySelector('#settingsPanel .btn-done');if(doneBtn)doneBtn.focus()}
@@ -840,7 +843,7 @@ async function registerCurrentDevice(personId,mode){const deviceId=currentDevice
 
 async function deleteDevice(deviceId){if(!currentPersonId)return;const confirmed=confirm('Gerät wirklich entfernen?');if(!confirmed)return;try{const res=await fetch(API_URL+'/person/'+encodeURIComponent(currentPersonId)+'/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId})});if(res.ok){await loadDevices();return}const data=await res.json().catch(()=>({}));if(res.status===409){alert(data.error||'Das letzte Gerät kann nicht gelöscht werden.');return}throw new Error(data.error||'Löschen fehlgeschlagen')}catch(e){console.error('Delete device failed',e);alert('Gerät konnte nicht gelöscht werden. Bitte erneut versuchen.')}}
 
-function updateDeviceActionSection(meta){const section=document.getElementById('deviceActionSection');const title=document.getElementById('deviceActionTitle');const button=document.getElementById('deviceActionButton');const help=document.getElementById('deviceActionHelp');if(!section||!title||!button||!help)return;currentPersonMaxDevices=Number(meta&&meta.max_devices)||1;currentPersonDeviceCount=Number(meta&&meta.device_count)||0;const action=meta&&typeof meta.device_action==='string'?meta.device_action:'';currentPersonDeviceAction=action==='add'||action==='full'?action:'switch';button.style.display='inline-flex';button.disabled=false;if(hasActiveWatcherConnection){stopDeviceQrScanner();if(currentPersonDeviceAction==='switch'){title.textContent='Auf anderes Gerät wechseln';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('switch');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Erst nach deiner Bestätigung auf diesem Gerät wird gewechselt und dieses Gerät zurückgesetzt. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}if(currentPersonDeviceAction==='add'){title.textContent='Neues Gerät hinzufügen';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('add');help.textContent='Zeige diesen QR-Code auf diesem Gerät an und scanne ihn mit dem neuen unverbundenen Gerät. Der ursprünglich vergebene Name bleibt unverändert.';section.style.display='block';return}title.textContent='Weitere Geräte';help.textContent='Gerätelimit erreicht. Solange alle Plätze belegt sind, kann kein weiteres Gerät hinzugefügt werden.';button.style.display='none';section.style.display='block';return}title.textContent='Mit bestehendem Konto verbinden';button.textContent='QR scannen';button.onclick=()=>startDeviceQrScan();help.textContent='Scanne den QR-Code eines bestehenden Gerätes um das andere Gerät durch dieses zu ersetzen.';section.style.display='block'}
+function updateDeviceActionSection(meta){const section=document.getElementById('deviceActionSection');const title=document.getElementById('deviceActionTitle');const button=document.getElementById('deviceActionButton');const help=document.getElementById('deviceActionHelp');if(!section||!title||!button||!help)return;currentPersonMaxDevices=Number(meta&&meta.max_devices)||1;currentPersonDeviceCount=Number(meta&&meta.device_count)||0;const action=meta&&typeof meta.device_action==='string'?meta.device_action:'';currentPersonDeviceAction=action==='add'||action==='full'?action:'switch';button.style.display='inline-flex';button.disabled=false;if(hasActiveWatcherConnection){stopDeviceQrScanner();if(currentPersonDeviceAction==='switch'){title.textContent='Auf anderes Gerät wechseln';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('switch');help.textContent='Scanne den QR-Code eines neuen Geräts um zu wechseln.';section.style.display='block';return}if(currentPersonDeviceAction==='add'){title.textContent='Neues Gerät hinzufügen';button.textContent='QR-Code anzeigen';button.onclick=()=>openDeviceLinkQrModal('add');help.textContent='Scanne den QR-Code eines neuen Geräts um es hinzuzufügen.';section.style.display='block';return}title.textContent='Weitere Geräte';help.textContent='Gerätelimit erreicht.';button.style.display='none';section.style.display='block';return}title.textContent='Mit bestehendem Konto verbinden';button.textContent='QR scannen';button.onclick=()=>startDeviceQrScan();help.textContent='Scanne einen Geräte-QR um dieses Gerät zu verbinden.';section.style.display='block'}
 
 function renderDeviceList(devices){const listEl=document.getElementById('deviceList');if(!listEl)return;if(!Array.isArray(devices)||devices.length===0){listEl.innerHTML='<div class="device-empty">Keine Geräte vorhanden.</div>';return}const activeDeviceId=currentDeviceId||getOrCreateDeviceId();currentDeviceId=activeDeviceId;const hideDeleteForSingleDevice=devices.length<=1;listEl.innerHTML=devices.map((device)=>{const isCurrent=device.device_id===activeDeviceId;const badges=[];if(isCurrent)badges.push('<span class="device-badge current">Dieses Gerät</span>');const model=escapeHtml(device.device_model||'Desktop');const lastSeen=escapeHtml(formatLastSeen(device.last_seen));const showDeleteButton=!hideDeleteForSingleDevice&&!isCurrent;return '<div class="device-row"><div class="device-main"><div class="device-title">'+model+'</div><div class="device-meta">Zuletzt aktiv: '+lastSeen+'</div><div class="device-badges">'+badges.join('')+'</div></div>'+(showDeleteButton?'<button type="button" class="device-delete-btn" data-device-id="'+escapeHtml(device.device_id)+'">Löschen</button>':'')+'</div>'}).join('');listEl.querySelectorAll('.device-delete-btn').forEach((button)=>{button.addEventListener('click',(event)=>{const target=event.currentTarget;if(!target)return;const deviceId=target.getAttribute('data-device-id');if(!deviceId||target.disabled)return;deleteDevice(deviceId)})})}
 
