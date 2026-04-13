@@ -620,7 +620,6 @@ h1 {
   <div class="settings-section">
     <h3>QR-Code zum Verbinden</h3>
     <button type="button" class="qr-scan-btn" onclick="openPairingQrModal()">QR-Code anzeigen</button>
-    <small class="settings-help" style="display:block;">Andere Personen können sich über diesen Fenster direkt mit dir verbinden.</small>
   </div>
 
   <div class="settings-section">
