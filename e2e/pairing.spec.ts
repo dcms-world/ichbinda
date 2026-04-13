@@ -1,29 +1,13 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function stubTurnstile(context: BrowserContext): Promise<void> {
-  await context.route('https://challenges.cloudflare.com/turnstile/v0/api.js*', async (route) => {
-    await route.fulfill({
-      contentType: 'application/javascript',
-      body: '',
-    });
-  });
-}
 
 async function registerPerson(page: Page, displayName: string): Promise<string> {
   await page.goto('/person.html');
   await expect(page.locator('#personNameInput')).toBeVisible();
   await page.locator('#personNameInput').fill(displayName);
   await page.getByRole('button', { name: 'Speichern' }).click();
-  await page.waitForFunction(() => typeof (window as { onTurnstileSuccess?: unknown }).onTurnstileSuccess === 'function');
-  await expect(page.locator('#authOverlay')).toBeVisible();
-  await page.evaluate(async (token) => {
-    await (window as Window & { onTurnstileSuccess(token: string): Promise<void> }).onTurnstileSuccess(token);
-  }, TURNSTILE_TEST_TOKEN);
   await page.waitForFunction(() => !!window.localStorage.getItem('ibinda_person_id'));
-  await expect(page.locator('#authOverlay')).toBeHidden();
   await expect(page.locator('#status')).toContainText('Richte zuerst eine Verbindung ein');
   const personId = await page.evaluate(() => window.localStorage.getItem('ibinda_person_id') || '');
   expect(personId).not.toBe('');
@@ -32,12 +16,6 @@ async function registerPerson(page: Page, displayName: string): Promise<string> 
 
 async function registerWatcher(page: Page, displayName: string): Promise<void> {
   await page.goto('/watcher.html');
-  await page.waitForFunction(() => typeof (window as { onTurnstileSuccess?: unknown }).onTurnstileSuccess === 'function');
-  await expect(page.locator('#authOverlay')).toBeVisible();
-  await page.evaluate(async (token) => {
-    await (window as Window & { onTurnstileSuccess(token: string): Promise<void> }).onTurnstileSuccess(token);
-  }, TURNSTILE_TEST_TOKEN);
-  await expect(page.locator('#authOverlay')).toBeHidden();
   await expect(page.locator('#watcherNameInput')).toBeVisible();
   await page.locator('#watcherNameInput').fill(displayName);
   await page.getByRole('button', { name: 'Speichern' }).click();
@@ -144,9 +122,6 @@ async function decodeRenderedQr(page: Page): Promise<string> {
 test('pairing confirmation updates watcher list immediately', async ({ browser }) => {
   const personContext = await browser.newContext();
   const watcherContext = await browser.newContext();
-
-  await stubTurnstile(personContext);
-  await stubTurnstile(watcherContext);
 
   const personPage = await personContext.newPage();
   const watcherPage = await watcherContext.newPage();

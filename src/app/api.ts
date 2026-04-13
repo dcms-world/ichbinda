@@ -4,7 +4,6 @@ import {
   MAX_CHECK_INTERVAL_MINUTES,
   MIN_CHECK_INTERVAL_MINUTES,
   PAIRING_TOKEN_TTL_MINUTES,
-  TURNSTILE_TEST_TOKEN,
 } from './constants';
 import {
   checkRateLimit,
@@ -24,11 +23,7 @@ import {
   applyCorsHeaders,
   constantTimeEquals,
   hashApiKey,
-  isLocalHostHeader,
-  isLocalRequest,
   resolveAllowedCorsOrigin,
-  resolveTurnstileSecret,
-  verifyTurnstileToken,
 } from './helpers/security';
 import {
   detectDeviceModel,
@@ -254,30 +249,15 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/auth/register-device', async (c) => {
     try {
-      const body = await c.req.json<{ device_id?: string; turnstile_token?: string; role?: string }>();
-      const { device_id, turnstile_token } = body;
+      const body = await c.req.json<{ device_id?: string; role?: string }>();
+      const { device_id } = body;
       const role = body.role === 'watcher' ? 'watcher' : 'person';
 
-      if (!device_id || !turnstile_token) {
-        return c.json({ error: 'device_id und turnstile_token erforderlich' }, 400);
+      if (!device_id) {
+        return c.json({ error: 'device_id erforderlich' }, 400);
       }
       if (device_id.length > 255) {
         return c.json({ error: 'device_id zu lang' }, 400);
-      }
-
-      const isLocalTurnstileTestRequest =
-        turnstile_token === TURNSTILE_TEST_TOKEN &&
-        (
-          isLocalRequest(c.req.url) ||
-          isLocalHostHeader(c.req.header('host')) ||
-          Boolean(c.env.DEV_TOKEN)
-        );
-      const turnstileSecret = resolveTurnstileSecret(c.req.url, c.env.TURNSTILE_SECRET_KEY, c.req.header('host'));
-      const valid = isLocalTurnstileTestRequest
-        ? true
-        : await verifyTurnstileToken(turnstile_token, turnstileSecret);
-      if (!valid) {
-        return c.json({ error: 'Bot-Check fehlgeschlagen' }, 400);
       }
 
       const existingDevice = await c.env.DB.prepare(

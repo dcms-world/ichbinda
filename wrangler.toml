@@ -15,9 +15,6 @@ migrations_dir = "migrations"
 crons = ["* * * * *"] # Jede Minute
 
 # Environment Variables (Secrets via wrangler secret)
-[vars]
-TURNSTILE_SITE_KEY = "0x4AAAAAACuh4_5jdfIdTeIC"
-# EXPO_ACCESS_TOKEN = "" # Via wrangler secret put EXPO_ACCESS_TOKEN
 # Secrets (nicht hier – via wrangler secret put):
-#   TURNSTILE_SECRET_KEY
+#   EXPO_ACCESS_TOKEN
 #   DEV_TOKEN (nur für Staging, nicht Prod)

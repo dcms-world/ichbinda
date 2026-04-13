@@ -6,7 +6,6 @@ export const PERSON_HTML = `<!DOCTYPE html>
 <title>iBinda - Ich bin okay</title>
 <script>__QRCODE_SCRIPT__</script>
 <script>__JSQR_SCRIPT__</script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 :root {
   --system-blue: #007AFF;
@@ -461,29 +460,6 @@ h1 {
 .cooldown-progress { height: 100%; background: var(--system-blue); width: 0%; transition: width 1s linear; }
 .cooldown-countdown { font-size: 24px; font-weight: 700; color: var(--system-blue); margin-top: 8px; text-align: center; }
 
-/* Turnstile / Auth Overlay */
-#authOverlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  background: rgba(0,0,0,0.6);
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  backdrop-filter: blur(10px);
-}
-.auth-modal {
-  background: var(--system-secondary-background);
-  border-radius: 20px;
-  padding: 32px 24px;
-  max-width: 340px;
-  width: 100%;
-  text-align: center;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-}
-.auth-modal h2 { font-size: 22px; font-weight: 700; color: var(--system-label); margin-bottom: 8px; }
-.auth-modal p { color: var(--system-secondary-label); font-size: 15px; margin-bottom: 24px; }
 
 /* QR Scanner Modal */
 .device-scan-overlay {
@@ -681,15 +657,6 @@ h1 {
 </div>
 </div>
 
-<div id="authOverlay">
-<div class="auth-modal">
-<div style="font-size:48px;margin-bottom:12px">🔐</div>
-<h2>Einmalige Einrichtung</h2>
-<p>Bitte kurz bestätigen, dass du kein Bot bist.</p>
-<div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__" data-callback="onTurnstileSuccess"></div>
-<p id="authStatus" style="margin-top:16px;color:var(--system-red);font-size:14px;min-height:20px"></p>
-</div>
-</div>
 
 <div class="container">
 <h1>iBinda</h1>
@@ -732,9 +699,7 @@ function hasTwoLetterStart(name){const chars=[...String(name||'').trim()];return
 function getDisplayNameValidationError(name){const trimmed=String(name||'').trim();if(trimmed.length<2)return'name-too-short';if(trimmed.length>MAX_DISPLAY_NAME_LENGTH)return'name-too-long';if(!hasTwoLetterStart(trimmed))return'name-invalid-start';return''}
 function showDisplayNameValidationError(errorCode){if(errorCode==='name-too-short'){alert('Der Name muss mindestens 2 Zeichen lang sein.')}else if(errorCode==='name-too-long'){alert('Der Name darf maximal 35 Zeichen lang sein.')}else if(errorCode==='name-invalid-start'){alert('Die ersten 2 Zeichen des Namens müssen Buchstaben sein.')}} 
 
-let resolveRegistered=null;
-async function onTurnstileSuccess(token){const statusEl=document.getElementById('authStatus');if(statusEl)statusEl.textContent='Registrierung läuft...';try{const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),turnstile_token:token,role:'person'})});if(!res.ok)throw new Error('Fehler '+res.status);setRegistered();const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='none';if(statusEl)statusEl.textContent='';if(resolveRegistered){resolveRegistered();resolveRegistered=null}}catch(e){if(statusEl)statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.'}}
-async function ensureRegistered(){if(isRegistered())return;const overlay=document.getElementById('authOverlay');if(overlay)overlay.style.display='flex';return new Promise(resolve=>{resolveRegistered=resolve})}
+async function ensureRegistered(){if(isRegistered())return;const res=await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:getOrCreateDeviceId(),role:'person'})});if(!res.ok)throw new Error('Registrierung fehlgeschlagen: '+res.status);setRegistered()}
 
 function getPersonId(){const id=localStorage.getItem('ibinda_person_id')||getCookie('ibinda_pid');if(id){localStorage.setItem('ibinda_person_id',id);setCookie('ibinda_pid',id)}return id||null}
 function setPersonId(id){localStorage.setItem('ibinda_person_id',id);setCookie('ibinda_pid',id)}

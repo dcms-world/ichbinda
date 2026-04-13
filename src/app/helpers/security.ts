@@ -5,9 +5,6 @@ import {
   API_CORS_ALLOW_METHODS,
   CAPACITOR_ALLOWED_ORIGINS,
   CONTENT_SECURITY_POLICY,
-  TURNSTILE_TEST_SECRET_KEY,
-  TURNSTILE_TEST_SITE_KEY,
-  TURNSTILE_TEST_TOKEN,
 } from '../constants';
 
 export function constantTimeEquals(left: string, right: string): boolean {
@@ -91,31 +88,3 @@ export function applySecurityHeaders(c: Context): void {
   }
 }
 
-export function resolveTurnstileSiteKey(url: string, configuredSiteKey?: string, hostHeader?: string): string {
-  return isLocalRequest(url) || isLocalHostHeader(hostHeader) ? TURNSTILE_TEST_SITE_KEY : (configuredSiteKey ?? '');
-}
-
-export function resolveTurnstileSecret(url: string, configuredSecret?: string, hostHeader?: string): string {
-  return isLocalRequest(url) || isLocalHostHeader(hostHeader) ? TURNSTILE_TEST_SECRET_KEY : (configuredSecret ?? '');
-}
-
-export async function verifyTurnstileToken(token: string, secret: string): Promise<boolean> {
-  if (secret === TURNSTILE_TEST_SECRET_KEY && token === TURNSTILE_TEST_TOKEN) {
-    return true;
-  }
-  if (!secret) {
-    return false;
-  }
-
-  try {
-    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret, response: token }),
-    });
-    const data = await response.json<{ success: boolean }>();
-    return data.success === true;
-  } catch {
-    return false;
-  }
-}

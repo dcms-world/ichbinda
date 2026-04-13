@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 
 import { registerApiRoutes } from './app/api';
 import { cleanupPairingRequests, checkOverduePersons } from './app/helpers/db';
-import { applySecurityHeaders, resolveTurnstileSiteKey } from './app/helpers/security';
+import { applySecurityHeaders } from './app/helpers/security';
 import { LANDING_HTML, renderPersonHtml, renderWatcherHtml } from './frontend';
 import type { AppBindings, AppEnv } from './app/types';
 
@@ -18,20 +18,8 @@ function htmlResponse(html: string): Response {
 }
 
 app.get('/', () => htmlResponse(LANDING_HTML));
-app.get('/person.html', (c) =>
-  htmlResponse(
-    renderPersonHtml(
-      resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')),
-    ),
-  ),
-);
-app.get('/watcher.html', (c) =>
-  htmlResponse(
-    renderWatcherHtml(
-      resolveTurnstileSiteKey(c.req.url, c.env.TURNSTILE_SITE_KEY, c.req.header('host')),
-    ),
-  ),
-);
+app.get('/person.html', (c) => htmlResponse(renderPersonHtml()));
+app.get('/watcher.html', (c) => htmlResponse(renderWatcherHtml()));
 
 app.use('*', async (c, next) => {
   await next();

@@ -5,7 +5,6 @@ export const WATCHER_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>iBinda — Watcher</title>
 <script>__JSQR_SCRIPT__</script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 :root {
   --primary: #4f46e5;
@@ -359,16 +358,6 @@ input[type="text"]:focus, select:focus {
   </div>
 </div>
 
-<!-- Auth Overlay -->
-<div id="authOverlay" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(15,23,42,0.9);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:24px">
-  <div class="modal-content">
-    <div class="modal-icon">🔐</div>
-    <h2 class="modal-title">Einmalige Einrichtung</h2>
-    <p class="modal-message">Bitte bestätige kurz, dass du ein Mensch bist.</p>
-    <div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__" data-callback="onTurnstileSuccess"></div>
-    <p id="authStatus" style="margin-top:16px;color:var(--status-overdue);font-size:14px;min-height:20px"></p>
-  </div>
-</div>
 
 <!-- Watcher Name Modal -->
 <div class="modal-overlay" id="nameModalOverlay">
@@ -516,33 +505,18 @@ function showDisplayNameValidationError(errorCode){
 
 function isRegistered(){return localStorage.getItem('ibinda_registered_watcher')==='1'}
 function setRegistered(){localStorage.setItem('ibinda_registered_watcher','1')}
-let resolveRegistered=null;
-
 function createWatcherDeviceId(){if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();if(window.crypto&&typeof window.crypto.getRandomValues==='function'){const bytes=new Uint8Array(16);window.crypto.getRandomValues(bytes);bytes[6]=bytes[6]&15|64;bytes[8]=bytes[8]&63|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20,32)}throw new Error('Secure random device id generation unavailable')}
-
-async function onTurnstileSuccess(token){
-  const statusEl = document.getElementById('authStatus');
-  if (statusEl) statusEl.textContent = 'Registrierung läuft...';
-  try {
-    const deviceId = localStorage.getItem('ibinda_watcher_device') || (() => {
-      const id = createWatcherDeviceId();
-      localStorage.setItem('ibinda_watcher_device', id);
-      return id;
-    })();
-    const res = await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,turnstile_token:token,role:'watcher'})});
-    if(!res.ok) throw new Error('Fehler '+res.status);
-    setRegistered();
-    document.getElementById('authOverlay').style.display='none';
-    if(resolveRegistered){resolveRegistered(); resolveRegistered=null;}
-  } catch(e) {
-    if(statusEl) statusEl.textContent='❌ '+e.message+' – Bitte Seite neu laden.';
-  }
-}
 
 async function ensureRegistered(){
   if(isRegistered()) return;
-  document.getElementById('authOverlay').style.display='flex';
-  return new Promise(resolve => { resolveRegistered = resolve; });
+  const deviceId = localStorage.getItem('ibinda_watcher_device') || (() => {
+    const id = createWatcherDeviceId();
+    localStorage.setItem('ibinda_watcher_device', id);
+    return id;
+  })();
+  const res = await fetch(API_URL+'/auth/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,role:'watcher'})});
+  if(!res.ok) throw new Error('Registrierung fehlgeschlagen: '+res.status);
+  setRegistered();
 }
 
 function handleOverlayClick(e, id) { if (e.target === e.currentTarget) { if(id==='addPersonOverlay') toggleAddPerson(false); else if(id==='statusModalOverlay') closeStatusModal(); else if(id==='confirmModalOverlay') closeConfirmModal(false); else if(id==='personDetailOverlay') closeDetailModal(); else if(id==='personEditOverlay') closeEditModal(); else if(id==='watcherProfileOverlay') closeWatcherProfile(); } }

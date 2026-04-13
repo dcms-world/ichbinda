@@ -2,8 +2,6 @@ export interface AppBindings {
   [key: string]: unknown;
   DB: D1Database;
   EXPO_ACCESS_TOKEN?: string;
-  TURNSTILE_SITE_KEY: string;
-  TURNSTILE_SECRET_KEY: string;
   DEV_TOKEN?: string;
 }
 
