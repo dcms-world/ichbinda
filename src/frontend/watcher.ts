@@ -455,7 +455,7 @@ input[type="text"]:focus, select:focus {
 
 
     <div class="button-row" style="flex-direction:column-reverse; gap:16px">
-      <button type="button" class="btn btn-danger" onclick="removePersonFromModal()">Person entfernen</button>
+      <button type="button" class="btn btn-danger" onclick="removePersonFromModal()">Löschen</button>
       <div class="button-row" style="gap:12px">
         <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Abbrechen</button>
         <button type="button" id="editSaveBtn" class="btn btn-primary" onclick="saveEditedPerson()">Speichern</button>
@@ -577,7 +577,7 @@ function closeStatusModal() {
 function showConfirmModal(title, message, confirmLabel) {
   const overlay = document.getElementById('confirmModalOverlay');
   document.getElementById('confirmModalTitle').textContent = title || 'Bestätigung';
-  document.getElementById('confirmModalMessage').textContent = message || '';
+  document.getElementById('confirmModalMessage').innerHTML = message || '';
   document.getElementById('confirmModalConfirmBtn').textContent = confirmLabel || 'Entfernen';
   overlay.classList.add('open');
   return new Promise((resolve) => { confirmModalResolver = resolve; });
@@ -1005,7 +1005,8 @@ async function handleEditPhotoChange(e) {
 
 async function removePersonFromModal() {
   const id = activeEditPersonId; if(!id) return;
-  const confirmed = await showConfirmModal('Verbindung trennen', 'Möchtest du die Überwachung für diese Person wirklich beenden?');
+  const personName = escapeHtml(getPersonName(id) || 'diese Person');
+  const confirmed = await showConfirmModal('Verbindung trennen', 'Möchtest du die Verbindung zu <strong>' + personName + '</strong> wirklich dauerhaft entfernen?');
   if (confirmed) {
     try {
       await fetch(API_URL + '/watch', {
