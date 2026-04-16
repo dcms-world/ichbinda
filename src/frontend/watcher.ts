@@ -731,6 +731,7 @@ function updatePersonLimitUi() {
 }
 
 async function refreshPersonCount() {
+  if (!getWatcherId()) return currentPersonCount;
   try {
     const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
     const persons = await res.json();
@@ -932,6 +933,7 @@ async function removeDeletedPerson(personId) {
 }
 
 async function loadPersons() {
+  if (!getWatcherId()) return;
   const res = await fetch(API_URL + '/watcher/' + getWatcherId() + '/persons');
   const persons = await res.json();
   const hidden = new Set(getStoredList(HIDDEN_PERSON_IDS_KEY));
