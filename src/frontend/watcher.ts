@@ -413,7 +413,7 @@ input[type="text"]:focus, select:focus {
   <div class="modal-content" style="text-align:center">
     <div id="detailPhotoPreview" style="margin:0 auto 16px"></div>
     <div id="detailPersonName" style="font-weight:800; font-size:22px; margin-bottom:4px"></div>
-    <div id="detailPersonId" class="person-id-label" style="margin-bottom:24px"></div>
+    <div style="margin-bottom:24px"></div>
     <div class="button-row" style="gap:12px">
       <button type="button" class="btn btn-secondary" onclick="closeDetailModal()">Schließen</button>
       <button type="button" class="btn btn-primary" onclick="openEditFromDetail()">Bearbeiten</button>
@@ -972,7 +972,6 @@ function closeEditModal() { document.getElementById('personEditOverlay').classLi
 function openDetailModal(id) {
   const p = visiblePersonsById[id]; if(!p) return;
   activeEditPersonId = id;
-  document.getElementById('detailPersonId').textContent = 'ID: ' + id.slice(0,8) + '...';
   document.getElementById('detailPersonName').textContent = getPersonName(id) || 'Unbekannt';
   const preview = document.getElementById('detailPhotoPreview');
   preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-large');
