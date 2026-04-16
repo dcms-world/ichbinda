@@ -905,7 +905,6 @@ function buildPersonRow(p) {
       '</div>' +
       '<div class="person-info">' +
         '<div class="person-name">' + escapeHtml(name) + '</div>' +
-        '<div class="person-id-label">ID: ' + p.id.slice(0,8) + '...</div>' +
       '</div>' +
     '</div>' +
     '<div class="person-meta">' +
