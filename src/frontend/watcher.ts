@@ -491,11 +491,14 @@ input[type="text"]:focus, select:focus {
 <div class="modal-overlay" id="cropModalOverlay">
   <div class="modal-content" style="text-align:center; padding:24px">
     <h3 class="modal-title" style="margin-bottom:8px">Bild anpassen</h3>
-    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px">Bild verschieben um den Ausschnitt zu wählen</p>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px">Verschieben &amp; Zoomen</p>
     <div id="cropViewport" class="crop-viewport">
       <img id="cropImage" class="crop-image" alt="" draggable="false">
     </div>
-    <div class="button-row" style="gap:12px; margin-top:20px; justify-content:center">
+    <div style="padding:12px 4px 0">
+      <input type="range" id="cropZoomSlider" min="0" max="100" value="0" oninput="onCropZoomSlider(+this.value)" style="width:100%;accent-color:var(--primary,#3b82f6)">
+    </div>
+    <div class="button-row" style="gap:12px; margin-top:12px; justify-content:center">
       <button type="button" class="btn btn-secondary" onclick="closeCropModal()">Abbrechen</button>
       <button type="button" class="btn btn-primary" onclick="confirmCrop()">Verwenden</button>
     </div>
@@ -1047,21 +1050,44 @@ async function handleEditPhotoChange(e) {
 }
 
 const CROP_SIZE = 280;
-let cropScale = 1, cropOffsetX = 0, cropOffsetY = 0;
+const CROP_MAX_ZOOM = 4;
+let cropScale = 1, cropMinScale = 1, cropOffsetX = 0, cropOffsetY = 0;
 let cropDragActive = false, cropDragStartX = 0, cropDragStartY = 0, cropDragBaseX = 0, cropDragBaseY = 0;
+let cropPinchActive = false, cropPinchDist = 0, cropPinchScaleBase = 1;
+
+function cropClamp(offset, displaySize) {
+  return Math.min(0, Math.max(CROP_SIZE - displaySize, offset));
+}
+
+function applyCropScale(newScale, pivotX, pivotY) {
+  newScale = Math.max(cropMinScale, Math.min(cropMinScale * CROP_MAX_ZOOM, newScale));
+  const ratio = newScale / cropScale;
+  cropOffsetX = cropClamp(pivotX - (pivotX - cropOffsetX) * ratio, document.getElementById('cropImage').naturalWidth * newScale);
+  cropOffsetY = cropClamp(pivotY - (pivotY - cropOffsetY) * ratio, document.getElementById('cropImage').naturalHeight * newScale);
+  cropScale = newScale;
+  const img = document.getElementById('cropImage');
+  img.style.width = img.naturalWidth * cropScale + 'px';
+  img.style.height = img.naturalHeight * cropScale + 'px';
+  img.style.left = cropOffsetX + 'px';
+  img.style.top = cropOffsetY + 'px';
+  const slider = document.getElementById('cropZoomSlider');
+  if (slider) slider.value = Math.round(((cropScale - cropMinScale) / (cropMinScale * (CROP_MAX_ZOOM - 1))) * 100);
+}
 
 function openCropModal(dataUrl) {
   const img = document.getElementById('cropImage');
   img.onload = () => {
     const w = img.naturalWidth, h = img.naturalHeight;
-    cropScale = CROP_SIZE / Math.min(w, h);
-    const dw = w * cropScale, dh = h * cropScale;
-    img.style.width = dw + 'px';
-    img.style.height = dh + 'px';
-    cropOffsetX = (CROP_SIZE - dw) / 2;
-    cropOffsetY = (CROP_SIZE - dh) / 2;
+    cropMinScale = CROP_SIZE / Math.min(w, h);
+    cropScale = cropMinScale;
+    img.style.width = w * cropScale + 'px';
+    img.style.height = h * cropScale + 'px';
+    cropOffsetX = (CROP_SIZE - w * cropScale) / 2;
+    cropOffsetY = (CROP_SIZE - h * cropScale) / 2;
     img.style.left = cropOffsetX + 'px';
     img.style.top = cropOffsetY + 'px';
+    const slider = document.getElementById('cropZoomSlider');
+    if (slider) slider.value = 0;
   };
   img.src = dataUrl;
   document.getElementById('cropModalOverlay').classList.add('open');
@@ -1072,8 +1098,9 @@ function closeCropModal() {
   document.getElementById('editPhotoInput').value = '';
 }
 
-function cropClamp(offset, displaySize) {
-  return Math.min(0, Math.max(CROP_SIZE - displaySize, offset));
+function onCropZoomSlider(val) {
+  const newScale = cropMinScale + cropMinScale * (CROP_MAX_ZOOM - 1) * (val / 100);
+  applyCropScale(newScale, CROP_SIZE / 2, CROP_SIZE / 2);
 }
 
 function confirmCrop() {
@@ -1089,10 +1116,16 @@ function confirmCrop() {
   loadPersons();
 }
 
+function pinchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX, dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 function setupCropDrag() {
   const vp = document.getElementById('cropViewport');
   if (!vp) return;
   const getImg = () => document.getElementById('cropImage');
+
   function start(cx, cy) { cropDragActive = true; cropDragStartX = cx; cropDragStartY = cy; cropDragBaseX = cropOffsetX; cropDragBaseY = cropOffsetY; }
   function move(cx, cy) {
     if (!cropDragActive) return;
@@ -1102,13 +1135,42 @@ function setupCropDrag() {
     img.style.left = cropOffsetX + 'px';
     img.style.top = cropOffsetY + 'px';
   }
-  function end() { cropDragActive = false; }
+  function end() { cropDragActive = false; cropPinchActive = false; }
+
   vp.addEventListener('mousedown', e => { start(e.clientX, e.clientY); e.preventDefault(); });
   vp.addEventListener('mousemove', e => move(e.clientX, e.clientY));
   vp.addEventListener('mouseup', end);
   vp.addEventListener('mouseleave', end);
-  vp.addEventListener('touchstart', e => { start(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
-  vp.addEventListener('touchmove', e => { move(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  vp.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = vp.getBoundingClientRect();
+    applyCropScale(cropScale * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  vp.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      cropDragActive = false;
+      cropPinchActive = true;
+      cropPinchDist = pinchDist(e.touches);
+      cropPinchScaleBase = cropScale;
+    } else {
+      start(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  vp.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && cropPinchActive) {
+      const rect = vp.getBoundingClientRect();
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      applyCropScale(cropPinchScaleBase * pinchDist(e.touches) / cropPinchDist, mx, my);
+    } else if (e.touches.length === 1) {
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    e.preventDefault();
+  }, { passive: false });
+
   vp.addEventListener('touchend', end);
 }
 setupCropDrag();
