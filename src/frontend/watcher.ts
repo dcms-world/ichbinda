@@ -174,6 +174,7 @@ body {
 }
 .avatar-edit-overlay svg { width: 32px; height: 32px; }
 .person-avatar-large { width: 120px; height: 120px; border-radius: 60px; font-size: 48px; }
+.person-avatar-xl { width: 160px; height: 160px; border-radius: 80px; font-size: 64px; }
 
 /* Add Person Section (Modal-like) */
 .add-person-overlay {
@@ -411,7 +412,7 @@ input[type="text"]:focus, select:focus {
 <!-- Person Detail Overlay -->
 <div class="modal-overlay" id="personDetailOverlay" onclick="handleOverlayClick(event, 'personDetailOverlay')">
   <div class="modal-content" style="text-align:center">
-    <div id="detailPhotoPreview" style="margin:0 auto 16px"></div>
+    <div id="detailPhotoPreview" style="display:flex; justify-content:center; margin-bottom:16px"></div>
     <div id="detailPersonName" style="font-weight:800; font-size:22px; margin-bottom:4px"></div>
     <div style="margin-bottom:24px"></div>
     <div class="button-row" style="gap:12px">
@@ -974,7 +975,7 @@ function openDetailModal(id) {
   activeEditPersonId = id;
   document.getElementById('detailPersonName').textContent = getPersonName(id) || 'Unbekannt';
   const preview = document.getElementById('detailPhotoPreview');
-  preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-large');
+  preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-xl');
   document.getElementById('personDetailOverlay').classList.add('open');
 }
 function closeDetailModal() { document.getElementById('personDetailOverlay').classList.remove('open'); activeEditPersonId = ''; }
