@@ -99,12 +99,12 @@ Neue Einträge oben anfügen (neueste zuerst).
 - **Alternativen verworfen:** ECDSA P-256 Keypairs pro Gerät — eleganter, aber unnötige Komplexität für das Bedrohungsmodell. Replay-Schutz, Zero-Knowledge-Server etc. sind für "Oma drückt grünen Knopf" nicht relevant.
 - **Konsequenz:** Masterplan Phasen 1-13 wurden vereinfacht. Kein neues DB-Schema fuer ECDSA/signed Requests, kein Frontend-Crypto, kein signedFetch. Fachliche Schema-Aenderungen fuer Pairing und Ownership bleiben weiterhin moeglich und sind separat zu bewerten. Stattdessen: bestehende Auth-Middleware fixen (Ownership-Pruefung), Heartbeat authentifizieren, CORS einschraenken.
 
-### Flutter statt Capacitor für Native-App-Deployment
-- **Datum:** 2026-04-12
+### Capacitor statt Flutter für Native-App-Deployment
+- **Datum:** 2026-04-16
 - **Entschieden von:** User
-- **Begründung:** Flutter ermöglicht echte native Performance und hochwertiges UI/UX ohne WebView-Kompromisse. Da die App langfristig wachsen soll und die bestehende Web-UI ohnehin einen Rewrite bräuchte (Pairing-Flow, Gerätetransfer, Push etc.), ist der Mehraufwand des Flutter-Rewrites gerechtfertigt. Außerdem möchte der User Flutter-Erfahrung aufbauen. Das Backend (Cloudflare Worker API) bleibt unverändert — Flutter spricht dieselben Endpoints an.
-- **Alternativen verworfen:** Capacitor (vorherige Entscheidung, 2026-03-28) — WebView-basiert, weniger native Feel; React Native — ähnlicher Aufwand wie Flutter, schwächeres Rendering-Modell; Expo — zu viel Abstraktion.
-- **Konsequenz:** CORS-seitig keine Änderung nötig — Flutter's HTTP-Client sendet keinen `Origin`-Header, was der bestehenden Regel "Native Clients ohne Origin-Header bleiben möglich" entspricht. `capacitor://localhost` in der CORS-Allowlist kann mittelfristig entfernt werden. CI/CD: Codemagic unterstützt Flutter nativ.
+- **Begründung:** Capacitor erlaubt es, die bestehende Web-UI (TypeScript/HTML) direkt als native App zu verpacken, ohne einen kompletten Rewrite. Die Web-Codebasis (`src/frontend/`) ist bereits vorhanden und funktionsfähig. Capacitor-Apps laufen in einer WebView und senden `capacitor://localhost` als Origin — die CORS-Allowlist enthält diesen Eintrag bereits.
+- **Alternativen verworfen:** Flutter (kurzzeitig gewählt am 2026-04-12) — erfordert einen vollständigen Rewrite in Dart, hoher Initialaufwand; React Native — ähnlicher Aufwand, kein Vorteil gegenüber Capacitor für diesen Use-Case; Expo — zu viel Abstraktion.
+- **Konsequenz:** Das bestehende Web-Frontend (`src/frontend/`) wird die Basis der nativen App. Capacitor-Projekt liegt unter `mobile/` im selben Repo (Monorepo). CORS-seitig ist `capacitor://localhost` bereits in der Allowlist — keine Änderung nötig. CI/CD: Codemagic hat nativen Capacitor-Support.
 
 ### D1 jetzt, Postgres erst bei Pro-Tier
 - **Datum:** vor 2026-03-27 (aus Masterplan übernommen)

@@ -76,17 +76,17 @@ Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
 - Beide Einstiege sprechen dasselbe Cloudflare-Backend an
 
 ### Ziel fuer die native App
-- Eine gemeinsame **Flutter-App** fuer iOS und Android (Entscheidung 2026-04-12, siehe `docs/DECISIONS.md`)
+- Eine gemeinsame **Capacitor-App** fuer iOS und Android (Entscheidung 2026-04-16, siehe `docs/DECISIONS.md`)
 - Beim ersten Start waehlt das Geraet einmalig den Modus `person` oder `watcher`
 - Die gewaehlte Rolle bleibt lokal persistent gespeichert und wird bei spaeteren App-Starts direkt wiederverwendet
 - Die App bootet danach direkt in die passende UI fuer diesen Modus
 - Beide Modi verwenden weiterhin dieselbe Worker-API auf Cloudflare als Backend
 
 ### Konsequenz fuer die Codebasis
-- Flutter-Projekt liegt unter `mobile/` im selben Repo (Monorepo)
-- Das Web-Frontend (`src/frontend/`) bleibt vorerst als Fallback erhalten, wird aber nicht weiterentwickelt
-- Backend-Endpoints bleiben rollengetrennt — Flutter spricht dieselben `/api/*`-Endpoints an
-- CORS: Flutter's HTTP-Client sendet keinen `Origin`-Header → bestehende Regel "Native Clients ohne Origin-Header bleiben moeglich" greift bereits. `capacitor://localhost` in der Allowlist kann nach dem Flutter-Launch entfernt werden.
+- Capacitor-Projekt liegt unter `mobile/` im selben Repo (Monorepo)
+- Das Web-Frontend (`src/frontend/`) ist die Basis der nativen App und wird gemeinsam weiterentwickelt
+- Backend-Endpoints bleiben rollengetrennt — die Capacitor-App spricht dieselben `/api/*`-Endpoints an
+- CORS: `capacitor://localhost` ist bereits in der Allowlist — keine Änderung nötig.
 
 ---
 
