@@ -159,22 +159,44 @@ body {
   height: 120px;
   margin: 0 auto;
 }
-.avatar-edit-wrapper:hover .avatar-edit-overlay { opacity: 1; }
 .avatar-edit-overlay {
   position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
+  bottom: 2px;
+  right: 2px;
+  width: 30px;
+  height: 30px;
+  background: var(--primary, #3b82f6);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  pointer-events: none;
 }
-.avatar-edit-overlay svg { width: 32px; height: 32px; }
+.avatar-edit-overlay svg { width: 15px; height: 15px; }
+.crop-viewport {
+  width: 280px;
+  height: 280px;
+  overflow: hidden;
+  border-radius: 12px;
+  position: relative;
+  margin: 0 auto;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  background: #e2e8f0;
+}
+.crop-viewport:active { cursor: grabbing; }
+.crop-image {
+  position: absolute;
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+  pointer-events: none;
+}
 .person-avatar-large { width: 120px; height: 120px; border-radius: 60px; font-size: 48px; }
-.person-avatar-xl { width: 160px; height: 160px; border-radius: 80px; font-size: 64px; }
+.person-avatar-xl { width: 190px; height: 190px; border-radius: 95px; font-size: 72px; }
 
 /* Add Person Section (Modal-like) */
 .add-person-overlay {
@@ -461,6 +483,21 @@ input[type="text"]:focus, select:focus {
         <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Abbrechen</button>
         <button type="button" id="editSaveBtn" class="btn btn-primary" onclick="saveEditedPerson()">Speichern</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Crop Modal -->
+<div class="modal-overlay" id="cropModalOverlay">
+  <div class="modal-content" style="text-align:center; padding:24px">
+    <h3 class="modal-title" style="margin-bottom:8px">Bild anpassen</h3>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px">Bild verschieben um den Ausschnitt zu wählen</p>
+    <div id="cropViewport" class="crop-viewport">
+      <img id="cropImage" class="crop-image" alt="" draggable="false">
+    </div>
+    <div class="button-row" style="gap:12px; margin-top:20px; justify-content:center">
+      <button type="button" class="btn btn-secondary" onclick="closeCropModal()">Abbrechen</button>
+      <button type="button" class="btn btn-primary" onclick="confirmCrop()">Verwenden</button>
     </div>
   </div>
 </div>
@@ -975,7 +1012,16 @@ function openDetailModal(id) {
   activeEditPersonId = id;
   document.getElementById('detailPersonName').textContent = getPersonName(id) || 'Unbekannt';
   const preview = document.getElementById('detailPhotoPreview');
-  preview.innerHTML = buildPersonAvatarMarkup(id).replace('person-avatar', 'person-avatar person-avatar-xl');
+  preview.style.display = 'block';
+  preview.style.justifyContent = '';
+  preview.onclick = null;
+  const photo = getPersonPhoto(id);
+  if (photo) {
+    preview.innerHTML = '<img src="' + escapeHtml(photo) + '" alt="" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:16px;display:block;">';
+  } else {
+    const initial = (getPersonName(id) || '?').charAt(0).toUpperCase();
+    preview.innerHTML = '<div style="width:100%;aspect-ratio:1/1;border-radius:16px;background:var(--system-fill,#e2e8f0);display:flex;align-items:center;justify-content:center;font-size:72px;font-weight:700;color:var(--text-muted,#8E8E93)">' + escapeHtml(initial) + '</div>';
+  }
   document.getElementById('personDetailOverlay').classList.add('open');
 }
 function closeDetailModal() { document.getElementById('personDetailOverlay').classList.remove('open'); activeEditPersonId = ''; }
@@ -996,13 +1042,76 @@ async function saveEditedPerson() {
 async function handleEditPhotoChange(e) {
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
-  reader.onload = async () => {
-    storePersonPhoto(activeEditPersonId, reader.result);
-    openEditModal(activeEditPersonId);
-    loadPersons();
-  };
+  reader.onload = () => openCropModal(reader.result);
   reader.readAsDataURL(file);
 }
+
+const CROP_SIZE = 280;
+let cropScale = 1, cropOffsetX = 0, cropOffsetY = 0;
+let cropDragActive = false, cropDragStartX = 0, cropDragStartY = 0, cropDragBaseX = 0, cropDragBaseY = 0;
+
+function openCropModal(dataUrl) {
+  const img = document.getElementById('cropImage');
+  img.onload = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    cropScale = CROP_SIZE / Math.min(w, h);
+    const dw = w * cropScale, dh = h * cropScale;
+    img.style.width = dw + 'px';
+    img.style.height = dh + 'px';
+    cropOffsetX = (CROP_SIZE - dw) / 2;
+    cropOffsetY = (CROP_SIZE - dh) / 2;
+    img.style.left = cropOffsetX + 'px';
+    img.style.top = cropOffsetY + 'px';
+  };
+  img.src = dataUrl;
+  document.getElementById('cropModalOverlay').classList.add('open');
+}
+
+function closeCropModal() {
+  document.getElementById('cropModalOverlay').classList.remove('open');
+  document.getElementById('editPhotoInput').value = '';
+}
+
+function cropClamp(offset, displaySize) {
+  return Math.min(0, Math.max(CROP_SIZE - displaySize, offset));
+}
+
+function confirmCrop() {
+  const img = document.getElementById('cropImage');
+  const canvas = document.createElement('canvas');
+  const OUT = 400;
+  canvas.width = OUT; canvas.height = OUT;
+  const srcSize = CROP_SIZE / cropScale;
+  canvas.getContext('2d').drawImage(img, -cropOffsetX / cropScale, -cropOffsetY / cropScale, srcSize, srcSize, 0, 0, OUT, OUT);
+  storePersonPhoto(activeEditPersonId, canvas.toDataURL('image/jpeg', 0.85));
+  document.getElementById('cropModalOverlay').classList.remove('open');
+  openEditModal(activeEditPersonId);
+  loadPersons();
+}
+
+function setupCropDrag() {
+  const vp = document.getElementById('cropViewport');
+  if (!vp) return;
+  const getImg = () => document.getElementById('cropImage');
+  function start(cx, cy) { cropDragActive = true; cropDragStartX = cx; cropDragStartY = cy; cropDragBaseX = cropOffsetX; cropDragBaseY = cropOffsetY; }
+  function move(cx, cy) {
+    if (!cropDragActive) return;
+    const img = getImg();
+    cropOffsetX = cropClamp(cropDragBaseX + cx - cropDragStartX, parseFloat(img.style.width));
+    cropOffsetY = cropClamp(cropDragBaseY + cy - cropDragStartY, parseFloat(img.style.height));
+    img.style.left = cropOffsetX + 'px';
+    img.style.top = cropOffsetY + 'px';
+  }
+  function end() { cropDragActive = false; }
+  vp.addEventListener('mousedown', e => { start(e.clientX, e.clientY); e.preventDefault(); });
+  vp.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+  vp.addEventListener('mouseup', end);
+  vp.addEventListener('mouseleave', end);
+  vp.addEventListener('touchstart', e => { start(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  vp.addEventListener('touchmove', e => { move(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  vp.addEventListener('touchend', end);
+}
+setupCropDrag();
 
 async function removePersonFromModal() {
   const id = activeEditPersonId; if(!id) return;
