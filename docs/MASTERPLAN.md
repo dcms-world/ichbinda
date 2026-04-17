@@ -10,53 +10,51 @@ Langfristig gibt es zwei Produkt-Stufen (Details in `docs/PRICING_AND_EDITIONS.m
 
 ---
 
-## Datenbank-Architektur: Option C (Hybrid ohne Sync)
+## Datenbank-Architektur: Cloudflare D1 (E2E-verschlüsselt)
 
 ### Entscheidung
-D1 für den anonymen operativen Core, Postgres (Neon Frankfurt) kommt erst wenn Pro gebaut wird. Kein Sync zwischen den Systemen.
+Sowohl die operative Free-Version als auch die Pro-Version nutzen ausschließlich **Cloudflare D1**. Sensible Stammdaten der Pro-Version werden clientseitig (im Dashboard/App) verschlüsselt, bevor sie in D1 gespeichert werden.
 
 ### Warum
-- Heartbeats brauchen keine Edge-Performance (1x pro Stunde, 5ms vs 40ms egal)
-- Kein Sync = keine Sync-Bugs, kein Event-Bus, kein Lag-Monitoring
-- DSGVO-Vorteil: Anonyme operative Daten (D1) physisch getrennt von Personaldaten (Postgres)
-- Free kann sofort fertig gebaut werden ohne auf DB-Entscheidung zu warten
-- Postgres wird erst eingeführt wenn Pro-Kunden (und damit Einnahmen) da sind
+- **Single Stack:** Keine Komplexität durch zwei verschiedene DB-Systeme (Postgres + D1).
+- **Security by Design:** Stammdaten (Namen, Adressen) sind für Cloudflare/Hacker nur als verschlüsselte Blobs sichtbar.
+- **Kein Sync:** Live-Daten und Stammdaten liegen im selben System, verknüpft über die `person_id`.
+- **UX:** Pfleger nutzen die bekannte Free-App, die durch Institutions-Beitritt (QR-Code) zum Pro-Werkzeug wird.
 
 ### Architektur
 
 ```
-D1 (operativ, anonym):              Postgres (Pro, personenbezogen):
-├── persons (UUID + Heartbeat)      ├── organizations (Mandanten)
-├── watchers (UUID + Push-Token)    ├── users + roles + permissions
-├── watch_relations                 ├── person_profiles (Name, Geb., Adresse)
-├── device_keys (API-Key Hashes)    ├── person_photos (verschlüsselt)
-├── person_devices                  ├── alert_rules / Eskalation
-├── device_rate_limits              ├── audit_logs
-└── pairing_requests                └── notification_policies
+Cloudflare D1 (Zentraler Datenspeicher):
+├── persons (UUID + Heartbeat)      ──┐
+├── watchers (UUID + Push-Token)    ──┤ Operative Daten (anonym)
+├── watch_relations                 ──┘
+├── ...
+├── organizations (Mandanten)       ──┐
+├── user_org_roles (Rollen)         ──┤ Pro-Layer (zugriffsgeschützt)
+├── person_profiles (verschlüsselt) ──┤ Stammdaten (E2E-verschlüsselt)
+└── audit_logs                      ──┘
 
-         │                                    │
-         └──── Verbindung: person_id (UUID) ──┘
-              (kein Sync – Dashboard ruft Worker-API auf)
+Cloudflare R2 (Objektspeicher):
+└── person_photos (verschlüsselt mit Org-Key)
 ```
 
 ### Datenfluss Pro-Dashboard
-- Dashboard zeigt Personenliste aus **Postgres** (Name, Adresse, Stammdaten)
-- Dashboard ruft **Worker-API** auf für Live-Status: `GET /api/person/:id` → Heartbeat aus D1
-- Kein Daten-Duplikat, keine Synchronisation
-- Worker-API bleibt Single Source of Truth für operative Daten
+- Dashboard lädt verschlüsselte Profile aus **D1**.
+- Entschlüsselung erfolgt **lokal im Browser** mit dem Org-Key.
+- Dashboard ruft **Worker-API** auf für Live-Status: `GET /api/person/:id` → Heartbeat aus D1.
+- Fotos werden aus **R2** geladen und ebenfalls lokal entschlüsselt.
 
-### Fotos
-- **Free:** localStorage (verlassen nie das Gerät)
-- **Pro:** Cloudflare R2, verschlüsselt mit Org-spezifischem Key
-  - Server speichert nur verschlüsselte Blobs
-  - Dashboard entschlüsselt client-seitig
-  - Crypto-Shredding bei Org-Löschung (Key vernichten → Fotos unwiederbringlich weg)
+### Pro-Onboarding (Mitarbeiter)
+- Admin generiert im Portal einen **Einladungs-QR-Code**.
+- Mitarbeiter scannt diesen mit der Standard iBinda-App.
+- App verknüpft `watcher_id` mit der `organization_id`.
+- Server hebt alle Free-Limits für diesen Watcher auf.
 
 ### Zeitleiste
 ```
 Jetzt:       Free fertig bauen (D1 + API-Key-Auth mit Ownership + Pairing)
-Wenn Pro:    Postgres aufsetzen (Neon Frankfurt), Dashboard bauen
-Wenn nötig:  D1 als Edge-Cache vor Postgres (Optimierung, nicht Architektur)
+Wenn Pro:    Pro-Tabellen in D1 ergänzen, Verschlüsselungs-Logik im Frontend bauen
+Später:      R2 für verschlüsselte Fotos integrieren
 ```
 
 ---

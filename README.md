@@ -84,6 +84,54 @@ npm run test:smoke
 
 Testet den lokalen Worker-Flow fuer Startseiten, Auth, Person, Watcher, Pairing, deaktivierten Legacy-`POST /api/watch`-Pfad, Heartbeat-Rate-Limit und das Person-Geraetelimit via `persons.max_devices`.
 
+### Browser-E2E lokal
+
+```bash
+npm run test:e2e
+```
+
+Fuehrt standardmaessig nur das Desktop-Projekt (`desktop-chromium`) aus, damit der schnelle Hauptlauf stabil und zuegig bleibt.
+
+### Browser-E2E mobil
+
+```bash
+npm run test:e2e:mobile
+```
+
+Mobile-Emulation laeuft ueber die Playwright-Projekte `iphone-13` und `pixel-7`.
+Beide Projekte laufen absichtlich auf Chromium; die iPhone-Konfiguration emuliert also das Geraetelayout, Touch- und Viewport-Verhalten ohne zusaetzlichen WebKit-Download.
+
+### Browser-E2E komplett
+
+```bash
+npm run test:e2e:all
+```
+
+### Scanner-E2E
+
+```bash
+npm run test:e2e:camera
+```
+
+Der Scanner-Lauf nutzt einen Mock fuer `getUserMedia` und `jsQR`, damit der Kamera-Entry-Point stabil in CI und lokal testbar bleibt.
+
+### Browser-E2E gegen Online-Dev
+
+```bash
+PLAYWRIGHT_BASE_URL="https://ibinda.johann-zehner.workers.dev" npm run test:e2e
+```
+
+Wenn `PLAYWRIGHT_BASE_URL` gesetzt ist, startet Playwright keinen lokalen Wrangler-Server, sondern testet direkt gegen die angegebene Remote-URL.
+Dasselbe funktioniert auch fuer `test:e2e:mobile`, `test:e2e:camera` und `test:e2e:all`.
+
+### Artefakte bei Fehlern
+
+- Screenshots: automatisch bei Fehlschlaegen
+- Traces: automatisch bei Fehlschlaegen
+- Videos: automatisch bei Fehlschlaegen
+
+Die Artefakte landen unter `test-results/playwright/`.
+
 ### 6. Deploy
 
 ```bash

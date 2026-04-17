@@ -52,9 +52,11 @@ iBinda wird als zweistufiges Produkt geführt:
 
 ## Upgrade-Logik Free → Pro
 
-1. Privatnutzer startet in Free.
-2. Bei Team-, Organisations- oder erweiterten Prozessanforderungen erfolgt Upgrade auf Pro.
-3. Pro aktiviert Dashboard, Rollen, Organisationsstruktur und erweiterte Daten-/Prozessfunktionen.
+1. **Institutions-Setup:** Ein Admin registriert eine Organisation im iBinda Pro-Portal.
+2. **Mitarbeiter-Einladung:** Der Admin generiert Einladungs-QR-Codes.
+3. **App-Kopplung:** Der Mitarbeiter (Watcher) scannt den QR-Code mit seiner iBinda Free-App.
+4. **Pro-Status:** Durch die Verknüpfung (`user_org_roles` in D1) werden für diesen Watcher serverseitig alle Limits (z.B. max. 2 Personen) aufgehoben.
+5. **Funktionsfreischaltung:** Das Pro-Portal wird nun zur Steuerzentrale für alle Personen, die von den verknüpften Watchern betreut werden. Stammdaten werden im Portal (verschlüsselt) ergänzt.
 
 ---
 

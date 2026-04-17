@@ -18,116 +18,69 @@ Ein Institutions-Dashboard für iBinda, mit dem Einrichtungen Personen, Geräte,
 ## Funktionsmodule
 
 ### Login und Mandantenbereich
-- Institutions-Login
-- Rollen wie Org-Owner, Care-Manager, Watcher, Read-Only
+- Institutions-Login (Web-Portal)
+- Admin-Dashboard zur Mitarbeiter- und Personenverwaltung
 
-### Personenverwaltung
-- Stammdaten je Person
-- Kontakte (Angehörige, Notfallkontakt, Arzt)
-- sensible Zusatzinfos mit restriktiver Sichtbarkeit
+### Mitarbeiter-Onboarding (Watcher)
+- **Flow:** Admin generiert im Web-Portal einen Einladungs-QR-Code.
+- Der Mitarbeiter (Pfleger) scannt diesen mit der Standard iBinda-App.
+- Das Gerät wird als "Pro-Mitarbeiter" der Institution markiert.
+- Alle Free-Limits (z.B. max. 2 beobachtete Personen) werden für dieses Konto serverseitig aufgehoben.
 
-### Device-Management
-- Gerätezuordnung je Person
-- letzter Kontakt und Status
-- Gerätewechsel und Historie
+### Personen-Management
+- Stammdaten (Name, Zimmer, Adresse) werden im Portal angelegt.
+- **Verschlüsselung:** Daten werden im Browser verschlüsselt, bevor sie in D1 gespeichert werden.
+- Verknüpfung mit der anonymen `person_id` (nach Scan des QR-Codes durch das Personal).
 
-### Monitoring-Zentrale
-- Gesamtübersicht mit Status (OK/Warnung/Alarm)
-- Verlauf letzter Aktivität
-- Filter nach Team, Bereich oder Institution
-
-### Eskalations- und Benachrichtigungsregeln
-- Regeln pro Person oder per Template
-- zeitbasierte Eskalationen
-- mehrere Benachrichtigungskanäle (Push, E-Mail, SMS, ggf. Anruf)
-- Quittierung von Alarmen ("Alarm übernommen")
-
-### Audit und Reporting
-- Nachvollziehbarkeit von Einsicht, Änderung und Export
-- Reports für Organisation und Qualitätssicherung
+### Rollenmodell (Vereinfacht)
+- **Admin:** Darf Mitarbeiter einladen, Rollen vergeben, Rechnungen/Org-Stammdaten verwalten.
+- **Care-Manager:** Darf Stammdaten von betreuten Personen bearbeiten und Regeln anlegen.
+- **Pfleger (Watcher):** Live-Monitoring, Alarme quittieren, Zugriff auf freigegebene Stammdaten.
 
 ---
 
-## Datenmodell Pro
+## Datenmodell Pro (Cloudflare D1)
 
-- `organizations`
-- `users`
-- `user_org_roles`
-- `person_profiles`
-- `person_contacts`
-- `devices`
-- `person_device_links`
-- `alert_rules`
-- `notification_policies`
-- `alert_events`
-- `audit_logs`
+- `organizations` (Name, Plan, Org-Master-Key-Hash)
+- `user_org_roles` (Zuordnung von Watcher-IDs zu Orgs + Rolle)
+- `person_profiles` (verschlüsselte Blobs: Name, Adresse, etc.)
+- `person_contacts` (verschlüsselte Notfallkontakte)
+- `alert_rules` / `notification_policies`
+- `alert_events` (Historie der Alarme)
+- `audit_logs` (Wer hat wann welche Daten eingesehen/geändert)
 
 ---
 
-## DSGVO-Anforderungen
+## DSGVO & Verschlüsselung
 
-### Datenschutz by Design & by Default
-- Datenminimierung strikt umsetzen
-- klare Zweckbindung pro Datenfeld
-- standardmäßig restriktive Sichtbarkeit
+### End-to-End-Ansatz für PII
+- **Stammdaten (PII):** Namen, Zimmernummern und Adressen verlassen das Endgerät des Nutzers (Browser/App) nur in verschlüsselter Form.
+- **Schlüsselverwaltung:** Die Institution besitzt einen Master-Key, der nicht im Klartext auf dem Server liegt.
+- **Verschlüsselung at-rest:** D1 speichert nur verschlüsselte Blobs für alle sensiblen Felder.
+
+### Fotos
+- Speicherung in **Cloudflare R2**.
+- Ebenfalls verschlüsselt mit dem Org-Key.
+- **Crypto-Shredding:** Bei Löschung der Organisation wird der Key vernichtet → alle gespeicherten Daten (D1 & R2) sind unwiederbringlich nutzlos.
 
 ### Mandantentrennung
-- technische Trennung per Tenant-ID + Row-Level Security
-- keine tenant-übergreifenden Queries
-
-### Zugriffsschutz
-- rollenbasiertes Berechtigungssystem (Need-to-know)
-- MFA für Institutions-Accounts
-- Session-Timeouts, IP-/Rate-Limits
-
-### Verschlüsselung
-- Transportverschlüsselung (TLS)
-- Verschlüsselung at-rest
-- zusätzliche Feldverschlüsselung für besonders sensible Daten (Geburtsdatum, Adresse)
-
-### Protokollierung & Nachvollziehbarkeit
-- Audit-Logs für Lesen/Ändern/Exportieren personenbezogener Daten
-- manipulationsarme Speicherung + definierte Aufbewahrung
-
-### Betroffenenrechte
-- Auskunft (Export)
-- Berichtigung
-- Löschung
-- Einschränkung der Verarbeitung
-- klare interne Bearbeitungsprozesse
-
-### Lösch- & Aufbewahrungskonzept
-- Heartbeat-Rohdaten mit klarer Retention
-- Stammdaten nur solange erforderlich
-- Backup-/Restore-Prozess mit DSGVO-konformer Löschstrategie
-- Crypto-Shredding für Fotos (Key vernichten → Daten unwiederbringlich weg)
-
-### Auftragsverarbeitung & Region
-- AVV/DPA mit allen Auftragsverarbeitern (Cloudflare, Neon)
-- bevorzugte Verarbeitung in EU/EWR
-- Drittlandtransfers nur mit geeigneten Garantien (z.B. SCC)
-
-### Risikoanalyse / DSFA
-- bei Gesundheits-/Pflegekontext frühzeitig DSFA einplanen
-- TOMs dokumentieren
-- **Empfehlung:** Frühzeitig Datenschutzberater einbinden bevor Pro live geht
+- Strenge Trennung über `organization_id` auf DB-Ebene.
+- Zugriff auf verschlüsselte Daten nur mit gültigem Session-Token der jeweiligen Organisation.
 
 ---
 
 ## Pro-MVP
 
 ### Phase 1
-- Institutions-Login und Rollenmodell
-- Personenstammdaten und Device-Zuordnung
-- Monitoring-Übersicht
-- erste Eskalationslogik
-- Audit-Log Basis
+- Admin-Portal: Mitarbeiter einladen (QR-Code-Flow).
+- Personen-Profile (Stammdaten) anlegen + Verschlüsselungs-Logik.
+- Live-Monitoring Dashboard (Glanceable UI).
+- Quittierung von Alarmen ("Übernommen durch...").
 
 ### Phase 2
-- Schichtplanung
-- komplexere Eskalationsketten
-- Exporte und Reporting
-- Integrationen
+- Stationen/Teams (Gruppierung von Personen).
+- Erweiterte Eskalationsketten.
+- PDF-Exporte und Reporting für QM.
 
 ---
 
