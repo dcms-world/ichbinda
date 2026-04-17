@@ -19,6 +19,12 @@ Neue Einträge oben anfügen (neueste zuerst).
 
 ---
 
+### Turnstile nur im Portal; App nutzt App Attest + Play Integrity
+- **Datum:** 2026-04-17
+- **Entschieden von:** User
+- **Begründung:** Turnstile ist für Web-Browser konzipiert und macht in einer nativen Capacitor-App keinen Sinn. Für die Person- und Watcher-App wird `POST /api/auth/register-device` stattdessen über Apple App Attest (iOS) und Google Play Integrity (Android) abgesichert, sobald die App in den Store geht. Diese Platform-Attestierungen sind kryptografisch stärker als Turnstile (kein Jailbreak/Root = nicht knackbar). Für das Portal bleibt Turnstile, da dort klassischer Web-Traffic mit Bot-Risiko besteht. Bis zum Store-Launch gibt es keinen Bot-Schutz auf `register-device` für die App — das ist akzeptabel, weil ein registriertes Gerät ohne gültige Person/Watcher-Identität nutzlos ist.
+- **Alternativen verworfen:** Turnstile auch in der App (funktioniert nicht in Capacitor-WebView zuverlässig); Custom API-Key in der App (aus APK/IPA extrahierbar); kein Schutz auf `register-device` dauerhaft.
+
 ### `max_devices` pro Person in DB; bei `1` wird gewechselt statt hinzugefügt
 - **Datum:** 2026-03-29
 - **Entschieden von:** User + Agent
