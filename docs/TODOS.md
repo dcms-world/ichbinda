@@ -85,14 +85,43 @@ Referenzen:
 - [x] Person-UI zwischen `Auf anderes Gerät wechseln` und `Neues Gerät hinzufügen` unterscheiden
 - [ ] Multi-Device-Regeln für Watcher auf Basis von `watcher_devices` entscheiden
 - [ ] Cleanup-Mechanismus für verwaiste Watch-Relations (ungültige Push-Tokens)
-- [ ] Person: Watcher trennen — Backend-Endpoint + Watcher erhält Push/Polling-Meldung mit Personen-Name „[Name] hat die Verbindung getrennt"
-- [ ] Person: unbekannte/alte Watcher aus der Liste entfernen können (bereits vorhandener Punkt, zusammengeführt)
+- [ ] Person: einzelne Watcher entfernen können (siehe eigenes TODO unten)
 - [ ] Reset-Funktion für Person: vollständiges Zurücksetzen (Person-ID, Geräte, Verbindungen) mit zweistufiger Bestätigung und erklärendem Text was das bedeutet (Daten weg, Watcher verlieren Verbindung); Watcher-Geräte erhalten Trennungs-Meldung mit Personen-Name
 - [ ] Reset-Funktion für Watcher: analoges vollständiges Zurücksetzen mit zweistufiger Bestätigung; verbundene Person erhält Disconnect-Event mit Watcher-Name (bereits vorhandener Disconnect-Event-Mechanismus nutzen)
 - [ ] Bei Reset des Person-Geräts: alle verbundenen Watcher per Disconnect-Event benachrichtigen (Name der Person mitsenden)
 - [ ] Bei Reset des Watcher-Geräts: verbundene Personen per Disconnect-Event informieren (Name des Watchers mitsenden)
 
 - **Fortschritt:** Am 2026-03-29 konkretisiert und teilweise umgesetzt: `persons.max_devices` wurde analog zu `watchers.max_persons` ins Schema aufgenommen (Default `1`), `POST /api/person/:id/devices` erzwingt jetzt serverseitig `mode = switch | add`, blockiert Watcher-Geräte und liefert bei `add` ohne freien Slot einen `409`. `GET /api/person/:id/devices` liefert zusätzlich `max_devices`, `device_count` und die abgeleitete UI-Aktion `switch | add | full`. Das Personen-Frontend zeigt bei `max_devices = 1` jetzt `Auf anderes Gerät wechseln`, bei freiem Multi-Device-Slot `Neues Gerät hinzufügen` und blendet den Scan-Button aus, wenn das Mehrgeräte-Limit voll ist. Am 2026-03-30 wurde der Person-Transfer-Flow erst auf Geräte-QR + Claim umgestellt und danach gezielt gehärtet: `mode = add` darf weiter direkt abschließen, aber `mode = switch` läuft jetzt zweistufig über `create -> claim -> confirm`. Das neue Gerät stellt nach dem Scan nur noch die Anfrage; das alte Gerät muss den Wechsel explizit bestätigen und wird danach lokal zurückgesetzt. Wenn das alte Gerät nicht mehr verfügbar ist, bleibt die Produktregel bewusst simpel: Watcher trennt die alte Verbindung und verbindet sich anschließend neu. Danach folgten mehrere Frontend-Stabilisierungen fuer echte Tests auf iPhone/Safari: HTML-Routen liefern `Cache-Control: no-store`, das neue Gerät zeigt waehrend des wartenden Wechsels ein eigenes Modal statt den normalen Personenfluss weiterlaufen zu lassen, der alte Personenname wird nach dem Transfer wieder korrekt uebernommen, und nach Abschluss startet das neue Gerät sauber in die uebernommene `person_id` neu statt im temporären Zustand weiterzulaufen. Zusaetzlich blendet die Personen-Geraeteliste den Loeschen-Button jetzt immer fuer das aktuelle Geraet und bei nur einem verbleibenden Geraet aus. `scripts/smoke-test.sh` deckt den neuen Bestätigungsfluss inzwischen mit ab.
+- **Erledigt am:** -
+
+---
+
+## Free: Person kann einzelne Watcher entfernen
+- **Status:** offen
+- **Priorität:** mittel
+- **Beschreibung:** Die Person soll verbundene Watcher einzeln trennen können (verwaiste Verbindungen aufräumen, Beziehungsänderungen, Selbstbestimmung/DSGVO). **Wichtig:** Trennung darf nie still passieren — der Watcher muss immer benachrichtigt werden.
+
+### Backend
+- [ ] `DELETE /api/person/:id/watchers/:watcher_id` — Person trennt einen Watcher
+  - Ownership-Check: Device besitzt Person
+  - `watch_relations.removed_at` setzen
+  - `watcher_disconnect_events` anlegen (umgekehrte Richtung: Person trennt Watcher)
+- [ ] Push-Notification an den Watcher senden: „[Personen-Name] hat die Verbindung getrennt"
+  - Push-Token aus `watcher_devices` lesen
+  - Personen-Name muss mitgeliefert werden (aus localStorage des Frontends oder als Body-Parameter)
+- [ ] Fallback wenn Push fehlschlägt: Watcher sieht beim nächsten Polling, dass die Person aus seiner Liste verschwunden ist
+
+### Frontend (Person)
+- [ ] In der Watcher-Liste pro Eintrag ein „Entfernen"-Button
+- [ ] Bestätigungsdialog mit Watcher-Name: „Möchtest du [Name] wirklich entfernen? [Name] wird darüber informiert."
+- [ ] Kein „Alle entfernen"-Button — nur einzeln, um versehentliches Löschen des gesamten Sicherheitsnetzes zu verhindern
+- [ ] Nach Entfernung: Liste aktualisieren
+
+### Frontend (Watcher)
+- [ ] Polling erkennt entfernte Person und aktualisiert die Liste
+- [ ] Optional: lokale Benachrichtigung wenn Push-Notification ankommt
+
+- **Fortschritt:** Nicht gestartet. Zusammengeführt aus zwei früheren Punkten (Watcher trennen + alte Watcher entfernen) im Gerätewechsel-TODO.
 - **Erledigt am:** -
 
 ---

@@ -1,7 +1,7 @@
 # Security Audit – iBinda
 
 Erstellt: 2026-03-21
-Aktualisiert: 2026-04-06
+Aktualisiert: 2026-04-16
 Status: offen
 
 ---
@@ -67,8 +67,8 @@ Status: offen
 - [ ] **29. `POST /api/watcher` — push_token nicht validiert**
   Die `parsePushToken()`-Funktion existiert, wird in `POST /api/watcher` aber nicht aufgerufen.
   Push-Token wird ohne Längen-/Zeichenvalidierung direkt in `watcher_devices` geschrieben.
-  Security-Audit #11 markiert push_token-Validierung als erledigt, aber dieser Endpoint ist ausgenommen.
-  **Fix:** `parsePushToken()` in `POST /api/watcher` aufrufen und bei ungültigem Token 400 zurückgeben.
+  Zusätzlich akzeptiert der Endpoint leere Strings als `push_token` (`schema.sql`: `NOT NULL` erlaubt `""`), was zu sinnlosen Notification-Versuchen an leere Empfänger führt.
+  **Fix:** `parsePushToken()` in `POST /api/watcher` aufrufen und bei ungültigem oder leerem Token 400 zurückgeben.
 
 - [ ] **9. Rate-Limiting nur per Device/Person, nicht per IP**
   Rate-Limiting wurde auf Device-ID-basiert umgestellt, aber ein Angreifer kann beliebig viele device_ids generieren.
@@ -80,11 +80,11 @@ Status: offen
 
 - [x] **11. Input-Validierung fehlt auf mehreren Endpoints**
   Die betroffenen Endpoints validieren jetzt konsistent:
-  - `POST /api/watcher`: `push_token` auf gueltige String-Laenge und Steuerzeichen
   - `GET /api/person/:id`, `GET /api/person/:id/has-watcher`, `GET /api/person/:id/watchers`, `GET/POST/DELETE /api/person/:id/devices`: UUID-Validierung fuer `person_id`
   - `GET /api/watcher/:id`, `GET /api/watcher/:id/persons`, `POST /api/watcher/:id/announce`: UUID-Validierung fuer `watcher_id`
   - `PUT /api/watch` und `DELETE /api/watch`: UUID-Validierung fuer `person_id` und `watcher_id`, plus robuste JSON-Fehlerbehandlung
   - `POST /api/watcher/:id/announce`: robuste JSON-Fehlerbehandlung fuer `name`
+  **Hinweis:** `POST /api/watcher` ruft `parsePushToken()` nicht auf — siehe #29.
 
 ---
 
@@ -128,6 +128,30 @@ Status: offen
   Niedrigeres Risiko (kurze Zeitfenster, aktive User-Interaktion nötig).
   **Fix:** UNIQUE-Index auf `watch_relations(person_id, watcher_id) WHERE removed_at IS NULL` oder atomares INSERT mit Conflict-Handling.
 
+- [ ] **33. `device_link_requests` Cleanup fehlt**
+  `cleanupPairingRequests()` wird im Cron aufgerufen und räumt abgelaufene `pairing_requests` auf.
+  Für `device_link_requests` gibt es kein Äquivalent — abgelaufene Device-Link-Tokens wachsen unbegrenzt in der DB.
+  **Fix:** `cleanupDeviceLinkRequests()` analog zu `cleanupPairingRequests()` implementieren und im Cron-Handler aufrufen.
+
+- [ ] **34. `DELETE /api/person/:id/devices` ohne `device_keys` Cleanup**
+  Beim Löschen eines Person-Geräts wird nur der `person_devices`-Eintrag entfernt (`src/app/api.ts:1204`).
+  Der zugehörige `device_keys`-Eintrag bleibt erhalten — das Gerät kann sich weiterhin authentifizieren (gültiger API-Key), hat aber keine Person-Ownership mehr.
+  Zombie-Device: authentifiziert, aber ohne Zugriff auf Daten. Kein direkter Exploit, aber inkonsistenter Zustand.
+  **Fix:** Bei `DELETE /api/person/:id/devices` auch den `device_keys`-Eintrag mit `role = 'person'` für die gelöschte `device_id` entfernen.
+
+- [ ] **35. `showConfirmModal` setzt `innerHTML` mit fragiler Escape-Kette**
+  `src/frontend/watcher.ts:621`: `confirmModalMessage.innerHTML = message` — die Message wird als HTML interpretiert.
+  Aktuelle Aufrufer (Zeile 649: statischer String; Zeile 1181: `escapeHtml()` + `<strong>`) sind sicher.
+  Das Pattern ist aber fragil: ein zukünftiger Aufrufer ohne `escapeHtml()` erzeugt sofort XSS.
+  Steht im Zusammenhang mit #18 (innerHTML) und #31 (localStorage-Daten in HTML).
+  **Fix:** `textContent` verwenden und HTML-Formatierung durch DOM-API ersetzen, oder sicherstellen dass die Funktion selbst escaped und nur explizit erlaubte Tags durchlässt.
+
+- [ ] **36. CSP erlaubt `'unsafe-inline'` fuer Scripts**
+  `src/app/constants.ts:18`: `script-src 'self' 'unsafe-inline'` schwächt den XSS-Schutz der CSP erheblich.
+  Wenn ein Angreifer eine Injection-Stelle findet (z.B. #31, #35), kann er beliebiges JS ausführen — die CSP blockiert das nicht.
+  Bewusstes Trade-off: Das Frontend nutzt Inline-Scripts, daher ist `unsafe-inline` aktuell notwendig.
+  Langfristig Inline-Scripts in separate Dateien auslagern und `unsafe-inline` entfernen, oder Nonce-basierte CSP verwenden.
+
 - [ ] **16. Kein Key-Rotation / Kein Key-Revocation**
   API-Keys sind 1 Jahr gültig (Cookie Max-Age), es gibt keinen Endpoint zum Invalidieren oder Rotieren.
   Kompromittierte Keys können nicht widerrufen werden.
@@ -147,9 +171,10 @@ Status: offen
 
 ## Niedrig
 
-- [ ] **19. Kein Datenlösch-Endpoint (DSGVO)**
-  Es gibt kein `DELETE /api/person/:id`. Nutzerdaten können nicht vollständig gelöscht werden.
-  Endpoint + Datenlöschroutine implementieren (inkl. Devices, Watch-Relations, Rate-Limits).
+- [ ] **19. Unvollständige Datenlöschung (DSGVO)**
+  `DELETE /api/person/:id` existiert (seit 2026-03-29), führt aber nur ein Soft-Delete aus (setzt `deleted_at`).
+  Personenbezogene Daten werden nicht vollständig entfernt — siehe #30 für Details.
+  Vollständige Datenlöschroutine implementieren (inkl. `device_keys`, `person_devices`, `watch_relations`, `device_rate_limits`, `pairing_requests`, `device_link_requests`).
 
 - [ ] **20. Push-Tokens unverschlüsselt in DB**
   Expo Push Tokens werden als Klartext in der `watcher_devices`-Tabelle gespeichert.
@@ -179,6 +204,11 @@ Status: offen
   Namen sollten nach Zweckerfüllung entfernt oder maskiert werden. Zwei Optionen:
   - **Löschen:** Feld auf `NULL` setzen wenn nicht mehr benötigt (z.B. `pairing_requests.watcher_name` nach Abschluss, `watcher_disconnect_events.watcher_name_snapshot` nach Bestätigung, `watcher_name_announcements.name` bei Verbindungstrennung).
   - **Maskieren:** Name auf erstes + letztes Zeichen reduzieren, Mitte durch `*` ersetzen (z.B. `Max Mustermann` → `M************n`) — bleibt als Referenz erkennbar, ist aber kein personenbezogenes Datum mehr. Sinnvoll wo der Eintrag selbst (z.B. Disconnect-Event) erhalten bleiben soll.
+
+- [ ] **37. `watcher_name_announcements` Endpoint fehlt**
+  `schema.sql` definiert die Tabelle `watcher_name_announcements`, das Watcher-Frontend referenziert `/api/watcher/:id/announce`.
+  Dieser Endpoint ist in `api.ts` nicht registriert — der Name-Announce-Flow ist serverseitig unvollständig.
+  Kein Security-Risiko, aber funktionale Lücke. Endpoint implementieren oder toten Code entfernen.
 
 - [ ] **25. Expo Access Token könnte in Logs landen**
   `Authorization: Bearer ${expoToken}` wird in Fetch-Requests an Expo verwendet.
@@ -216,8 +246,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 6      | 1             |
-| Hoch        | 9      | 3             |
-| Mittel      | 10     | 7             |
-| Niedrig     | 8      | 8             |
-| **Gesamt**  | **33** | **19**        |
+| Kritisch    | 6      | 1           |
+| Hoch        | 9      | 3           |
+| Mittel      | 14     | 11          |
+| Niedrig     | 9      | 9           |
+| **Gesamt**  | **38** | **24**      |
