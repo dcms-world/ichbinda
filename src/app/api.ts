@@ -356,18 +356,17 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/heartbeat', async (c) => {
     const body = await c.req
-      .json<{ person_id?: string; status?: string; device_id?: string; push_token?: string }>()
-      .catch((): { person_id?: string; status?: string; device_id?: string; push_token?: string } => ({}));
+      .json<{ person_id?: string; status?: string; push_token?: string }>()
+      .catch((): { person_id?: string; status?: string; push_token?: string } => ({}));
     const personId = typeof body.person_id === 'string' ? body.person_id.trim() : '';
     const status = typeof body.status === 'string' ? body.status.trim() : 'ok';
-    const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
     const pushToken = typeof body.push_token === 'string' ? body.push_token.trim() : null;
 
     if (!personId || !isValidUUID(personId)) {
       return c.json({ error: 'Ungültige person_id' }, 400);
     }
-    if (status.length > 64 || deviceId.length > 255) {
-      return c.json({ error: 'person_id, status or device_id is too long' }, 400);
+    if (status.length > 64) {
+      return c.json({ error: 'status is too long' }, 400);
     }
 
     const authDeviceId = c.get('deviceId');
@@ -377,8 +376,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
     const now = new Date();
     const nowIso = now.toISOString();
-    const rateLimitKey = deviceId || personId;
-    const rateLimitCheck = await checkRateLimit(c.env.DB, rateLimitKey);
+    const rateLimitCheck = await checkRateLimit(c.env.DB, authDeviceId);
     if (!rateLimitCheck.allowed) {
       return c.json({
         error: 'Too many requests',
@@ -394,33 +392,31 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
            created_at = COALESCE(persons.created_at, excluded.created_at)`,
       ).bind(personId, nowIso).run();
 
-      if (deviceId) {
-        await ensurePersonDevicesTable(c.env.DB);
-        await upsertPersonDevice(
-          c.env.DB,
-          personId,
-          deviceId,
-          detectDeviceModel(c.req.header('user-agent') ?? ''),
-          nowIso,
-          pushToken,
-        );
-      }
+      await ensurePersonDevicesTable(c.env.DB);
+      await upsertPersonDevice(
+        c.env.DB,
+        personId,
+        authDeviceId,
+        detectDeviceModel(c.req.header('user-agent') ?? ''),
+        nowIso,
+        pushToken,
+      );
 
       return c.json({
         success: true,
         person_id: personId,
-        device_id: deviceId || null,
+        device_id: authDeviceId,
         status,
         timestamp: nowIso,
       });
     } catch (error) {
       const previousRateLimit = await c.env.DB.prepare(
         'SELECT last_heartbeat_at FROM device_rate_limits WHERE device_id = ?1',
-      ).bind(rateLimitKey).first<RateLimitRow>();
+      ).bind(authDeviceId).first<RateLimitRow>();
 
       await rollbackRateLimit(
         c.env.DB,
-        rateLimitKey,
+        authDeviceId,
         previousRateLimit?.last_heartbeat_at ?? null,
         nowIso,
       );

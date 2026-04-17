@@ -27,11 +27,8 @@ Status: offen
   **Person-Endpoints: behoben.** `deviceOwnsPerson()` prüft via `person_devices`-Tabelle. `POST /api/person` legt automatisch Ownership-Bindung an. Alle Person-Endpoints (`GET/POST/DELETE /api/person/:id/*`, `POST /api/heartbeat`) geben 403 bei fehlendem Ownership.
   **Watcher-Endpoints: behoben (2026-03-28).** Direkter `watcher_devices`-Check auf allen betroffenen Endpoints (kein `device_keys.watcher_id` nötig). `POST/PUT/DELETE /api/watch` und `GET /api/watcher/:id/persons` prüfen via `SELECT 1 FROM watcher_devices WHERE watcher_id = ? AND device_id = ?` und geben 403 bei fehlendem Ownership.
 
-- [ ] **27. Heartbeat `device_id` aus Request-Body — IDOR + Rate-Limit-Bypass**
-  `POST /api/heartbeat` liest `device_id` aus dem Request-Body statt aus der Auth-Middleware.
-  **Rate-Limit-Bypass:** `rateLimitKey = deviceId || personId` (Zeile 392) — Angreifer kann beliebige `device_id`-Strings senden und das Device-Rate-Limit umgehen.
-  **IDOR / Account-Takeover:** `upsertPersonDevice()` (Zeile 411) führt `ON CONFLICT(device_id) DO UPDATE SET person_id = excluded.person_id` aus. Ein Angreifer kann die `device_id` eines Opfers im Body senden. Da der Ownership-Check nur den authentifizierten Device gegen die eigene Person prüft, wird der `person_devices`-Eintrag des Opfers überschrieben — das Opfer verliert den Zugriff auf seine eigene Person (403).
-  **Fix:** `device_id` im Heartbeat-Body ignorieren und ausschließlich den authentifizierten `authDeviceId` aus der Middleware verwenden (für Rate-Limiting und `upsertPersonDevice`).
+- [x] **27. Heartbeat `device_id` aus Request-Body — IDOR + Rate-Limit-Bypass**
+  `device_id` wird im Heartbeat-Body nicht mehr akzeptiert. Rate-Limiting und `upsertPersonDevice` verwenden ausschließlich `authDeviceId` aus der Auth-Middleware. Der Body-Parameter `device_id` wurde aus dem Handler und der OpenAPI-Spec entfernt.
 
 - [x] **4. CORS `origin: '*'`**
   API akzeptiert jetzt nur noch erlaubte Origins:
@@ -246,8 +243,8 @@ Status: offen
 
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
-| Kritisch    | 6      | 1           |
+| Kritisch    | 6      | 0           |
 | Hoch        | 9      | 3           |
 | Mittel      | 14     | 11          |
 | Niedrig     | 9      | 9           |
-| **Gesamt**  | **38** | **24**      |
+| **Gesamt**  | **38** | **23**      |

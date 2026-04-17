@@ -299,9 +299,6 @@ paths:
                   type: string
                   maxLength: 64
                   default: ok
-                device_id:
-                  type: string
-                  maxLength: 255
                 push_token:
                   type: string
                   nullable: true

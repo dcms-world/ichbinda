@@ -299,9 +299,7 @@ paths:
     post:
       tags: [Person]
       summary: Heartbeat senden
-      description: |
-        Registriert einen Check-in für eine Person. Rate-Limit: 1x pro Stunde pro Gerät.
-        **Security #27:** `device_id` im Body wird derzeit noch für Rate-Limiting verwendet (bekannte Lücke).
+      description: Registriert einen Check-in für eine Person. Rate-Limit 1x/Stunde pro Gerät.
       security:
         - cookiePersonAuth: []
         - bearerAuth: []
@@ -320,10 +318,6 @@ paths:
                   type: string
                   maxLength: 64
                   default: ok
-                device_id:
-                  type: string
-                  maxLength: 255
-                  description: Gerät-ID für Rate-Limiting (sollte mit auth. Gerät übereinstimmen)
                 push_token:
                   type: string
                   nullable: true
