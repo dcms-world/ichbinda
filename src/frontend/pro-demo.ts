@@ -3,319 +3,347 @@ export const PRO_DEMO_HTML = `
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iBinda Pro — Institutionelle Betreuung</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iBinda Pro — Professional Care Suite</title>
     <style>
         :root {
-            --bg-color: #f8fafc;
+            --bg-main: #f8fafc;
+            --sidebar-bg: #111827;
+            --sidebar-text: #9ca3af;
+            --sidebar-active: #ffffff;
             --card-bg: #ffffff;
             --text-main: #0f172a;
-            --text-muted: #475569;
+            --text-muted: #64748b;
             --primary: #2563eb;
+            --primary-hover: #1d4ed8;
             --status-green: #10b981;
+            --status-green-bg: #ecfdf5;
             --status-yellow: #f59e0b;
+            --status-yellow-bg: #fffbeb;
             --status-red: #ef4444;
-            --radius: 16px;
-            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --status-red-bg: #fef2f2;
+            --border: #e2e8f0;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
+            background-color: var(--bg-main);
             color: var(--text-main);
+            min-height: 100vh;
             line-height: 1.5;
-            padding: 0;
-            margin: 0;
-            height: 100vh;
         }
 
-        /* Login Screen */
+        /* --- Login Screen --- */
         #login-screen {
+            position: fixed;
+            inset: 0;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        }
-        .login-card {
+            z-index: 1000;
             background: white;
-            padding: 3rem;
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
         }
-        .login-card h1 { margin-bottom: 0.5rem; color: var(--primary); font-weight: 800; }
-        .login-card p { margin-bottom: 2rem; color: var(--text-muted); font-size: 0.95rem; }
-        .login-card input {
-            width: 100%;
-            padding: 0.85rem 1rem;
-            margin-bottom: 1rem;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 1rem;
-            outline: none;
-        }
-        .login-card input:focus { border-color: var(--primary); }
-
-        /* Dashboard (Hidden by default) */
-        #dashboard-container {
-            display: none;
-            padding: 2rem;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2.5rem;
-            max-width: 1400px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .logo-area h1 { font-size: 1.75rem; font-weight: 800; color: var(--primary); }
-        .logo-area p { font-size: 0.95rem; color: var(--text-muted); font-weight: 500; }
-
-        .actions { display: flex; gap: 1rem; align-items: center; }
-        button {
-            padding: 0.75rem 1.5rem;
-            border-radius: 12px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-outline { background: white; border: 1px solid #e2e8f0; color: var(--text-main); }
-        button:hover { opacity: 0.9; transform: translateY(-1px); }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .patient-card {
-            background: var(--card-bg);
-            border-radius: var(--radius);
-            padding: 1.75rem;
-            box-shadow: var(--shadow);
-            border: 2px solid transparent;
-            transition: all 0.4s;
-            position: relative;
+        .login-left {
+            flex: 1.2;
+            background: var(--sidebar-bg);
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            min-height: 220px;
-        }
-
-        /* Status Styles */
-        .status-ok { border-color: #f1f5f9; }
-        .status-warning { border-color: var(--status-yellow); }
-        .status-alarm { 
-            border-color: var(--status-red); 
-            animation: pulse-border 2s infinite;
-        }
-
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .patient-name { font-size: 1.3rem; font-weight: 800; }
-        .room-info { font-size: 0.9rem; color: var(--text-muted); margin-top: 2px; }
-
-        .heartbeat-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.75rem;
-            font-weight: 800;
-            text-transform: uppercase;
-        }
-
-        .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-        .dot-green { background: var(--status-green); box-shadow: 0 0 12px var(--status-green); }
-        .dot-red { background: var(--status-red); }
-
-        .card-body { margin-bottom: 1.5rem; }
-        .last-activity { font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
-
-        .btn-alarm-action {
-            width: 100%;
-            background: var(--status-red);
+            justify-content: center;
+            padding: 4rem;
             color: white;
-            padding: 1rem;
+        }
+        .login-left h2 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 800; line-height: 1.1; margin-bottom: 1.5rem; }
+        .login-left p { font-size: 1.25rem; color: var(--sidebar-text); max-width: 400px; }
+        
+        .login-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+        .login-form { width: 100%; max-width: 320px; }
+        .login-form h3 { font-size: 1.5rem; font-weight: 700; margin-bottom: 2rem; }
+        .login-form input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
             font-size: 1rem;
-            font-weight: 800;
+        }
+        .btn-login {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            padding: 0.75rem;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
         }
 
-        #overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
+        /* --- Main Layout --- */
+        #app-container { display: none; min-height: 100vh; }
+        
+        aside {
+            width: 260px;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            position: sticky;
+            top: 0;
+            height: 100vh;
         }
-        .modal {
-            background: white;
-            padding: 3rem;
-            border-radius: 24px;
-            max-width: 460px;
-            text-align: center;
-        }
-        .qr-placeholder {
-            width: 240px; height: 240px;
-            background: #f8fafc;
-            margin: 2rem auto;
-            border-radius: 20px;
+        .nav-logo { color: white; font-size: 1.25rem; font-weight: 800; margin-bottom: 2.5rem; }
+        .nav-item {
             display: flex;
             align-items: center;
-            justify-content: center;
-            border: 3px dashed #e2e8f0;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            font-size: 0.9375rem;
         }
-        .encrypted { filter: blur(5px); user-select: none; opacity: 0.7; }
+        .nav-item.active { color: white; background: var(--primary); }
+        .nav-item:not(.active):hover { color: white; background: rgba(255,255,255,0.05); }
+
+        main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        
+        .top-bar {
+            height: 64px;
+            background: white;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .content-area { padding: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+        /* --- Dashboard UI --- */
+        .stats-row { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 1rem; 
+            margin-bottom: 2rem; 
+        }
+        .stat-card { background: white; padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+        .stat-label { font-size: 0.8125rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.025em; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; }
+
+        .client-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .client-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .client-name { font-size: 1.125rem; font-weight: 700; }
+        .client-info { font-size: 0.875rem; color: var(--text-muted); }
+
+        .badge {
+            padding: 0.25rem 0.625rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .badge-ok { background: var(--status-green-bg); color: var(--status-green); }
+        .badge-warning { background: var(--status-yellow-bg); color: var(--status-yellow); }
+        .badge-alarm { background: var(--status-red-bg); color: var(--status-red); border: 1px solid var(--status-red); }
+
+        .info-group { display: flex; flex-direction: column; gap: 0.375rem; }
+        .info-item { display: flex; justify-content: space-between; font-size: 0.875rem; }
+        .info-label { color: var(--text-muted); }
+        .info-value { font-weight: 600; }
+
+        .btn-action {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-alarm { background: var(--status-red); color: white; }
+
+        .menu-btn { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+
+        /* --- Mobile Responsiveness --- */
+        @media (max-width: 1024px) {
+            .login-left { display: none; }
+        }
+
+        @media (max-width: 768px) {
+            aside {
+                position: fixed;
+                inset: 0 0 0 -260px;
+                z-index: 1000;
+                transition: transform 0.3s;
+            }
+            aside.open { transform: translateX(260px); }
+            
+            #app-container { flex-direction: column; }
+            .menu-btn { display: block; }
+            .top-bar-title { font-size: 1rem; }
+            .user-profile span { display: none; }
+            
+            .content-area { padding: 1rem; }
+            .stats-row { grid-template-columns: 1fr 1fr; }
+            
+            .btn-text { display: none; }
+        }
+
+        .encrypted { filter: blur(5px); opacity: 0.5; }
     </style>
 </head>
 <body>
 
     <div id="login-screen">
-        <div class="login-card">
-            <h1>iBinda <span style="font-weight: 300;">Pro</span></h1>
-            <p>Institutioneller Login</p>
-            <input type="text" id="email" placeholder="Benutzername">
-            <input type="password" id="password" placeholder="Passwort">
-            <button class="btn-primary" style="width: 100%;" onclick="tryLogin()">Einloggen</button>
+        <div class="login-left">
+            <h2>Sicherheit, <br>die vertraut.</h2>
+            <p>Die professionelle iBinda Suite für ambulante Einrichtungen und modernes Wohnen.</p>
+        </div>
+        <div class="login-right">
+            <div class="login-form">
+                <div style="font-size: 2.5rem; margin-bottom: 1rem;">📍</div>
+                <h3>Anmelden</h3>
+                <input type="text" id="email" placeholder="Benutzername">
+                <input type="password" id="password" placeholder="Passwort">
+                <button class="btn-login" onclick="tryLogin()">Portal öffnen</button>
+            </div>
         </div>
     </div>
 
-    <div id="dashboard-container">
-        <header>
-            <div class="logo-area">
-                <h1>iBinda <span style="font-weight: 300; color: #64748b;">Pro Portal</span></h1>
-                <p>Klienten-Übersicht — Ambulante Betreuung & Wohnungskontrolle</p>
+    <div id="app-container" style="display: none;">
+        <aside id="sidebar">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <div class="nav-logo">iBinda <span style="font-weight: 300;">Pro</span></div>
+                <button class="menu-btn" style="color: white; padding: 0;" onclick="toggleMenu()">✕</button>
             </div>
-            <div class="actions">
-                <button class="btn-outline" onclick="toggleEncryption()">🔐 PII Verschlüsselung</button>
-                <button class="btn-primary" onclick="showOnboarding()">+ Mitarbeiter einladen</button>
+            <nav>
+                <div class="nav-item active">📊 Dashboard</div>
+                <div class="nav-item">👥 Klienten</div>
+                <div class="nav-item">📡 Geräte</div>
+                <div class="nav-item">📁 Protokolle</div>
+                <div class="nav-item">⚙️ Settings</div>
+            </nav>
+        </aside>
+
+        <main>
+            <div class="top-bar">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                    <div class="top-bar-title">Übersicht</div>
+                </div>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <button onclick="toggleEncryption()" style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: white;">🔐 <span class="btn-text">Schutz</span></button>
+                    <button onclick="showOnboarding()" style="padding: 0.5rem; border-radius: 8px; border: none; background: var(--primary); color: white;">+ <span class="btn-text">Einladen</span></button>
+                    <div style="width: 32px; height: 32px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;">AZ</div>
+                </div>
             </div>
-        </header>
 
-        <div class="dashboard-grid" id="dashboard">
-            <!-- Cards will be injected here -->
-        </div>
-
-        <div id="overlay" onclick="hideOnboarding()">
-            <div class="modal" onclick="event.stopPropagation()">
-                <h2>Mitarbeiter-Einladung</h2>
-                <p style="color: var(--text-muted); margin-top: 0.5rem;">Ein autorisierter Pfleger oder Mitarbeiter scannt diesen Code mit der iBinda App, um der Institution beizutreten.</p>
-                <div class="qr-placeholder">
-                    <div style="text-align: center;">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8;">[EINLADUNGS-QR]</div>
+            <div class="content-area">
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-label">Klienten</div>
+                        <div class="stat-value">124</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Alarme</div>
+                        <div class="stat-value" style="color: var(--status-red);" id="alarm-count">1</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Warnungen</div>
+                        <div class="stat-value" style="color: var(--status-yellow);">1</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Status</div>
+                        <div class="stat-value" style="color: var(--status-green); font-size: 1.1rem;">Bereit</div>
                     </div>
                 </div>
-                <button class="btn-outline" style="margin-top: 2rem; width: 100%;" onclick="hideOnboarding()">Schließen</button>
+
+                <div class="client-grid" id="dashboard"></div>
             </div>
-        </div>
+        </main>
     </div>
 
     <script>
         const clients = [
-            { id: '1', name: 'Maria Sommer', info: 'Appartement 14', status: 'ok', lastSeen: 'vor 12 Min.', battery: '92%' },
-            { id: '2', name: 'Josef Berger', info: 'Wohnung 3a', status: 'alarm', lastSeen: 'vor 2 Std.', battery: '64%' },
-            { id: '3', name: 'Hildegard Mayr', info: 'Appartement 1', status: 'warning', lastSeen: 'vor 45 Min.', battery: '18%' },
-            { id: '4', name: 'Karl-Heinz Koch', info: 'Wohnung 22', status: 'ok', lastSeen: 'vor 5 Min.', battery: '98%' },
-            { id: '5', name: 'Anna Huber', info: 'Wohnung 7', status: 'ok', lastSeen: 'vor 1 Std.', battery: '45%' },
-            { id: '6', name: 'Peter Lustig', info: 'Wohneinheit 1', status: 'ok', lastSeen: 'vor 8 Min.', battery: '77%' }
+            { id: '1', name: 'Maria Sommer', info: 'App. 14', status: 'ok', last: '12 Min.', bat: '92%' },
+            { id: '2', name: 'Josef Berger', info: 'Whg. 3a', status: 'alarm', last: '2 Std.', bat: '64%' },
+            { id: '3', name: 'Hildegard Mayr', info: 'App. 1', status: 'warning', last: '45 Min.', bat: '18%' },
+            { id: '4', name: 'Karl-Heinz Koch', info: 'Whg. 22', status: 'ok', last: '5 Min.', bat: '98%' }
         ];
 
         let isEncrypted = false;
+
+        function toggleMenu() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
 
         function tryLogin() {
             const e = document.getElementById('email').value;
             const p = document.getElementById('password').value;
             if (e === 'admin' && p === 'demo') {
                 document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('dashboard-container').style.display = 'block';
+                document.getElementById('app-container').style.display = 'flex';
                 render();
             } else {
-                alert('Falsche Zugangsdaten! (admin / demo)');
+                alert('admin / demo nutzen');
             }
         }
 
         function render() {
             const grid = document.getElementById('dashboard');
             grid.innerHTML = clients.map(c => \`
-                <div class="patient-card status-\${c.status}">
+                <div class="client-card">
                     <div class="card-header">
                         <div>
-                            <div class="patient-name \${isEncrypted ? 'encrypted' : ''}">\${isEncrypted ? 'K-ID: 772-XQ' : c.name}</div>
-                            <div class="room-info \${isEncrypted ? 'encrypted' : ''}">\${isEncrypted ? 'Sektor A / Zone 4' : c.info}</div>
+                            <div class="client-name \${isEncrypted ? 'encrypted' : ''}">\${isEncrypted ? 'ID-772' : c.name}</div>
+                            <div class="client-info">\${c.info}</div>
                         </div>
-                        <div class="heartbeat-status">
-                            <div class="dot \${c.status === 'alarm' ? 'dot-red' : 'dot-green'}"></div>
-                            <span style="color: \${c.status === 'alarm' ? 'var(--status-red)' : 'var(--status-green)'}">
-                                \${c.status === 'alarm' ? 'Eskalation' : 'Normal'}
-                            </span>
-                        </div>
+                        <div class="badge badge-\${c.status}">\${c.status.toUpperCase()}</div>
                     </div>
-                    <div class="card-body">
-                        <div class="last-activity">🕒 Letzte Meldung: \${c.lastSeen}</div>
-                        <div class="last-activity" style="color: \${parseInt(c.battery) < 20 ? 'var(--status-red)' : 'inherit'}">
-                            🔋 Gerät: \${c.battery}
-                        </div>
+                    <div class="info-group">
+                        <div class="info-item"><span class="info-label">Letzte Meldung</span><span class="info-value">vor \${c.last}</span></div>
+                        <div class="info-item"><span class="info-label">Batterie</span><span class="info-value">\${c.bat}</span></div>
                     </div>
-                    \${c.status === 'alarm' ? \`
-                        <div class="card-footer">
-                            <button class="btn-alarm-action" onclick="claimAlarm('\${c.id}')">ALARM ÜBERNEHMEN</button>
-                        </div>
-                    \` : ''}
+                    \${c.status === 'alarm' ? \`<button class="btn-action btn-alarm" onclick="claimAlarm('\${c.id}')">HILFE STARTEN</button>\` : ''}
                 </div>
             \`).join('');
+            document.getElementById('alarm-count').innerText = clients.filter(c => c.status === 'alarm').length;
         }
 
         function claimAlarm(id) {
             const c = clients.find(c => c.id === id);
-            if (c) {
-                c.status = 'warning';
-                c.lastSeen = 'Übernahme läuft';
-                alert('Alarm übernommen. Die Intervention wurde im System vermerkt.');
-                render();
-            }
+            if (c) { c.status = 'ok'; c.last = 'Gerade eben'; render(); }
         }
 
-        function toggleEncryption() {
-            isEncrypted = !isEncrypted;
-            render();
-        }
-
-        function showOnboarding() {
-            document.getElementById('overlay').style.display = 'flex';
-        }
-
-        function hideOnboarding() {
-            document.getElementById('overlay').style.display = 'none';
-        }
+        function toggleEncryption() { isEncrypted = !isEncrypted; render(); }
+        function showOnboarding() { alert('QR Code Scan-Einladung (Simuliert)'); }
     </script>
 </body>
 </html>
