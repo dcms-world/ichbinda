@@ -61,11 +61,8 @@ Status: offen
   Nur das Frontend limitiert via `MAX_WATCHED_PERSONS`. Ein Watcher kann durch direkte API-Calls beliebig viele Personen überwachen.
   **Fix:** Vor dem Anlegen einer `watch_relation` in `POST /api/pair/confirm` die aktive Watcher-Relation-Anzahl gegen `watchers.max_persons` prüfen.
 
-- [ ] **29. `POST /api/watcher` — push_token nicht validiert**
-  Die `parsePushToken()`-Funktion existiert, wird in `POST /api/watcher` aber nicht aufgerufen.
-  Push-Token wird ohne Längen-/Zeichenvalidierung direkt in `watcher_devices` geschrieben.
-  Zusätzlich akzeptiert der Endpoint leere Strings als `push_token` (`schema.sql`: `NOT NULL` erlaubt `""`), was zu sinnlosen Notification-Versuchen an leere Empfänger führt.
-  **Fix:** `parsePushToken()` in `POST /api/watcher` aufrufen und bei ungültigem oder leerem Token 400 zurückgeben.
+- [x] **29. `POST /api/watcher` — push_token nicht validiert**
+  `parsePushToken()` wird jetzt in `POST /api/watcher` aufgerufen. Ist `push_token` angegeben aber ungültig (leer, zu kurz, Steuerzeichen), antwortet der Endpoint mit 400. Fehlt `push_token` komplett (Web-Client ohne Push-Support), wird `null` gespeichert. `watcher_devices.push_token` wurde von `NOT NULL` auf nullable umgestellt.
 
 - [ ] **9. Rate-Limiting nur per Device/Person, nicht per IP**
   Rate-Limiting wurde auf Device-ID-basiert umgestellt, aber ein Angreifer kann beliebig viele device_ids generieren.
@@ -244,7 +241,7 @@ Status: offen
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
 | Kritisch    | 6      | 0           |
-| Hoch        | 9      | 3           |
+| Hoch        | 9      | 2           |
 | Mittel      | 14     | 11          |
 | Niedrig     | 9      | 9           |
-| **Gesamt**  | **38** | **23**      |
+| **Gesamt**  | **38** | **22**      |

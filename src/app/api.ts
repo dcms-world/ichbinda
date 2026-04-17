@@ -33,6 +33,7 @@ import {
   normalizeDisplayName,
   parseCheckIntervalMinutes,
   parseDeviceModel,
+  parsePushToken,
 } from './helpers/validation';
 import { OPENAPI_YAML } from './openapi-spec';
 import type {
@@ -1215,7 +1216,10 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.post('/api/watcher', async (c) => {
     const body = await c.req.json<{ push_token?: unknown }>().catch((): { push_token?: unknown } => ({}));
-    const pushToken = typeof body.push_token === 'string' ? body.push_token.trim() : '';
+    const pushToken = body.push_token !== undefined ? parsePushToken(body.push_token) : null;
+    if (body.push_token !== undefined && pushToken === null) {
+      return c.json({ error: 'Ungültiger push_token' }, 400);
+    }
     const deviceModel = detectDeviceModel(c.req.header('user-agent') ?? '');
 
     const deviceId = c.get('deviceId');

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS watcher_devices (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   watcher_id TEXT NOT NULL,
   device_id TEXT NOT NULL UNIQUE,
-  push_token TEXT NOT NULL,
+  push_token TEXT,
   device_model TEXT NOT NULL DEFAULT 'unknown',
   last_seen DATETIME NOT NULL,
   FOREIGN KEY (watcher_id) REFERENCES watchers(id)
