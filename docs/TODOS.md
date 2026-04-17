@@ -161,7 +161,7 @@ Referenzen:
 - **Beschreibung:** Offene Audit-Punkte außerhalb des Free-Kerns bewerten: umsetzen, einplanen oder bewusst akzeptieren.
 
 - [ ] IP-basiertes Rate-Limiting — **Security #9**
-- [ ] Sensitive Daten aus localStorage → HttpOnly-Cookies — **Security #14**
+- [~] Sensitive Daten aus localStorage → HttpOnly-Cookies — **Security #14** — won't fix (Web test-only); Capacitor-App löst das via `@capacitor/preferences` (Phase B)
 - [x] Obergrenze Geräte pro Person — **Security #15**
 - [ ] API-Key Revocation — **Security #16**
 - [ ] DSGVO-Lösch-Endpoint — **Security #19**

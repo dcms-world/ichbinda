@@ -95,9 +95,10 @@ Status: offen
   - `Strict-Transport-Security` fuer HTTPS-Requests
   Die CSP ist auf die verbleibenden benoetigten Quellen begrenzt. QR-Libraries werden lokal ausgeliefert, die externe Google-Font-Abhaengigkeit wurde entfernt; bewusst extern bleibt nur Turnstile.
 
-- [ ] **14. Sensitive Daten in `localStorage`**
+- [~] **14. Sensitive Daten in `localStorage`**
   person_id, watcher_id, Namen und Fotos liegen in localStorage – bei XSS sofort kompromittiert.
-  Kritische IDs nur in HttpOnly-Cookies speichern (API-Key ist bereits als HttpOnly-Cookie gelöst).
+  **Won't fix (Web-App ist test-only).** Für die Capacitor-App entfällt der HttpOnly-Cookie-Ansatz: die WebView läuft in einer nativen App-Sandbox (kein Cross-App-Zugriff), und sensitive Daten werden stattdessen über `@capacitor/preferences` in der nativen Keychain (iOS) bzw. EncryptedSharedPreferences (Android) gespeichert — das ist sicherer als HttpOnly-Cookies im WebView. Wird automatisch durch Phase B der Native-App-Migration gelöst.
+  **Hinweis:** XSS-Risiko bleibt davon unabhängig bestehen — injizierter Script kann localStorage und @capacitor/preferences gleichermaßen lesen. Siehe #18, #31, #35.
 
 - [x] **15. Unbegrenzte Geräte pro Person (Resource Exhaustion)**
   `persons.max_devices` wurde eingeführt (Default `1`) und wird serverseitig in `POST /api/person/:id/devices` erzwungen.
