@@ -1,9 +1,10 @@
+import { DOCS_HTML } from './docs';
 import { LANDING_HTML } from './landing';
 import { PERSON_HTML } from './person';
 import { JSQR_SCRIPT, QRCODE_SCRIPT } from './vendor';
 import { WATCHER_HTML } from './watcher';
 
-export { LANDING_HTML };
+export { LANDING_HTML, DOCS_HTML };
 
 export function renderPersonHtml(): string {
   return PERSON_HTML

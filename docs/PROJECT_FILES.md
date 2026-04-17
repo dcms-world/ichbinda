@@ -20,6 +20,7 @@ Lies die Dateien, die für deine aktuelle Aufgabe relevant sind — nicht alle a
 | `docs/DECISIONS.md` | Bei Architektur-/Design-Fragen | Getroffene Entscheidungen mit Begründung |
 | `docs/CONVENTIONS.md` | Bei Code-Arbeit | Code-Stil, Namenskonventionen, Commit-Format |
 | `docs/REBUILD_PROMPT.md` | Zum Nachbauen der App | Vollständiger aktueller Projektstand als Prompt |
+| `docs/openapi.yaml` | Bei API-Dokumentation / Client-Generierung | OpenAPI 3.1 Spec aller `/api/*`-Endpoints |
 
 ---
 

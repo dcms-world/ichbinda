@@ -22,6 +22,18 @@ export const CONTENT_SECURITY_POLICY = [
   "connect-src 'self'",
 ].join('; ');
 
+export const DOCS_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data: https://cdn.jsdelivr.net",
+  "connect-src 'self'",
+].join('; ');
+
 export const CAPACITOR_ALLOWED_ORIGINS = new Set([
   'capacitor://localhost',
   'https://localhost',

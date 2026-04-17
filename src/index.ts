@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 
 import { registerApiRoutes } from './app/api';
 import { cleanupPairingRequests, checkOverduePersons } from './app/helpers/db';
+import { DOCS_CONTENT_SECURITY_POLICY } from './app/constants';
 import { applySecurityHeaders } from './app/helpers/security';
-import { LANDING_HTML, renderPersonHtml, renderWatcherHtml } from './frontend';
+import { DOCS_HTML, LANDING_HTML, renderPersonHtml, renderWatcherHtml } from './frontend';
 import type { AppBindings, AppEnv } from './app/types';
 
 const app = new Hono<AppEnv>();
@@ -20,10 +21,20 @@ function htmlResponse(html: string): Response {
 app.get('/', () => htmlResponse(LANDING_HTML));
 app.get('/person.html', (c) => htmlResponse(renderPersonHtml()));
 app.get('/watcher.html', (c) => htmlResponse(renderWatcherHtml()));
+app.get('/docs', () => htmlResponse(DOCS_HTML));
 
 app.use('*', async (c, next) => {
   await next();
-  applySecurityHeaders(c);
+  if (c.req.path === '/docs') {
+    c.header('Content-Security-Policy', DOCS_CONTENT_SECURITY_POLICY);
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (new URL(c.req.url).protocol === 'https:') {
+      c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+  } else {
+    applySecurityHeaders(c);
+  }
 });
 
 registerApiRoutes(app);

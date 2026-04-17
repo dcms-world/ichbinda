@@ -33,6 +33,7 @@ import {
   parseCheckIntervalMinutes,
   parseDeviceModel,
 } from './helpers/validation';
+import { OPENAPI_YAML } from './openapi-spec';
 import type {
   AppEnv,
   DeviceLinkRequestRow,
@@ -216,6 +217,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
 
   app.use('/api/*', async (c, next) => {
     if (c.req.path === '/api/auth/register-device') return await next();
+    if (c.req.path === '/api/openapi.yaml') return await next();
 
     if (c.env.DEV_TOKEN) {
       const devToken = new URL(c.req.url).searchParams.get('dev_token');
@@ -245,6 +247,12 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     }
 
     return c.json({ error: 'Unauthorized' }, 401);
+  });
+
+  app.get('/api/openapi.yaml', (c) => {
+    return new Response(OPENAPI_YAML, {
+      headers: { 'content-type': 'application/yaml; charset=UTF-8' },
+    });
   });
 
   app.post('/api/auth/register-device', async (c) => {
