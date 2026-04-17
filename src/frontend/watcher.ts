@@ -618,7 +618,7 @@ function closeStatusModal() {
 function showConfirmModal(title, message, confirmLabel) {
   const overlay = document.getElementById('confirmModalOverlay');
   document.getElementById('confirmModalTitle').textContent = title || 'Bestätigung';
-  document.getElementById('confirmModalMessage').innerHTML = message || '';
+  document.getElementById('confirmModalMessage').textContent = message || '';
   document.getElementById('confirmModalConfirmBtn').textContent = confirmLabel || 'Entfernen';
   overlay.classList.add('open');
   return new Promise((resolve) => { confirmModalResolver = resolve; });
@@ -719,7 +719,7 @@ function getPersonPhoto(personId) {
 
 function buildPersonAvatarMarkup(personId) {
   const photo = getPersonPhoto(personId);
-  if (photo) return '<img src="' + photo + '" alt="" class="person-avatar">';
+  if (photo) return '<img src="' + escapeHtml(photo) + '" alt="" class="person-avatar">';
   const initial = (getPersonName(personId) || getRememberedPersonName(personId) || '?').charAt(0).toUpperCase();
   return '<div class="person-avatar">' + initial + '</div>';
 }
@@ -1177,8 +1177,8 @@ setupCropDrag();
 
 async function removePersonFromModal() {
   const id = activeEditPersonId; if(!id) return;
-  const personName = escapeHtml(getPersonName(id) || 'diese Person');
-  const confirmed = await showConfirmModal('Verbindung trennen', 'Möchtest du die Verbindung zu <strong>' + personName + '</strong> wirklich dauerhaft entfernen?');
+  const personName = getPersonName(id) || 'diese Person';
+  const confirmed = await showConfirmModal('Verbindung trennen', 'Möchtest du die Verbindung zu "' + personName + '" wirklich dauerhaft entfernen?');
   if (confirmed) {
     try {
       await fetch(API_URL + '/watch', {

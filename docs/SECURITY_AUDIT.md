@@ -110,16 +110,11 @@ Status: offen
   Die Person ist "gelöscht", aber funktional passiert nichts.
   **Fix:** Beim Soft-Delete auch `device_keys` löschen (oder invalidieren), `person_devices` aufräumen und `watch_relations` soft-deleten. Alternativ: Hard-Delete mit kaskadiertem Cleanup.
 
-- [ ] **31. XSS über localStorage-Photo in `buildPersonAvatarMarkup`**
-  `src/frontend/watcher.ts:704`: `'<img src="' + photo + '" ...>'` — `photo` aus localStorage wird nicht escaped.
-  Bei Zugriff auf localStorage (z.B. über andere XSS-Lücke, Shared Device, DevTools) kann eine bösartige Photo-URL eingeschleust werden (`" onerror="alert(1)`).
-  Steht im Zusammenhang mit #14 (Sensitive Daten in localStorage) und #18 (innerHTML).
-  **Fix:** `photo` durch `escapeHtml()` laufen lassen oder `img.src` via DOM-API setzen.
+- [x] **31. XSS über localStorage-Photo in `buildPersonAvatarMarkup`**
+  `src/frontend/watcher.ts`: `escapeHtml(photo)` ergänzt — `photo` aus localStorage wird jetzt escaped bevor es in `<img src>` eingesetzt wird.
 
-- [ ] **32. Race Condition bei Pairing-Confirm — doppelte watch_relations**
-  `POST /api/pair/confirm`: Zwei gleichzeitige Requests können beide `status = 'pending'` sehen, beide die Prüfung passieren und doppelte `watch_relations`-Einträge erzeugen (kein UNIQUE-Constraint auf `person_id + watcher_id`).
-  Niedrigeres Risiko (kurze Zeitfenster, aktive User-Interaktion nötig).
-  **Fix:** UNIQUE-Index auf `watch_relations(person_id, watcher_id) WHERE removed_at IS NULL` oder atomares INSERT mit Conflict-Handling.
+- [x] **32. Race Condition bei Pairing-Confirm — doppelte watch_relations**
+  `POST /api/pair/confirm`: zweilagige Absicherung — `confirmResult.meta.changes === 0` prüft nach dem `UPDATE pairing_requests` ob der Request gewonnen hat (concurrent Request bekommt sofort `409`); zusätzlich UNIQUE-Index `uq_watch_relations_active` auf `watch_relations(person_id, watcher_id) WHERE removed_at IS NULL` als DB-seitige Schranke. Migration `016_watch_relations_unique.sql` auf Remote angewendet.
 
 - [x] **33. `device_link_requests` Cleanup fehlt**
   `cleanupDeviceLinkRequests()` wurde analog zu `cleanupPairingRequests()` implementiert und im Cron-Handler registriert. Abgelaufene Einträge werden nach 60 Minuten gelöscht (`DEVICE_LINK_CLEANUP_AFTER_MINUTES`).
@@ -127,12 +122,8 @@ Status: offen
 - [x] **34. `DELETE /api/person/:id/devices` ohne `device_keys` Cleanup**
   `DELETE /api/person/:id/devices` löscht jetzt in einem Batch sowohl den `person_devices`- als auch den `device_keys`-Eintrag (`role = 'person'`) für die entfernte `device_id`. Kein Zombie-Device mehr möglich.
 
-- [ ] **35. `showConfirmModal` setzt `innerHTML` mit fragiler Escape-Kette**
-  `src/frontend/watcher.ts:621`: `confirmModalMessage.innerHTML = message` — die Message wird als HTML interpretiert.
-  Aktuelle Aufrufer (Zeile 649: statischer String; Zeile 1181: `escapeHtml()` + `<strong>`) sind sicher.
-  Das Pattern ist aber fragil: ein zukünftiger Aufrufer ohne `escapeHtml()` erzeugt sofort XSS.
-  Steht im Zusammenhang mit #18 (innerHTML) und #31 (localStorage-Daten in HTML).
-  **Fix:** `textContent` verwenden und HTML-Formatierung durch DOM-API ersetzen, oder sicherstellen dass die Funktion selbst escaped und nur explizit erlaubte Tags durchlässt.
+- [x] **35. `showConfirmModal` setzt `innerHTML` mit fragiler Escape-Kette**
+  `showConfirmModal` nutzt jetzt `textContent` statt `innerHTML`; der Aufrufer mit Personen-Name übergibt Plain Text mit Anführungszeichen statt HTML.
 
 - [ ] **36. CSP erlaubt `'unsafe-inline'` fuer Scripts**
   `src/app/constants.ts:18`: `script-src 'self' 'unsafe-inline'` schwächt den XSS-Schutz der CSP erheblich.

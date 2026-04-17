@@ -1063,12 +1063,16 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       }
     }
 
-    await c.env.DB.prepare(
+    const confirmResult = await c.env.DB.prepare(
       `UPDATE pairing_requests
        SET status = 'completed',
            completed_at = datetime('now')
        WHERE pairing_token = ?1 AND status = 'pending'`,
     ).bind(pairingToken).run();
+
+    if (confirmResult.meta.changes === 0) {
+      return c.json({ error: 'Pairing bereits abgeschlossen' }, 409);
+    }
 
     if (!existingRelation) {
       await c.env.DB.prepare(

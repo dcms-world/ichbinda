@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS watch_relations (
   FOREIGN KEY (person_id) REFERENCES persons(id),
   FOREIGN KEY (watcher_id) REFERENCES watchers(id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_watch_relations_active
+  ON watch_relations (person_id, watcher_id)
+  WHERE removed_at IS NULL;
 
 -- Geräte pro Person (Multi-Device Support)
 CREATE TABLE IF NOT EXISTS person_devices (
