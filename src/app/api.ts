@@ -1222,9 +1222,10 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       return c.json({ error: 'Das letzte Gerät kann nicht gelöscht werden.' }, 409);
     }
 
-    await c.env.DB.prepare(
-      'DELETE FROM person_devices WHERE person_id = ?1 AND device_id = ?2',
-    ).bind(personId, deviceId).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM person_devices WHERE person_id = ?1 AND device_id = ?2').bind(personId, deviceId),
+      c.env.DB.prepare("DELETE FROM device_keys WHERE device_id = ?1 AND role = 'person'").bind(deviceId),
+    ]);
 
     return c.json({ success: true, person_id: personId, device_id: deviceId });
   });

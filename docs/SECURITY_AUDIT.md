@@ -120,16 +120,11 @@ Status: offen
   Niedrigeres Risiko (kurze Zeitfenster, aktive User-Interaktion nötig).
   **Fix:** UNIQUE-Index auf `watch_relations(person_id, watcher_id) WHERE removed_at IS NULL` oder atomares INSERT mit Conflict-Handling.
 
-- [ ] **33. `device_link_requests` Cleanup fehlt**
-  `cleanupPairingRequests()` wird im Cron aufgerufen und räumt abgelaufene `pairing_requests` auf.
-  Für `device_link_requests` gibt es kein Äquivalent — abgelaufene Device-Link-Tokens wachsen unbegrenzt in der DB.
-  **Fix:** `cleanupDeviceLinkRequests()` analog zu `cleanupPairingRequests()` implementieren und im Cron-Handler aufrufen.
+- [x] **33. `device_link_requests` Cleanup fehlt**
+  `cleanupDeviceLinkRequests()` wurde analog zu `cleanupPairingRequests()` implementiert und im Cron-Handler registriert. Abgelaufene Einträge werden nach 60 Minuten gelöscht (`DEVICE_LINK_CLEANUP_AFTER_MINUTES`).
 
-- [ ] **34. `DELETE /api/person/:id/devices` ohne `device_keys` Cleanup**
-  Beim Löschen eines Person-Geräts wird nur der `person_devices`-Eintrag entfernt (`src/app/api.ts:1204`).
-  Der zugehörige `device_keys`-Eintrag bleibt erhalten — das Gerät kann sich weiterhin authentifizieren (gültiger API-Key), hat aber keine Person-Ownership mehr.
-  Zombie-Device: authentifiziert, aber ohne Zugriff auf Daten. Kein direkter Exploit, aber inkonsistenter Zustand.
-  **Fix:** Bei `DELETE /api/person/:id/devices` auch den `device_keys`-Eintrag mit `role = 'person'` für die gelöschte `device_id` entfernen.
+- [x] **34. `DELETE /api/person/:id/devices` ohne `device_keys` Cleanup**
+  `DELETE /api/person/:id/devices` löscht jetzt in einem Batch sowohl den `person_devices`- als auch den `device_keys`-Eintrag (`role = 'person'`) für die entfernte `device_id`. Kein Zombie-Device mehr möglich.
 
 - [ ] **35. `showConfirmModal` setzt `innerHTML` mit fragiler Escape-Kette**
   `src/frontend/watcher.ts:621`: `confirmModalMessage.innerHTML = message` — die Message wird als HTML interpretiert.
@@ -240,6 +235,6 @@ Status: offen
 |-------------|--------|-------------|
 | Kritisch    | 6      | 0           |
 | Hoch        | 9      | 1           |
-| Mittel      | 14     | 11          |
+| Mittel      | 14     | 9           |
 | Niedrig     | 9      | 9           |
-| **Gesamt**  | **38** | **21**      |
+| **Gesamt**  | **38** | **19**      |

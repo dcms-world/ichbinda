@@ -1,4 +1,4 @@
-import { PAIRING_CLEANUP_AFTER_MINUTES, PAIRING_TOKEN_TTL_MINUTES, RATE_LIMIT_WINDOW_MS } from '../constants';
+import { DEVICE_LINK_CLEANUP_AFTER_MINUTES, PAIRING_CLEANUP_AFTER_MINUTES, PAIRING_TOKEN_TTL_MINUTES, RATE_LIMIT_WINDOW_MS } from '../constants';
 import type { DeviceLinkRequestRow, OverduePersonRow, PairingRequestRow, RateLimitRow } from '../types';
 import { hashApiKey } from './security';
 
@@ -299,5 +299,14 @@ export async function cleanupPairingRequests(db: D1Database): Promise<{ deleted:
     `DELETE FROM pairing_requests
      WHERE created_at < datetime('now', ?1)`,
   ).bind(`-${PAIRING_CLEANUP_AFTER_MINUTES} minutes`).run();
+  return { deleted: result.meta?.changes ?? 0 };
+}
+
+export async function cleanupDeviceLinkRequests(db: D1Database): Promise<{ deleted: number }> {
+  await ensureDeviceLinkRequestsTable(db);
+  const result = await db.prepare(
+    `DELETE FROM device_link_requests
+     WHERE created_at < datetime('now', ?1)`,
+  ).bind(`-${DEVICE_LINK_CLEANUP_AFTER_MINUTES} minutes`).run();
   return { deleted: result.meta?.changes ?? 0 };
 }

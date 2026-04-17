@@ -7,6 +7,7 @@ export const MAX_PUSH_TOKEN_LENGTH = 2048;
 export const MAX_DEVICE_MODEL_LENGTH = 255;
 export const PAIRING_TOKEN_TTL_MINUTES = 5;
 export const PAIRING_CLEANUP_AFTER_MINUTES = 10;
+export const DEVICE_LINK_CLEANUP_AFTER_MINUTES = 60;
 export const API_CORS_ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
 export const API_CORS_ALLOW_HEADERS = 'Content-Type, Authorization';
 export const CONTENT_SECURITY_POLICY = [

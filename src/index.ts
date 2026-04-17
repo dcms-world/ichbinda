@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import { registerApiRoutes } from './app/api';
-import { cleanupPairingRequests, checkOverduePersons } from './app/helpers/db';
+import { cleanupPairingRequests, cleanupDeviceLinkRequests, checkOverduePersons } from './app/helpers/db';
 import { DOCS_CONTENT_SECURITY_POLICY } from './app/constants';
 import { applySecurityHeaders } from './app/helpers/security';
 import { DOCS_HTML, LANDING_HTML, renderPersonHtml, renderWatcherHtml } from './frontend';
@@ -47,6 +47,7 @@ export default {
     ctx.waitUntil(Promise.all([
       checkOverduePersons(env.DB, env.EXPO_ACCESS_TOKEN),
       cleanupPairingRequests(env.DB),
+      cleanupDeviceLinkRequests(env.DB),
     ]));
   },
 };
