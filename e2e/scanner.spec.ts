@@ -44,7 +44,7 @@ async function installWatcherCameraMocks(page: Page) {
 
 test('@camera watcher scanner accepts the person QR payload via mocked camera flow', async ({ browser }) => {
   const personContext = await browser.newContext();
-  const watcherContext = await browser.newContext({ permissions: ['camera'] });
+  const watcherContext = await browser.newContext();
 
   const personPage = await personContext.newPage();
   const watcherPage = await watcherContext.newPage();

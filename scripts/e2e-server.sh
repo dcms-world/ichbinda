@@ -43,4 +43,4 @@ DEV_TOKEN = "e2e-dev-token"
 EOF
 
 npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" d1 execute "$DB_NAME" --local --persist-to "$PERSIST_DIR" --file="$ROOT_DIR/schema.sql" >/dev/null
-npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" dev --local --port "$PORT" --ip 127.0.0.1 --persist-to "$PERSIST_DIR"
+npx wrangler --cwd "$TMP_DIR" -c "$WRANGLER_CONFIG" dev --local --port "$PORT" --ip localhost --persist-to "$PERSIST_DIR"

@@ -13,10 +13,23 @@ export async function getLocalStorageItem(page: Page, key: string): Promise<stri
   return page.evaluate((storageKey) => window.localStorage.getItem(storageKey) || '', key);
 }
 
+async function setTextInputValue(page: Page, selector: string, value: string): Promise<void> {
+  await page.locator(selector).click();
+  await page.locator(selector).evaluate((element, nextValue) => {
+    if (!(element instanceof HTMLInputElement)) {
+      throw new Error('Expected input element');
+    }
+    element.value = nextValue;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+  await expect(page.locator(selector)).toHaveValue(value);
+}
+
 export async function registerPerson(page: Page, displayName: string): Promise<string> {
   await page.goto('/person.html');
   await expect(page.locator('#personNameInput')).toBeVisible();
-  await page.locator('#personNameInput').fill(displayName);
+  await setTextInputValue(page, '#personNameInput', displayName);
   await page.getByRole('button', { name: 'Speichern' }).click();
   await page.waitForFunction(() => {
     const value = window.localStorage.getItem('ibinda_person_id') || '';
@@ -32,7 +45,7 @@ export async function registerPerson(page: Page, displayName: string): Promise<s
 export async function registerWatcher(page: Page, displayName: string): Promise<string> {
   await page.goto('/watcher.html');
   await expect(page.locator('#watcherNameInput')).toBeVisible();
-  await page.locator('#watcherNameInput').fill(displayName);
+  await setTextInputValue(page, '#watcherNameInput', displayName);
   await page.getByRole('button', { name: 'Speichern' }).click();
 
   try {

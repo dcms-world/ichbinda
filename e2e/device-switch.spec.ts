@@ -62,9 +62,13 @@ test('device switch moves the person to the new device and resets the old one', 
   }, deviceLinkToken);
   await expect(oldPersonPage.locator('#deviceSwitchModalOverlay')).toHaveClass(/open/, { timeout: 10_000 });
 
-  oldPersonPage.on('dialog', (dialog) => dialog.accept());
+  const dialogPromise = oldPersonPage.waitForEvent('dialog');
   await oldPersonPage.locator('#deviceSwitchApproveBtn').click();
-  await expect(oldPersonPage.locator('#personNameInput')).toBeVisible({ timeout: 15_000 });
+  const dialog = await dialogPromise;
+  await dialog.accept();
+  await expect
+    .poll(async () => getLocalStorageItem(oldPersonPage, 'ibinda_person_id'), { timeout: 15_000 })
+    .toBe('');
 
   await expect
     .poll(async () => getLocalStorageItem(newPersonPage, 'ibinda_person_id'), { timeout: 15_000 })
