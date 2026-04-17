@@ -56,10 +56,8 @@ Status: offen
 - [x] **8. Fehlende Ownership-Prüfung bei DELETE**
   `DELETE /api/person/:id/devices` prüft jetzt via `deviceOwnsPerson()` ob der Requester die Person besitzt.
 
-- [ ] **28. `watchers.max_persons` wird serverseitig nicht durchgesetzt**
-  `POST /api/pair/confirm` prüft nicht, ob der Watcher sein `max_persons`-Limit (Default: 2) bereits erreicht hat.
-  Nur das Frontend limitiert via `MAX_WATCHED_PERSONS`. Ein Watcher kann durch direkte API-Calls beliebig viele Personen überwachen.
-  **Fix:** Vor dem Anlegen einer `watch_relation` in `POST /api/pair/confirm` die aktive Watcher-Relation-Anzahl gegen `watchers.max_persons` prüfen.
+- [x] **28. `watchers.max_persons` wird serverseitig nicht durchgesetzt**
+  `POST /api/pair/confirm` prüft jetzt vor dem Anlegen einer neuen `watch_relation`, ob der Watcher sein `max_persons`-Limit bereits erreicht hat. Bei Überschreitung wird `422` zurückgegeben. Die Prüfung findet vor dem Status-Update der `pairing_requests` statt, sodass kein inkonsistenter Zustand entsteht. Bereits aktive Verbindungen (idempotenter Re-Confirm) werden nicht nochmal gezählt.
 
 - [x] **29. `POST /api/watcher` — push_token nicht validiert**
   `parsePushToken()` wird jetzt in `POST /api/watcher` aufgerufen. Ist `push_token` angegeben aber ungültig (leer, zu kurz, Steuerzeichen), antwortet der Endpoint mit 400. Fehlt `push_token` komplett (Web-Client ohne Push-Support), wird `null` gespeichert. `watcher_devices.push_token` wurde von `NOT NULL` auf nullable umgestellt.
@@ -241,7 +239,7 @@ Status: offen
 | Schweregrad | Anzahl | Davon offen |
 |-------------|--------|-------------|
 | Kritisch    | 6      | 0           |
-| Hoch        | 9      | 2           |
+| Hoch        | 9      | 1           |
 | Mittel      | 14     | 11          |
 | Niedrig     | 9      | 9           |
-| **Gesamt**  | **38** | **22**      |
+| **Gesamt**  | **38** | **21**      |

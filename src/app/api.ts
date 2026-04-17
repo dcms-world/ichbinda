@@ -1040,13 +1040,6 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       return c.json({ error: 'Watcher nicht registriert' }, 404);
     }
 
-    await c.env.DB.prepare(
-      `UPDATE pairing_requests
-       SET status = 'completed',
-           completed_at = datetime('now')
-       WHERE pairing_token = ?1 AND status = 'pending'`,
-    ).bind(pairingToken).run();
-
     const existingRelation = await c.env.DB.prepare(
       `SELECT id, removed_at
        FROM watch_relations
@@ -1054,6 +1047,28 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
        ORDER BY id DESC
        LIMIT 1`,
     ).bind(pairing.person_id, watcher.watcher_id).first<{ id: number; removed_at: string | null }>();
+
+    if (!existingRelation || existingRelation.removed_at !== null) {
+      const [watcherMeta, activeCount] = await Promise.all([
+        c.env.DB.prepare('SELECT max_persons FROM watchers WHERE id = ?1')
+          .bind(watcher.watcher_id)
+          .first<{ max_persons: number | string }>(),
+        c.env.DB.prepare('SELECT COUNT(*) as count FROM watch_relations WHERE watcher_id = ?1 AND removed_at IS NULL')
+          .bind(watcher.watcher_id)
+          .first<{ count: number | string }>(),
+      ]);
+      const maxPersons = Number(watcherMeta?.max_persons ?? 2);
+      if (Number(activeCount?.count ?? 0) >= maxPersons) {
+        return c.json({ error: 'Maximale Anzahl verbundener Personen erreicht' }, 422);
+      }
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE pairing_requests
+       SET status = 'completed',
+           completed_at = datetime('now')
+       WHERE pairing_token = ?1 AND status = 'pending'`,
+    ).bind(pairingToken).run();
 
     if (!existingRelation) {
       await c.env.DB.prepare(
