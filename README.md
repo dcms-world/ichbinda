@@ -99,7 +99,7 @@ npm run test:e2e:mobile
 ```
 
 Mobile-Emulation laeuft ueber die Playwright-Projekte `iphone-13` und `pixel-7`.
-Beide Projekte laufen absichtlich auf Chromium; die iPhone-Konfiguration emuliert also das Geraetelayout, Touch- und Viewport-Verhalten ohne zusaetzlichen WebKit-Download.
+`iphone-13` nutzt dabei echtes Playwright-WebKit, `pixel-7` laeuft auf Chromium.
 
 ### Browser-E2E komplett
 
