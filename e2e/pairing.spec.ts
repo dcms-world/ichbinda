@@ -56,7 +56,7 @@ async function registerWatcher(page: Page, displayName: string): Promise<void> {
     const value = window.localStorage.getItem('ibinda_watcher_id') || '';
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   });
-  await expect(page.locator('#personList')).toContainText('Noch keine verbundenen Personen.');
+  await expect(page.locator('#personList')).toContainText('Noch niemand verbunden');
 }
 
 async function decodeRenderedQr(page: Page): Promise<string> {
@@ -141,20 +141,22 @@ test('pairing confirmation updates watcher list immediately', async ({ browser }
   });
   await expect.poll(async () => decodeRenderedQr(personPage)).toBe(pairingPayload);
 
+  await watcherPage.locator('#fabAdd').click();
+  await expect(watcherPage.locator('#addPersonOverlay')).toHaveClass(/open/);
   await watcherPage.locator('#personId').fill(pairingPayload);
   await watcherPage.locator('#addPersonBtn').click();
 
   await expect(watcherPage.locator('#statusModalOverlay')).toHaveClass(/open/);
-  await expect(watcherPage.locator('#statusModalMessage')).toContainText('muss die Verbindung jetzt bestätigen');
-  await watcherPage.locator('#statusModalButton').click();
+  await expect(watcherPage.locator('#statusModalMessage')).toContainText('Warte auf Bestätigung der Person...');
+  await watcherPage.locator('#statusModalOverlay button').click();
 
   await expect(personPage.locator('#pairingRequestModalOverlay')).toHaveClass(/open/);
   await expect(personPage.locator('#pairingRequestText')).toContainText('Max Muster');
   await personPage.locator('#pairingApproveBtn').click();
 
   await expect(watcherPage.locator('#statusModalOverlay')).toHaveClass(/open/);
-  await expect(watcherPage.locator('#statusModalTitle')).toContainText('Verbindung bestätigt');
-  await expect(watcherPage.locator('#personList .person-item')).toHaveCount(1);
+  await expect(watcherPage.locator('#statusModalTitle')).toContainText('Verbunden!');
+  await expect(watcherPage.locator('#personList .person-card')).toHaveCount(1);
   await expect(watcherPage.locator('#personList')).toContainText('Oma Erna');
 
   await expect(personPage.locator('#status')).toContainText('Einmal tippen: Alles okay');
