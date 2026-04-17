@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 import {
   MAX_CHECK_INTERVAL_MINUTES,
@@ -746,7 +747,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       }, 202);
     } catch (error) {
       if (error instanceof ApiRouteError) {
-        return c.json({ error: error.message }, error.status);
+        return c.json({ error: error.message }, error.status as ContentfulStatusCode);
       }
       console.error('Error claiming person device link:', error);
       return c.json({ error: 'Gerätewechsel fehlgeschlagen' }, 500);
@@ -847,7 +848,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       });
     } catch (error) {
       if (error instanceof ApiRouteError) {
-        return c.json({ error: error.message }, error.status);
+        return c.json({ error: error.message }, error.status as ContentfulStatusCode);
       }
       console.error('Error confirming person device link:', error);
       return c.json({ error: 'Gerätewechsel-Bestätigung fehlgeschlagen' }, 500);
@@ -1156,7 +1157,7 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
       removedDeviceIds = result.removedDeviceIds;
     } catch (error) {
       if (error instanceof ApiRouteError) {
-        return c.json({ error: error.message }, error.status);
+        return c.json({ error: error.message }, error.status as ContentfulStatusCode);
       }
       throw error;
     }

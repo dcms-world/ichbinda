@@ -15,7 +15,7 @@
     "db:setup:local": "npm run db:schema:local"
   },
   "dependencies": {
-    "hono": "^3.12.0"
+    "hono": "^4.12.14"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20231218.0",
