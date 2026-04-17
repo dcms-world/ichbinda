@@ -101,19 +101,11 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
   last_heartbeat_at TEXT NOT NULL
 );
 
--- Zuletzt bekannter Anzeigename pro verbundener Person
-CREATE TABLE IF NOT EXISTS watcher_name_announcements (
-  watcher_id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT (datetime('now'))
-);
-
 -- Persistente Ereignisse fuer Verbindungsabbrueche, bis die Person sie bestaetigt
 CREATE TABLE IF NOT EXISTS watcher_disconnect_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   person_id TEXT NOT NULL,
   watcher_id TEXT NOT NULL,
-  watcher_name_snapshot TEXT,
   created_at DATETIME NOT NULL DEFAULT (datetime('now')),
   acknowledged_at DATETIME,
   FOREIGN KEY (person_id) REFERENCES persons(id),
