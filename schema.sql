@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS persons (
 );
 
 -- Betreuer (Watcher) - Identität
--- Hinweis: push_token ist ein DB-Überbleibsel (NOT NULL, leer gesetzt), wird nicht mehr verwendet
 CREATE TABLE IF NOT EXISTS watchers (
   id TEXT PRIMARY KEY,
   max_persons INTEGER NOT NULL DEFAULT 2,
