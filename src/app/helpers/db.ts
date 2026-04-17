@@ -266,6 +266,7 @@ export async function checkOverduePersons(db: D1Database, expoToken?: string): P
      JOIN watch_relations wr ON p.id = wr.person_id
      JOIN watcher_devices wd ON wr.watcher_id = wd.watcher_id
      WHERE wr.removed_at IS NULL
+     AND p.deleted_at IS NULL
      AND (p.last_heartbeat IS NULL OR datetime(p.last_heartbeat, '+' || wr.check_interval_minutes || ' minutes') < datetime('now'))
      AND (wr.last_notified_at IS NULL OR wr.last_notified_at < datetime('now', '-1 hour'))`,
   ).all<OverduePersonRow>();

@@ -448,9 +448,38 @@ export function registerApiRoutes(app: Hono<AppEnv>): void {
     if (!await deviceOwnsPerson(c.env.DB, c.get('deviceId'), personId)) {
       return c.json({ error: 'Forbidden' }, 403);
     }
-    await c.env.DB.prepare(
-      `UPDATE persons SET deleted_at = datetime('now') WHERE id = ?1 AND deleted_at IS NULL`,
-    ).bind(personId).run();
+
+    await ensurePairingRequestsTable(c.env.DB);
+    await ensureDeviceLinkRequestsTable(c.env.DB);
+
+    const devices = await c.env.DB.prepare('SELECT device_id FROM person_devices WHERE person_id = ?1').bind(personId).all<{ device_id: string }>();
+    const deviceIds = (devices.results ?? []).map((d) => d.device_id);
+
+    const stmts = [
+      c.env.DB.prepare(
+        `UPDATE persons SET deleted_at = datetime('now') WHERE id = ?1 AND deleted_at IS NULL`,
+      ).bind(personId),
+      c.env.DB.prepare('DELETE FROM person_devices WHERE person_id = ?1').bind(personId),
+      // Hinweis: watch_relations bleiben aktiv, damit Watcher den Status "Konto gelöscht" sehen.
+      // Benachrichtigungen werden in checkOverduePersons() ueber deleted_at gefiltert.
+      c.env.DB.prepare(
+        `UPDATE pairing_requests SET status = 'expired' WHERE person_id = ?1 AND status = 'pending'`,
+      ).bind(personId),
+      c.env.DB.prepare(
+        `UPDATE device_link_requests SET status = 'expired' WHERE person_id = ?1 AND status = 'pending'`,
+      ).bind(personId),
+    ];
+
+    if (deviceIds.length > 0) {
+      const placeholders = deviceIds.map((_, index) => `?${index + 1}`).join(', ');
+      stmts.push(
+        c.env.DB.prepare(
+          `DELETE FROM device_keys WHERE role = 'person' AND device_id IN (${placeholders})`,
+        ).bind(...deviceIds),
+      );
+    }
+
+    await c.env.DB.batch(stmts);
     return c.json({ success: true });
   });
 

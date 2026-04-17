@@ -104,11 +104,14 @@ Status: offen
   `persons.max_devices` wurde eingeführt (Default `1`) und wird serverseitig in `POST /api/person/:id/devices` erzwungen.
   `mode = add` liefert ohne freien Slot einen `409`, `mode = switch` ersetzt bei Ein-Gerät-Setups die alte Person-Gerätebindung kontrolliert.
 
-- [ ] **30. Soft-Delete Person unvollständig**
-  `DELETE /api/person/:id` setzt nur `deleted_at` auf `persons`. Danach bleiben aktiv:
-  `device_keys` (Device authentifiziert sich weiter), `person_devices` (Ownership bestehen), `watch_relations` (Watcher bekommen weiter Notifications), `device_rate_limits`, `pairing_requests`, `device_link_requests`.
-  Die Person ist "gelöscht", aber funktional passiert nichts.
-  **Fix:** Beim Soft-Delete auch `device_keys` löschen (oder invalidieren), `person_devices` aufräumen und `watch_relations` soft-deleten. Alternativ: Hard-Delete mit kaskadiertem Cleanup.
+- [x] **30. Soft-Delete Person unvollständig**
+  `DELETE /api/person/:id` führt nun einen kaskadierten Cleanup durch:
+  - Markiert Person als `deleted_at`.
+  - Löscht zugehörige `device_keys` (Auth-Entzug).
+  - Löscht `person_devices` (Ownership-Entzug).
+  - Beendet aktive `watch_relations` (`removed_at`).
+  - Erzeugt `watcher_disconnect_events` für alle betroffenen Watcher.
+  - Setzt ausstehende `pairing_requests` und `device_link_requests` auf `expired`.
 
 - [x] **31. XSS über localStorage-Photo in `buildPersonAvatarMarkup`**
   `src/frontend/watcher.ts`: `escapeHtml(photo)` ergänzt — `photo` aus localStorage wird jetzt escaped bevor es in `<img src>` eingesetzt wird.
